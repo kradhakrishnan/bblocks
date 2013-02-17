@@ -48,6 +48,7 @@ public:
         }
     }
 
+
     virtual ~RefCounted()
     {
     }
@@ -69,6 +70,17 @@ public:
     {
         ASSERT(dynamic_cast<RefCounted *>(t_));
         t_->Pin();
+    }
+
+    T * operator->()
+    {
+        ASSERT(t_);
+        return t_;
+    }
+
+    T * Get() const
+    {
+        return t_;
     }
 
     ~Ref()
@@ -100,6 +112,12 @@ public:
 
     inline T * Get() const
     {
+        return t_;
+    }
+
+    inline T * operator->()
+    {
+        ASSERT(t_);
         return t_;
     }
 

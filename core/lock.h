@@ -15,6 +15,8 @@ public:
     virtual void Lock() = 0;
     virtual void Unlock() = 0;
 
+    virtual bool IsOwner() = 0;
+
     virtual ~Mutex() {}
 };
 
@@ -118,6 +120,11 @@ public:
         ASSERT(status == 0);
     }
 
+    virtual bool IsOwner()
+    {
+        return pthread_mutex_lock(&mutex_) == EDEADLK;
+    }
+
     ~PThreadMutex()
     {
         pthread_mutex_destroy(&mutex_);
@@ -211,6 +218,11 @@ public:
     const bool Is(const uint32_t & value)
     {
         return __sync_bool_compare_and_swap(&mutex_, value, value);
+    }
+
+    virtual bool IsOwner()
+    {
+        ASSERT(!"Not Supported");
     }
 
 protected:
