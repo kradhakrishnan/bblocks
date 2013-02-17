@@ -2,6 +2,7 @@
 #define _CORE_INLIST_H_
 
 #include "core/util.hpp"
+#include "core/lock.h"
 
 namespace dh_core {
 
@@ -81,11 +82,57 @@ public:
         }
     }
 
+    bool IsEmpty() const
+    {
+        return !head_ && !tail_;
+    }
+
 private:
 
     T * head_; // pop
     T * tail_; // push
 };
+
+/**
+ *
+ */
+template<class T>
+class InQueue
+{
+public:
+
+    InQueue(const std::string & name)
+        : log_("/q/" + name)
+        , lock_(new PThreadMutex())
+    {}
+
+    void Push(T * t)
+    {
+        AutoLock _(lock_.Get());
+
+        q_.Push(t);
+        conditionEmpty_.Signal();
+    }
+
+    T * Pop()
+    {
+        AutoLock _(lock_.Get());
+
+        while (q_.IsEmpty()) {
+            conditionEmpty_.Wait(lock_.Get());
+        }
+
+        return q_.Pop();
+    }
+
+private:
+
+    LogPath log_;
+    AutoPtr<PThreadMutex> lock_;
+    WaitCondition conditionEmpty_;
+    InList<T> q_;
+};
+
 
 }
 

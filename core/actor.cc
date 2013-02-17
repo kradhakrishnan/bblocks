@@ -9,14 +9,15 @@ void
 Inbox::Push(ActorCommand * cmd)
 {
     AutoLock _(lock_.Get());
-    cmds_.Push(cmd);
-}
 
-ActorCommand *
-Inbox::Pop()
-{
-    AutoLock _(lock_.Get());
-    return cmds_.Pop();
+    // scan to see if need to schedule the inbox
+    const bool schd = cmds_.IsEmpty();
+    // push the command into the inbox
+    cmds_.Push(cmd);
+
+    if (schd) {
+        Scheduler::Instance().Schedule(this);
+    }
 }
 
 void
@@ -34,7 +35,33 @@ Inbox::DetachActor(Actor * actor)
     AutoLock _(lock_.Get());
 
     INVARIANT(actor_);
+    INVARIANT(actor_ == actor);
+
     actor_ = NULL;
+}
+
+bool
+Inbox::Execute()
+{
+    AutoLock _(lock_.Get());
+
+    ActorCommand * cmd = cmds_.Pop();
+    if (actor_) {
+        bool ok = actor_->Handle(cmd);
+        if (!ok) {
+            // requeue this message
+            cmds_.Push(cmd);
+            return false;
+        }
+
+        return !cmds_.IsEmpty();
+    }
+
+    ASSERT(!actor_);
+    delete cmd;
+
+    return !cmds_.IsEmpty();
+
 }
 
 //

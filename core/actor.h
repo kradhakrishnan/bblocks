@@ -4,16 +4,12 @@
 #include <string>
 #include <inttypes.h>
 #include <list>
-#include <boost/lexical_cast.hpp>
 
 #include "core/util.hpp"
 #include "core/logger.h"
 #include "core/lock.h"
 #include "core/inlist.hpp"
-
-#define STR(x) boost::lexical_cast<std::string>(x)
-
-#define ALIGNED(x) __attribute__((aligned(sizeof(x))))
+#include "core/scheduler.h"
 
 namespace dh_core {
 
@@ -41,24 +37,26 @@ private:
 /**
  *
  */
-class Inbox : public RefCounted
+class Inbox : public RefCounted, public Schedulable
 {
 public:
 
     Inbox(const std::string & name)
-        : log_("/inbox/" + name)
+        : Schedulable(name, RRCpuId::Instance().GetId())
+        , log_("/inbox/" + name)
         , lock_(new SpinMutex())
         , actor_(NULL)
     {}
 
     // Push a command
     void Push(ActorCommand * cmd);
-    // Pop the command to process
-    ActorCommand * Pop();
     // Attach an actor for the messages
     void AttachActor(Actor * actor);
     // Detach existing actor
     void DetachActor(Actor * actor);
+
+    // functions from Schedulable
+    virtual bool Execute();
 
 private:
 
@@ -78,6 +76,8 @@ private:
 class Actor
 {
 public:
+
+    friend class Inbox;
 
     // Action commands
     static const uint64_t STARTUP = 0; // STARTUP
@@ -101,11 +101,12 @@ public:
     void Start();
     void WaitForStop();
 
+
 private:
 
     // handle the command
     // to be implemented by every actor
-    virtual bool HandleCommand(const ActorCommand * cmd) = 0;
+    virtual bool Handle(const ActorCommand * cmd) = 0;
  
     // Send a message (will be flushed while swapping context)
     void Send(Inbox * inbox, ActorCommand * cmd);

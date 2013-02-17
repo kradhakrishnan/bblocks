@@ -6,6 +6,7 @@
 #include <sstream>
 #include <boost/shared_ptr.hpp>
 #include <boost/enable_shared_from_this.hpp>
+#include <boost/lexical_cast.hpp>
 #include <inttypes.h>
 #include <rpc/xdr.h>
 #include <zlib.h>
@@ -16,6 +17,8 @@ namespace dh_core {
 
 #define SharedPtr boost::shared_ptr
 #define SharedPtrBase boost::enable_shared_from_this
+#define STR(x) boost::lexical_cast<std::string>(x)
+#define ALIGNED(x) __attribute__((aligned(sizeof(x))))
 
 template<class T>
 SharedPtr<T>
