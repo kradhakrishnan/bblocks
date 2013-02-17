@@ -1,0 +1,49 @@
+HOW TO COMPILE
+==============
+
+Compiling under Windows
+------------------------
+
+SUPPORTED OS
+
+** Broken **
+
+REQUIREMENT
+
+- Visual Studio 10 and above
+- Micosoft SDK 10 and above
+- BoostPro  1.4.*
+- GNU make (any version)
+
+STEPS
+
+- Goto trunk
+- Set environment variable for Microsoft Visual studio directory
+    - set DARK_HORSE_VS=<...>
+    - set DARK_HORSE_BOOST=<..>
+- make
+
+Compiling under Linux (ubuntu)
+-------------------------------
+
+SUPPORTED OS
+
+- Ubuntu x86_64
+
+REQUIREMENTS
+
+- GCC  4 and above
+- pthread any version
+- libaio
+- zlib1g-dev
+- zlibc
+- boost-python
+- python Ply
+- tcmalloc-minimal0
+
+STEPS
+
+- Goto trunk
+- make ubuntu-setup
+- make
+
