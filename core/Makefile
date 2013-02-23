@@ -11,8 +11,7 @@ TARGET +=
 #
 # .cc
 #
-SRCS += core/actor.cc\
-        core/scheduler.cc
+SRCS += 
 
 #	core/assert.cc \
 #        core/logger.cc \

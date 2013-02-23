@@ -4,6 +4,8 @@
 #include "core/util.hpp"
 #include "core/lock.h"
 
+#define ALIGNED(x) __attribute__((aligned(sizeof(x))))
+
 namespace dh_core {
 
 template<class T>
@@ -34,55 +36,51 @@ public:
         INVARIANT(!tail_);
     }
 
-    void Push(T * t)
+    inline void Push(T * t)
     {
-        INVARIANT(t);
-        INVARIANT(t->next_);
-        INVARIANT(t->prev_);
+        ASSERT((!head_ && !tail_) || (head_ && tail_));
+        ASSERT(!head_ || !head_->prev_);
+        ASSERT(!tail_ || !tail_->next_);
 
-        t->next_ = head_ ? head_->next_ : NULL;
+        ASSERT(t);
+        ASSERT(!t->next_);
+        ASSERT(!t->prev_);
+
+        t->next_ = head_;
+        if (head_) {
+            head_->prev_ = t;
+        }
+
         head_ = t;
-
         if (!tail_) {
             tail_ = head_;
         }
     }
 
-    T * Pop()
+    inline T * Pop()
     {
-        INVARIANT(tail_);
+        ASSERT(tail_ && head_);
+        ASSERT(!tail_->next_);
+        ASSERT(!head_->prev_);
 
         T * t = tail_;
-        Unlink(t);
 
-        return t;
-    }
-
-    void Unlink(T * t)
-    {
-        INVARIANT(t);
-        INVARIANT(t->next_ || t->prev_);
-
-        if (t->prev_) {
-            t->prev_->next_ = t->next_;
+        tail_ = tail_->prev_;
+        if (tail_) {
+            tail_->next_ = NULL;
         }
 
-        if (t->next_) {
-            t->next_->prev_ = t->prev_;
+        if (t == head_) {
+            ASSERT(!tail_);
+            head_ = NULL;
         }
 
         t->next_ = t->prev_ = NULL;
 
-        if (t == head_) {
-            head_ = head_->next_;
-        }
-
-        if (t == tail_) {
-            tail_ = tail_->prev_;
-        }
+        return t;
     }
 
-    bool IsEmpty() const
+    inline bool IsEmpty() const
     {
         return !head_ && !tail_;
     }
@@ -103,32 +101,45 @@ public:
 
     InQueue(const std::string & name)
         : log_("/q/" + name)
-        , lock_(new PThreadMutex())
-    {}
-
-    void Push(T * t)
     {
-        AutoLock _(lock_.Get());
+    }
 
+    inline void Push(T * t)
+    {
+        lock_.Lock();
         q_.Push(t);
+        lock_.Unlock();
+
         conditionEmpty_.Signal();
     }
 
-    T * Pop()
+    inline T * Pop()
     {
-        AutoLock _(lock_.Get());
-
-        while (q_.IsEmpty()) {
-            conditionEmpty_.Wait(lock_.Get());
+        for (int i = 0; i < 100; ++i) {
+            lock_.Lock();
+            if (!q_.IsEmpty()) {
+                T * t = q_.Pop();
+                lock_.Unlock();
+                return t;
+            }
+            lock_.Unlock();
         }
 
-        return q_.Pop();
+        lock_.Lock();
+        while (q_.IsEmpty()) {
+            conditionEmpty_.Wait(&lock_);
+        }
+
+        T * t = q_.Pop();
+        lock_.Unlock();
+
+        return t;
     }
 
 private:
 
     LogPath log_;
-    AutoPtr<PThreadMutex> lock_;
+    PThreadMutex lock_;
     WaitCondition conditionEmpty_;
     InList<T> q_;
 };

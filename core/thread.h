@@ -1,7 +1,9 @@
 #ifndef _DH_CORE_THREAD_H_
 #define _DH_CORE_THREAD_H_
 
+#include "core/logger.h"
 #include "core/util.hpp"
+#include "core/scheduler.h"
 
 namespace dh_core {
 
@@ -12,13 +14,14 @@ public:
 
     Thread(const std::string & logPath)
         : log_(logPath)
+        , exitMain_(false)
     {
     }
 
     void StartThread()
     {
         int ok = pthread_create(&tid_, /*attr=*/ NULL, ThFn, (void *)this);
-        ASSERT(!ok);
+        INVARIANT(!ok);
 
         SetProcessorAffinity();
 
@@ -27,15 +30,42 @@ public:
 
     virtual ~Thread()
     {
-        INFO(log_) << "Thread " << tid_ << " detached.";
+        INFO(log_) << "Thread " << tid_ << " destroyed.";
+    }
 
-        int ok = pthread_detach(tid_);
-        ASSERT(!ok);
+    void EnableThreadCancellation()
+    {
+        int status = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE,
+                                            /*oldstate=*/ NULL);
+        (void) status;
+        ASSERT(!status);
+    }
+
+    void DisableThreadCancellation()
+    {
+        int status = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE,
+                                            /*oldstate=*/ NULL);
+        (void) status;
+        ASSERT(!status);
+    }
+
+    void Stop()
+    {
+        ASSERT(!exitMain_);
+        exitMain_ = true;
+
+        int status = pthread_cancel(tid_);
+        INVARIANT(!status);
+
+        DEBUG(log_) << "Waiting for MainLoop to exit.";
+
+        status = pthread_join(tid_, /*exit status=*/ NULL);
+        // ASSERT(!status);
     }
 
     void SetProcessorAffinity()
     {
-        const uint32_t core = RoundRobinCpuId::Instance().GetId();
+        const uint32_t core = RRCpuId::Instance().GetId();
 
         INFO(log_) << "Binding to core " << core;
 
@@ -44,7 +74,7 @@ public:
         CPU_SET(core, &cpuset);
 
         int status = pthread_setaffinity_np(tid_, sizeof(cpuset), &cpuset);
-        ASSERT(!status);
+        INVARIANT(!status);
     }
 
     static void * ThFn(void * args)
@@ -53,12 +83,13 @@ public:
         return th->ThreadMain();
     }
 
-private:
+protected:
 
     virtual void * ThreadMain() = 0;
 
     LogPath log_;
     pthread_t tid_;
+    bool exitMain_;
 };
 
 } // namespace dh_core

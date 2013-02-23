@@ -86,6 +86,7 @@ public:
         pthread_mutexattr_t attr;
         int status;
         status = pthread_mutexattr_init(&attr);
+        (void) status;
         ASSERT(status == 0);
 
         // Enable/disable recursive locking
@@ -111,12 +112,14 @@ public:
     virtual void Lock()
     {
         int status = pthread_mutex_lock(&mutex_);
+        (void) status;
         ASSERT(status == 0);
     }
 
     virtual void Unlock()
     {
         int status = pthread_mutex_unlock(&mutex_);
+        (void) status;
         ASSERT(status == 0);
     }
 
@@ -144,6 +147,7 @@ public:
     WaitCondition()
     {
         int status = pthread_cond_init(&cond_, /*attr=*/ NULL);
+        (void) status;
         ASSERT(status == 0);
     }
 
@@ -157,18 +161,21 @@ public:
     void Wait(PThreadMutex * lock)
     {
         int status = pthread_cond_wait(&cond_, &lock->mutex_);
+        (void) status;
         ASSERT(status == 0);
     }
 
     void Signal()
     {
         int status = pthread_cond_signal(&cond_);
+        (void) status;
         ASSERT(status == 0);
     }
 
     void Broadcast()
     {
         int status = pthread_cond_broadcast(&cond_);
+        (void) status;
         ASSERT(status == 0);
     }
 
@@ -212,6 +219,7 @@ public:
     {
         ASSERT(Is(CLOSED));
         bool status = __sync_bool_compare_and_swap(&mutex_, CLOSED, OPEN);
+        (void) status;
         ASSERT(status);
     }
 
@@ -222,7 +230,7 @@ public:
 
     virtual bool IsOwner()
     {
-        ASSERT(!"Not Supported");
+        INVARIANT(!"Not Supported");
     }
 
 protected:
@@ -251,30 +259,35 @@ public:
     PThreadRWLock()
     {
         int status = pthread_rwlock_init(&rwlock_,  /*attr=*/ NULL);
+        (void) status;
         ASSERT(status == 0);
     }
 
     ~PThreadRWLock()
     {
         int status = pthread_rwlock_destroy(&rwlock_);
+        (void) status;
         ASSERT(status == 0);
     }
 
     void ReadLock()
     {
         int status = pthread_rwlock_rdlock(&rwlock_);
+        (void) status;
         ASSERT(status == 0);
     }
 
     void Unlock()
     {
         int status = pthread_rwlock_unlock(&rwlock_);
+        (void) status;
         ASSERT(status == 0);
     }
 
     void WriteLock()
     {
         int status = pthread_rwlock_rdlock(&rwlock_);
+        (void) status;
         ASSERT(status == 0);
     }
 
