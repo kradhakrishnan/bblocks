@@ -81,7 +81,7 @@ struct ThMaster : public NonBlockingLogic
     virtual void Run(ThSlave * th)
     {
         if (!(i_.Count() % 100000)) {
-            cout << this << " : " << i_.Count() << " : " << out_.Count() << endl;
+            cout << (unsigned int) i_.Count() << " : " << out_.Count() << endl;
         }
 
         i_.Add(1);

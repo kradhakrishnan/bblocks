@@ -4,7 +4,8 @@ INCLUDE =
 
 STDCPP = /usr/include/c++/4.6.3/
 
-SUBDIR = core/test \
+SUBDIR = core \
+         core/test \
 
 -include ${SUBDIR:%=%/Makefile}
 

@@ -99,8 +99,11 @@ class InQueue
 {
 public:
 
+    static const unsigned int MAX_SPIN = 10000;
+
     InQueue(const std::string & name)
         : log_("/q/" + name)
+        , maxSpin_(2)
     {
     }
 
@@ -115,7 +118,7 @@ public:
 
     inline T * Pop()
     {
-        for (int i = 0; i < 100; ++i) {
+        for (unsigned int i = 0; i < maxSpin_; ++i) {
             lock_.Lock();
             if (!q_.IsEmpty()) {
                 T * t = q_.Pop();
@@ -123,6 +126,12 @@ public:
                 return t;
             }
             lock_.Unlock();
+        }
+
+        // lame adaptive spinning
+        maxSpin_ = maxSpin_ * maxSpin_;
+        if (maxSpin_ > MAX_SPIN) {
+            maxSpin_ = 10;
         }
 
         lock_.Lock();
@@ -142,6 +151,7 @@ private:
     PThreadMutex lock_;
     WaitCondition conditionEmpty_;
     InList<T> q_;
+    unsigned int maxSpin_;
 };
 
 

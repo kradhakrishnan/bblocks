@@ -7,15 +7,24 @@ namespace dh_core {
 
 class NonBlockingThread;
 
-struct ThreadRoutine : public InListElement<ThreadRoutine>
+/**
+ *
+ */
+class ThreadRoutine : public InListElement<ThreadRoutine>
 {
+public:
+
     virtual void Run() = 0;
     virtual ~ThreadRoutine() {}
 };
 
+/**
+ *
+ */
 template<class _OBJ_, class _PARAM_>
-struct MemberFnPtr : public ThreadRoutine
+class MemberFnPtr : public ThreadRoutine
 {
+public:
 
     MemberFnPtr(_OBJ_ * obj, void (_OBJ_::*fn)(_PARAM_), const _PARAM_ & param)
         : obj_(obj), fn_(fn), param_(param)
@@ -25,7 +34,10 @@ struct MemberFnPtr : public ThreadRoutine
     virtual void Run()
     {
         (*obj_.*fn_)(param_);
+        delete this;
     }
+
+private:
 
     _OBJ_ * obj_;
     void (_OBJ_::*fn_)(_PARAM_);
@@ -33,13 +45,9 @@ struct MemberFnPtr : public ThreadRoutine
 }
 ALIGNED(sizeof(uint64_t));
 
-template<class _OBJ_, class _PARAM_>
-MemberFnPtr<_OBJ_, _PARAM_> *
-fn(_OBJ_ * obj, void (_OBJ_::*fn)(_PARAM_), const _PARAM_ & param)
-{
-    return new MemberFnPtr<_OBJ_, _PARAM_>(obj, fn, param);
-}
-
+/**
+ *
+ */
 class NonBlockingLogic
 {
 public:
@@ -60,6 +68,9 @@ protected:
     const uint32_t thAffinity_;
 };
 
+/**
+ *
+ */
 class NonBlockingThread : public Thread
 {
 public:
@@ -79,7 +90,6 @@ public:
             DisableThreadCancellation();
 
             r->Run();
-            delete r;
         }
 
         return NULL;
@@ -95,6 +105,9 @@ private:
     InQueue<ThreadRoutine> q_;
 };
 
+/**
+ *
+ */
 class NonBlockingThreadPool : public Singleton<NonBlockingThreadPool>
 {
 public:
@@ -134,7 +147,12 @@ public:
                   const _PARAM_ & param)
     {
         ThreadRoutine * r = new MemberFnPtr<_OBJ_, _PARAM_>(obj, fn, param);
-        threads_[obj->thAffinity_ % threads_.size()]->Push(r);
+        threads_[rand() % threads_.size()]->Push(r);
+    }
+
+    void Schedule(ThreadRoutine * r)
+    {
+        threads_[rand() % threads_.size()]->Push(r);
     }
 
 private:
