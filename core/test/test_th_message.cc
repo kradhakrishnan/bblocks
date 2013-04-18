@@ -74,7 +74,6 @@ main(int argc, char ** argv)
     InitTestSetup();
 
     simple_test();
-    parallel_test();
 
     TeardownTestSetup();
 
