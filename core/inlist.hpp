@@ -118,6 +118,7 @@ public:
 
     inline T * Pop()
     {
+/*
         for (unsigned int i = 0; i < maxSpin_; ++i) {
             lock_.Lock();
             if (!q_.IsEmpty()) {
@@ -133,7 +134,7 @@ public:
         if (maxSpin_ > MAX_SPIN) {
             maxSpin_ = 10;
         }
-
+*/
         lock_.Lock();
         while (q_.IsEmpty()) {
             conditionEmpty_.Wait(&lock_);

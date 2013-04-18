@@ -147,12 +147,12 @@ public:
                   const _PARAM_ & param)
     {
         ThreadRoutine * r = new MemberFnPtr<_OBJ_, _PARAM_>(obj, fn, param);
-        threads_[rand() % threads_.size()]->Push(r);
+        threads_[nextTh_++ % threads_.size()]->Push(r);
     }
 
     void Schedule(ThreadRoutine * r)
     {
-        threads_[rand() % threads_.size()]->Push(r);
+        threads_[nextTh_++ % threads_.size()]->Push(r);
     }
 
 private:

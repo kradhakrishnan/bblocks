@@ -15,28 +15,42 @@
 
 namespace dh_core {
 
+/**
+ */
 class EpollSet : public Thread
 {
 public:
 
-    typedef int fd_t;
-    typedef Raw<GenericFn2<fd_t, uint32_t> > cb_t;
+    /**
+     */
+    struct FdEvent
+    {
+        FdEvent(int fd, uint32_t events)
+            : fd_(fd), events_(events)
+        {}
+
+        int fd_;
+        uint32_t events_;
+    };
+
+    typedef Fn1<FdEvent> epoll_client_t;
+    typedef boost::function<bool> cb_t;
 
     // ctor and dtor
     EpollSet(const std::string & logPath);
     virtual ~EpollSet();
 
     // Add a fd for polling
-    void Add(const fd_t fd, const uint32_t events, const  cb_t & cb);
+    void Add(const fd_t fd, const uint32_t events, epoll_client_t & client);
     // Add an event to an existing fd
     void AddEvent(const fd_t fd, const uint32_t events);
     // Remove a fd from poll list
-    void Remove(const fd_t fd);
+    void Remove(const fd_t fd, const cb_t & cb);
     // Stop polling for an event for a given fd
     void RemoveEvent(const fd_t fd, const uint32_t events);
 
     // Notification from fd that it has handled the event
-    void NotifyDone(fd_t fd);
+    void NotifyHandled(fd_t fd);
 
 private:
 
@@ -54,7 +68,7 @@ private:
         {}
 
         uint32_t events_;
-        cb_t cb_;
+        epoll_client_t client_;
     };
 
     typedef std::tr1::unordered_map<fd_t, FDRecord> fd_map_t;

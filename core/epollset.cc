@@ -17,7 +17,7 @@ EpollSet::EpollSet(const string & logPath)
 }
 
 void
-EpollSet::NotifyDone(fd_t fd)
+EpollSet::NotifyHandled(fd_t fd)
 {
     AutoLock _(&lock_);
 
@@ -34,11 +34,12 @@ EpollSet::NotifyDone(fd_t fd)
 }
 
 void
-EpollSet::Add(const fd_t fd, const uint32_t events, const cb_t & cb)
+EpollSet::Add(const fd_t fd, const uint32_t events, epoll_client_t * client)
 {
     AutoLock _(&lock_);
 
-    DEBUG(log_) << "Add. fd:" << fd << ", events:" << events;
+    DEBUG(log_) << "Add. fd:" << fd << ", events:" << events
+                << " , client: " << client;
 
     epoll_event ee;
 #ifdef VALGRIND_BUILD
@@ -51,7 +52,7 @@ EpollSet::Add(const fd_t fd, const uint32_t events, const cb_t & cb)
     INVARIANT(status != -1);
 
     INVARIANT(fdmap_.find(fd) == fdmap_.end());
-    fdmap_.insert(make_pair(fd, FDRecord(events, cb)));
+    fdmap_.insert(make_pair(fd, FDRecord(events, client)));
 }
 
 void
@@ -80,7 +81,7 @@ EpollSet::AddEvent(const fd_t fd, const uint32_t events)
 }
 
 void
-EpollSet::Remove(const fd_t fd)
+EpollSet::Remove(const fd_t fd, const cb_t & cb)
 {
     AutoLock _(&lock_);
 
@@ -92,6 +93,9 @@ EpollSet::Remove(const fd_t fd)
     fd_map_t::iterator it = fdmap_.find(fd);
     ASSERT(it != fdmap_.end());
     fdmap_.erase(it);
+
+    // this is racy
+    cb(true);
 }
 
 void
@@ -177,9 +181,8 @@ EpollSet::ThreadMain()
             pendingAcks_.insert(fd);
 
             // make a callback
-            cb_t & cb = fdrecord.cb_;
-            cb->Set(fd, events_mask);
-            NonBlockingThreadPool::Instance().Schedule(cb.Get());
+            epoll_client_t & client = fdrecord.client_;
+            cb->Schedule(FdEvent(fd, events_mask));
         }
 
         // Go into a wait

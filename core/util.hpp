@@ -58,15 +58,16 @@ class RefCounted
 public:
 
     RefCounted()
+        : refs_(1)
     {
     }
 
-    void Pin()
+    void IncRef()
     {
         refs_.Add(/*count=*/ 1);
     }
 
-    void Unpin()
+    void DecRef()
     {
         const uint64_t count = refs_.Add(/*count=*/ -1);
         if (!count) {
@@ -75,49 +76,13 @@ public:
     }
 
 
+protected:
+
     virtual ~RefCounted()
     {
     }
 
-private:
-
     AtomicCounter refs_;
-};
-
-/**
- */
-template<class T>
-class Ref
-{
-public:
-
-    Ref(T * t)
-        : t_(t)
-    {
-        ASSERT(dynamic_cast<RefCounted *>(t_));
-        t_->Pin();
-    }
-
-    T * operator->()
-    {
-        ASSERT(t_);
-        return t_;
-    }
-
-    T * Get() const
-    {
-        return t_;
-    }
-
-    ~Ref()
-    {
-        ASSERT(t_);
-        t_->Unpin();
-    }
-
-private:
-
-    T * t_;
 };
 
 /**

@@ -46,7 +46,7 @@ struct Th : public NonBlockingLogic
 void
 simple_test()
 {
-    NonBlockingThreadPool::Instance().Start(/*maxCores=*/   4);
+    NonBlockingThreadPool::Instance().Start(/*maxCores=*/   1);
 
     Th th1;
     Th th2;
