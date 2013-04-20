@@ -1,7 +1,6 @@
 #include <iostream>
 
 #include "core/thread-pool.h"
-#include "core/fnptr.hpp"
 #include "core/atomic.h"
 
 using namespace dh_core;
@@ -21,20 +20,30 @@ void TeardownTestSetup()
     LogHelper::DestroyLogger();
 }
 
-class Callee
+class ICallee
 {
 public:
 
-    void Callback(int & val)
-    {
-        cout << "Got callback " << val << endl;
-        if (val == 100) {
-            NonBlockingThreadPool::Instance().Shutdown();
-            return;
-        }
+    virtual void Callback(int val) = 0;
 
-        ASSERT(val < 100);
+};
+
+class Callee : public ICallee
+{
+public:
+
+    Callee() : count_(0) {}
+
+    void Callback(int val)
+    {
+        cout << "Got callback " << count_ << endl;
+        ASSERT(val == 0xfeaf);
+        if (++count_ == 100) {
+            NonBlockingThreadPool::Instance().Shutdown();
+        }
     }
+
+    int count_;
 };
 
 class Caller
@@ -43,14 +52,14 @@ public:
 
     static const uint64_t TEST = 1024;
 
-    Caller(const boost::shared_ptr<Fn1<int> > & cb) : cb_(cb) {}
+    Caller(ICallee * cb) : cb_(cb) {}
 
     void Start(int val)
     {
-        NonBlockingThreadPool::Instance().Schedule(new Fn1ThreadRoutine<int>(cb_, val));
+        NonBlockingThreadPool::Instance().Schedule(cb_, &ICallee::Callback, val);
     }
 
-    boost::shared_ptr<Fn1<int> > cb_;
+    ICallee *cb_;
 };
 
 void
@@ -59,10 +68,10 @@ simple_test()
     NonBlockingThreadPool::Instance().Start(/*maxCores=*/ 4);
 
     Callee callee;
-    Caller caller(make_fnptr(&callee, &Callee::Callback));
-    for (int i = 0; i <= 100; ++i) {
+    Caller caller(&callee);
+    for (int i = 0; i < 100; ++i) {
         NonBlockingThreadPool::Instance().Schedule(&caller, &Caller::Start,
-                                                   /*val=*/ (int) i);
+                                                   /*val=*/ (int) 0xfeaf);
     }
 
     NonBlockingThreadPool::Instance().Wait();

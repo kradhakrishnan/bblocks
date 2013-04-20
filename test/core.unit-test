@@ -1,0 +1,4 @@
+<unit-tests name="core-unit-tests">
+    <test name="test_th_pool" cmd="core/test/test_th_pool" timeout="60" />
+    <test name="test_th_message" cmd="core/test/test_th_message" timeout="60" />
+</unit-tests>

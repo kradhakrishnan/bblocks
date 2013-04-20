@@ -50,7 +50,6 @@ MakeSharedPtr(T * t)
     return SharedPtr<T>(t);
 }
 
-
 /**
  */
 class RefCounted

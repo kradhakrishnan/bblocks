@@ -6,6 +6,8 @@
 using namespace dh_core;
 using namespace std;
 
+#define TEST(x) cout << #x << endl; x();
+
 void InitTestSetup()
 {
     LogHelper::InitConsoleLogger();
@@ -80,14 +82,14 @@ struct ThMaster : public NonBlockingLogic
 
     virtual void Run(ThSlave * th)
     {
-        if (!(i_.Count() % 100000)) {
+        if (!(i_.Count() % 1000)) {
             cout << (unsigned int) i_.Count() << " : " << out_.Count() << endl;
         }
 
         i_.Add(1);
         out_.Add(-1);
 
-        if (i_.Count() > 5000000) {
+        if (i_.Count() > 50000) {
             if (!out_.Count()) {
                 NonBlockingThreadPool::Instance().Shutdown();
             }
@@ -135,8 +137,8 @@ main(int argc, char ** argv)
 {
     InitTestSetup();
 
-    simple_test();
-    parallel_test();
+    TEST(simple_test);
+    TEST(parallel_test);
 
     TeardownTestSetup();
 
