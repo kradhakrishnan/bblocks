@@ -11,8 +11,9 @@
 #include "core/util.hpp"
 #include "core/epollset.h"
 #include "core/thread-pool.h"
+#include "core/callback.hpp"
 
-namespace kware {
+namespace dh_core {
 
 /**
  *
@@ -105,35 +106,28 @@ private:
     struct sockaddr_in addr_;
 };
 
-class TCPClient;
+/**
+ *
+ */
+class TCPConnector;
 class TCPServer;
 
-class TCPChannel : public NonBlockingLogic
+class TCPChannel : public EpollSetClient
 {
 public:
 
-    friend class TCPClient;
+    friend class TCPConnector;
     friend class TCPServer;
 
-    typedef Raw<GenericFn1<bool> > writecb_t;
-    typedef Raw<GenericFn> cb_t;
+    typedef Callback<int> writercb_t;
+    typedef Callback2<int, DataBuffer *> readercb_t;
 
-/*
-    TCPChannel()
-        : Actor(GetLogPath())
-        , log_(GetLogPath())
-        , fd_(0)
-    {
-    }
-*/
-    TCPChannel(int fd, const Ptr<EpollSet> & epoll,
-               const std::string & name)
-        : Actor(name)
-        , log_(name)
+    TCPChannel(const std::string & name, int fd, EpollSet * epoll)
+        : log_(name)
         , fd_(fd)
         , epoll_(epoll)
-        , reader_(NULL)
-        , writer_(NULL)
+        , reader_cb_(NULL)
+        , writer_cb_(NULL)
     {
         ASSERT(fd_ >= 0);
         ASSERT(epoll_);
@@ -141,11 +135,19 @@ public:
 
     ~TCPChannel()
     {
+        ASSERT(!reader_cb_);
+        ASSERT(!writer_cb_);
     }
 
-    void Write(const DataBuffer & buf, const writecb_t & cb);
-    action_t RegisterRead(const cb_t & cb);
-    action_t Close(const cb_t & cb);
+    void Write(const DataBuffer & buf, writercb_t * cb);
+
+    // TODO: Make reader subscribe/unsubscribe model
+    void RegisterRead(readercb_t * cb);
+
+    // TODO: Make this asynchronous, that is the correct protocol
+    void Close();
+
+    void EpollSetHandleFdEvent(int fd, uint32_t events);
 
 private:
 
@@ -153,59 +155,68 @@ private:
 
     TCPChannel();
 
-    // Handler functions
-    void WriteImpl(Actor * writer, const DataBuffer & data);
-    void RegisterReadImpl(Actor * reader);
-    void CloseImpl(Actor * actor);
-
-    void HandleEpollNotification(const epoll_event & event);
+    // Read data from the socket to internal buffer
     void ReadDataFromSocket();
+    // Write data from internal buffer to socket
     void WriteDataToSocket();
 
-    // close
+    // close socket
     void CloseInternal();
-    void CloseInternal_EpollClosed();
 
-    LogStream log_;
+    LogPath log_;
     int fd_;
-    Ptr<EpollSet> epoll_;
+    EpollSet * epoll_;
     DataBuffer inq_;
     DataBuffer outq_;
-    Actor * reader_;
-    Actor * writer_;
+    readercb_t * reader_cb_;
+    writercb_t * writer_cb_;
+};
+
+/**
+ *
+ */
+class TCPServerClient
+{
+public:
+
+    virtual void TCPServerHandleConnection(int status, TCPChannel * ch) = 0;
 };
 
 /**
  * TCPServer
  */
-class TCPServer : public Actor
+class TCPServer : public EpollSetClient
 {
 public:
 
-    TCPServer(const SocketAddress & addr, const Ptr<EpollSet> & epoll)
-        : Actor(GetLogPath())
-        , log_(GetLogPath())
+    TCPServer(const SocketAddress & addr, EpollSet * epoll)
+        : log_(GetLogPath())
         , epoll_(epoll)
         , servaddr_(addr)
+        , client_(NULL)
     {
         ASSERT(epoll_);
+        ASSERT(!client_);
     }
 
     ~TCPServer()
     {
+        INVARIANT(!client_);
+        INVARIANT(!epoll_);
     }
 
-    virtual bool HandleAction(Actor * from, const ActorCommand & type,
-                              void * data, void * ctx);
+    uint64_t UId() const
+    {
+        return (uint64_t) this;
+    }
 
-    action_t StartAccepting(Actor * actor);
-    action_t Shutdown();
+    void StartAccepting(TCPServerClient * client);
+    // TODO: Make it async 
+    void Shutdown();
 
 private:
 
-    void HandleEpollNotification(const epoll_event & ee);
-    void StartAcceptingImpl(Actor * actor);
-    void ShutdownImpl();
+    void EpollSetHandleFdEvent(int fd, uint32_t events);
 
     const std::string GetLogPath() const
     {
@@ -222,55 +233,61 @@ private:
     typedef int socket_t;
     typedef std::list<TCPChannel *> iochs_t;
 
-    LogStream log_;
-    Ptr<EpollSet> epoll_;
+    LogPath log_;
+    EpollSet * epoll_;
     socket_t sockfd_;
     const SocketAddress servaddr_;
     iochs_t iochs_;
-    Actor * acceptor_;
+    TCPServerClient * client_;
+};
+
+/**
+ *
+ */
+class TCPConnectorClient
+{
+public:
+
+    virtual void TCPConnectorHandleConnection(int status, TCPChannel * ch) = 0;
 };
 
 /**
  * TCPClient
  */
-class TCPClient : public Actor
+class TCPConnector : public EpollSetClient
 {
 
 public:
 
-    TCPClient(const Ptr<EpollSet> & epoll,
-              const std::string & name = "tcpclient/")
-        : Actor(name)
-        , log_(name)
+    typedef TCPConnectorClient client_t;
+
+    TCPConnector(EpollSet * epoll, const std::string & name = "tcpclient/")
+        : log_(name)
         , epoll_(epoll)
-        , connector_(NULL)
+        , client_(NULL)
     {
     }
 
-    ~TCPClient()
+    ~TCPConnector()
     {
-        ASSERT(!connector_);
+        ASSERT(!client_);
     }
 
-    virtual bool HandleAction(Actor * from, const ActorCommand & type,
-                              void * data, void * ctx);
-
-    action_t Connect(Actor * caller, const SocketAddress & addr);
+    void Connect(const SocketAddress & addr, TCPConnectorClient *cb);
     void Stop();
 
 private:
 
-    void HandleEpollNotification(const epoll_event & ee);
-    void ConnectImpl(Actor * connector, const SocketAddress & addr);
+    void EpollSetHandleFdEvent(int fd, uint32_t events);
 
     std::string TCPChannelLogPath(int fd) const
     {
-        return name_ + "ch/" + STR(fd) + "/";
+        return  log_.GetPath() + "ch/" + STR(fd) + "/";
     }
 
-    LogStream log_;
-    Ptr<EpollSet> epoll_;
-    Actor * connector_;
+    LogPath log_;
+    EpollSet * epoll_;
+    TCPConnectorClient * client_;
 };
 
 } // namespace kware {

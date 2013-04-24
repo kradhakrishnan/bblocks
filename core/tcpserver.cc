@@ -3,7 +3,7 @@
 #include <fcntl.h>
 
 using namespace std;
-using namespace kware;
+using namespace dh_core;
 
 static const uint32_t MAXBUFFERSIZE = 1 * 1024 * 1024; // 1 MiB
 
@@ -13,81 +13,33 @@ static const uint32_t MAXBUFFERSIZE = 1 * 1024 * 1024; // 1 MiB
 const uint32_t
 TCPChannel::DEFAULT_READ_SIZE;
 
-bool
-TCPChannel::HandleAction(Actor * from, const ActorCommand & type,
-                         void * data, void * ctx)
-{
-    ASSERT(!ctx);
-
-    DEBUG(log_) << "HandleAction: from :" << from << " type:" << type;
-
-    IF(EPOLL_NOTIFICATION)
-        epoll_event * ee = (epoll_event *) data;
-        ASSERT(epoll_.get() == from);
-        ASSERT(ee->data.fd == fd_);
-        HandleEpollNotification(*ee);
-        SendMessage(from, EPOLL_NOTIFICATION_ACK, (void *)(uint64_t) fd_);
-    ELIF(READ)
-        ASSERT(!data);
-        RegisterReadImpl(from);
-    ELIF(WRITE)
-        DataBuffer * buf = (DataBuffer *) data;
-        WriteImpl(from, *buf);
-        delete buf;
-    ELIF(CLOSE)
-        Close();
-    ELSE NOTREACHED
-    FI
-
-    return true;
-}
-
-action_t
-TCPChannel::Write(Actor * writer, const DataBuffer & buf)
-{
-    return ScheduleAction(writer, WRITE, new DataBuffer(buf));
-}
-
 void
-TCPChannel::WriteImpl(Actor * writer, const DataBuffer & data)
+TCPChannel::Write(const DataBuffer & data, Callback<int> * cb)
 {
-    // There can be at most one writer waiting for notification any given time.
-    // There cannot be any dirty buffer. Otherwise it is a misbehaving writer
-    ASSERT(!writer_);
-    // ASSERT(outq_.Size() < MAXBUFFERSIZE);
+    ASSERT(cb);
 
-    writer_ = writer;
+    // There can be only one writer per channel at any given time
+    ASSERT(!writer_cb_);
+    writer_cb_ = cb;
+
     outq_.Append(data);
 
-    // if (outq_.Size() < MAXBUFFERSIZE) {
-    //    SendMessage(writer_, WRITE_DONE, /*data=*/ NULL);
-    //    writer_ = NULL;
-    //}
-
+    // Flush it to socket if possible immediately
     WriteDataToSocket();
 }
 
-action_t
-TCPChannel::RegisterRead(Actor * reader)
-{
-    return ScheduleAction(reader, READ, /*data=*/ NULL);
-}
-
 void
-TCPChannel::RegisterReadImpl(Actor * reader)
+TCPChannel::RegisterRead(TCPChannel::readercb_t * cb)
 {
-    ASSERT(!reader_);
-    reader_ = reader;
+    ASSERT(cb);
 
-    // Register fd for reading
-    SendMessage(epoll_.get(), EPOLL_ADD_EVENT,
-                new EpollSet::FdEvent(fd_, EPOLLIN|EPOLLET));
-}
+    // There can be only one reader registered per channel
+    ASSERT(!reader_cb_);
+    reader_cb_ = cb;
 
-action_t
-TCPChannel::Close(Actor * actor)
-{
-    return ScheduleAction(actor, CLOSE, /*data=*/ NULL);
+    // Register fd for reading with EpollSet
+    ThreadPool::Schedule(epoll_, &EpollSet::Add, fd_, EPOLLIN|EPOLLET,
+                         (EpollSetClient *) this);
 }
 
 void
@@ -97,50 +49,42 @@ TCPChannel::Close()
 }
 
 void
-TCPChannel::CloseImpl(Actor * caller)
-{
-    CloseInternal();
-    SendMessage(caller, CLOSE_DONE, /*data=*/ NULL);
-}
-
-void
 TCPChannel::CloseInternal()
 {
     DEBUG(log_) << "Closing channel " << fd_;
 
-    SendMessage(epoll_.get(), EPOLL_REMOVE_FD, new EpollSet::FdEvent(fd_));
+    // we take the hit of sync call since we don't expect much of this and to
+    // keep the code simple
+    epoll_->Remove(fd_);
 }
 
 void
-TCPChannel::CloseInternal_EpollClosed()
+TCPChannel::EpollSetHandleFdEvent(int fd, uint32_t events)
 {
-    close(fd_);
-    fd_ = -1;
-}
+    ASSERT(fd == fd_);
+    ASSERT(!(events & ~(EPOLLIN | EPOLLOUT)));
 
-void
-TCPChannel::HandleEpollNotification(const epoll_event & eevent)
-{
     DEBUG(log_) << "Epoll Notification: fd=" << fd_
-                << " events:" << eevent.events;
+                << " events:" << events;
 
-    ASSERT(!(eevent.events & ~(EPOLLIN | EPOLLOUT)));
 
-    if (eevent.events & EPOLLIN) {
+    if (events & EPOLLIN) {
         ReadDataFromSocket();
     }
 
-    if (eevent.events & EPOLLOUT) {
+    if (events & EPOLLOUT) {
         WriteDataToSocket();
     }
 
-    return;
+    // TODO: make it async
+    epoll_->NotifyHandled(fd_);
 }
 
 void
 TCPChannel::ReadDataFromSocket()
 {
-    ASSERT(reader_);
+    // pre-condition
+    ASSERT(reader_cb_);
     ASSERT(inq_.IsEmpty());
 
     while (true) {
@@ -149,21 +93,29 @@ TCPChannel::ReadDataFromSocket()
         int status = read(fd_, data.Get(), data.Size());
         if (status == -1) {
             if (errno == EAGAIN) {
+                // Transient error, try again
                 break;
             }
 
             ERROR(log_) << "Error reading from socket.";
+
+            // do we need this ?
             CloseInternal();
+
+            // notify error and return
+            reader_cb_->ScheduleCallback(errno, /*data=*/ NULL);
+            reader_cb_ = NULL;
             return;
         }
 
         if (status == 0) {
+            // no bytes were read
             break;
         }
 
-        ASSERT(status > 0);
+        uint32_t & bytes = (uint32_t &) status;
 
-        uint32_t bytes = status;
+        ASSERT(bytes > 0);
         ASSERT(bytes <= data.Size());
 
         if (bytes < data.Size()) {
@@ -176,7 +128,7 @@ TCPChannel::ReadDataFromSocket()
 
     if (!inq_.IsEmpty()) {
         DataBuffer * data = new DataBuffer(inq_);
-        SendMessage(reader_, READ_DONE, data);
+        reader_cb_->ScheduleCallback(/*errno=*/ 0, data);
         inq_.Clear();
     }
 }
@@ -186,6 +138,7 @@ TCPChannel::WriteDataToSocket()
 {
     while (true) {
         if (outq_.IsEmpty()) {
+            // nothing to write
             break;
         }
 
@@ -211,6 +164,7 @@ TCPChannel::WriteDataToSocket()
 
         if (status == -1) {
             if (errno == EAGAIN) {
+                // transient failure
                 break;
             }
 
@@ -219,6 +173,7 @@ TCPChannel::WriteDataToSocket()
         }
 
         if (status == 0) {
+            // no bytes written
             break;
         }
 
@@ -243,47 +198,22 @@ TCPChannel::WriteDataToSocket()
         }
     }
 
-    if (writer_ && outq_.IsEmpty()) {
-        SendMessage(writer_, WRITE_DONE, /*data=*/ NULL);
-        writer_ = NULL;
+    if (writer_cb_ && outq_.IsEmpty()) {
+        writer_cb_->ScheduleCallback(/*status=*/ 0);
+        writer_cb_ = NULL;
     }
 }
 
 //
 // TCPServer
 //
-bool
-TCPServer::HandleAction(Actor * from, const ActorCommand & type,
-                        void * data, void * ctx)
-{
-    IF(EPOLL_NOTIFICATION)
-        epoll_event * ee = (epoll_event *) data;
-        ASSERT(epoll_.get() == from);
-        ASSERT(ee->data.fd == sockfd_);
-        HandleEpollNotification(*ee);
-        SendMessage(from, EPOLL_NOTIFICATION_ACK, (void *)(uint64_t) sockfd_);
-    ELIF(TCP_ACCEPT)
-        StartAcceptingImpl(from);
-    ELSE
-        NOTREACHED
-    FI
-
-    return true;
-}
-
-action_t
-TCPServer::StartAccepting(Actor * actor)
-{
-    return ScheduleAction(actor, TCP_ACCEPT, actor);
-}
-
 void
-TCPServer::StartAcceptingImpl(Actor * actor)
+TCPServer::StartAccepting(TCPServerClient * client)
 {
-    ASSERT(actor);
+    ASSERT(client);
+    ASSERT(!client_);
 
-    ASSERT(!acceptor_);
-    acceptor_ = actor;
+    client_ = client;
 
     sockfd_ = socket(AF_INET, SOCK_STREAM, 0);
     ASSERT(sockfd_ >= 0);
@@ -301,17 +231,16 @@ TCPServer::StartAcceptingImpl(Actor * actor)
     status = listen(sockfd_, MAXBACKLOG);
     ASSERT(status == 0);
 
-    SendMessage(epoll_.get(), EPOLL_ADD_FD, new EpollSet::FdEvent(sockfd_,
-                                                                  EPOLLIN));
-    SendMessage(acceptor_, TCP_ACCEPT_STARTED);
+    // TODO: Make it async
+    epoll_->Add(sockfd_, EPOLLIN, this);
 
     INFO(log_) << "TCP Server started. ";
 }
 
 void
-TCPServer::HandleEpollNotification(const epoll_event & ee)
+TCPServer::EpollSetHandleFdEvent(int fd, uint32_t events)
 {
-    ASSERT(ee.events == EPOLLIN);
+    ASSERT(events == EPOLLIN);
 
     SocketAddress addr;
     socklen_t len = sizeof(sockaddr_in);
@@ -323,38 +252,39 @@ TCPServer::HandleEpollNotification(const epoll_event & ee)
 
     if (clientfd == -1) {
         ERROR(log_) << "Error accepting client connection. " << strerror(errno);
-        SendMessage(acceptor_, ERROR, (void *)(uint64_t) errno);
+        ThreadPool::Schedule(client_,
+                             &TCPServerClient::TCPServerHandleConnection,
+                             errno, /*conn=*/ (TCPChannel *) NULL);
         return;
     }
 
     const string logpath = TCPChannelLogPath(clientfd);
-    TCPChannel * ch = new TCPChannel(clientfd, epoll_, logpath);
-    SendMessage(epoll_.get(), ch, EPOLL_ADD_FD,
-                new EpollSet::FdEvent(clientfd, EPOLLOUT));
+    TCPChannel * ch = new TCPChannel(logpath, clientfd, epoll_);
+
+    // ThreadPool::Schedule(epoll_, &EpollSet::Add, clientfd, EPOLLOUT,
+    //                     (EpollSetClient *) ch_);
 
     iochs_.push_back(ch);
 
-    SendMessage(acceptor_, TCP_ACCEPT_DONE, ch, /*ctx=*/ NULL);
+    ThreadPool::Schedule(client_, &TCPServerClient::TCPServerHandleConnection,
+                         /*status=*/ 0, ch);
 
     DEBUG(log_) << "Accepted. clientfd=" << clientfd;
-}
 
-action_t
-TCPServer::Shutdown()
-{
-    return ScheduleAction(NULL, CMD_SHUTDOWN, /*data=*/ NULL);
+    epoll_->NotifyHandled(sockfd_);
 }
 
 void
-TCPServer::ShutdownImpl()
+TCPServer::Shutdown()
 {
+    // TODO: Remove race here by making it async
+    epoll_->Remove(sockfd_);
+
     for (iochs_t::iterator it = iochs_.begin(); it != iochs_.end(); ++it) {
         TCPChannel * ch = *it;
         ch->Close();
     }
     iochs_.clear();
-
-    SendMessage(epoll_.get(), EPOLL_REMOVE_FD, new EpollSet::FdEvent(sockfd_));
 
     ::shutdown(sockfd_, SHUT_RDWR);
     ::close(sockfd_);
@@ -363,37 +293,11 @@ TCPServer::ShutdownImpl()
 //
 // TCPClient
 //
-bool
-TCPClient::HandleAction(Actor * from, const ActorCommand & type, void * data,
-                        void * ctx)
-{
-    IF(EPOLL_NOTIFICATION)
-        ASSERT(epoll_.get() == from);
-        epoll_event * ee = (epoll_event *) data;
-        HandleEpollNotification(*ee);
-        SendMessage(from, EPOLL_NOTIFICATION_ACK, (void *)(uint64_t) ee->data.fd);
-    ELIF(TCP_CONNECT)
-        SocketAddress * addr = (SocketAddress *) data;
-        ConnectImpl(from, *addr);
-        delete addr;
-    ELSE
-        NOTREACHED
-    FI
-
-    return true;
-}
-
-action_t
-TCPClient::Connect(Actor * connector, const SocketAddress & addr)
-{
-    return ScheduleAction(connector, TCP_CONNECT, new SocketAddress(addr));
-}
-
 void
-TCPClient::ConnectImpl(Actor * connector, const SocketAddress & addr)
+TCPConnector::Connect(const SocketAddress & addr, TCPConnectorClient * client)
 {
-    ASSERT(!connector_);
-    connector_ = connector;
+    ASSERT(!client_);
+    client_ = client;
 
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     assert(fd >= 0);
@@ -414,43 +318,45 @@ TCPClient::ConnectImpl(Actor * connector, const SocketAddress & addr)
     status = connect(fd, (sockaddr *) &addr.sockaddr(), sizeof(sockaddr_in));
     ASSERT(status == -1 && errno == EINPROGRESS);
 
-    SendMessage(epoll_.get(), EPOLL_ADD_FD, new EpollSet::FdEvent(fd, EPOLLOUT));
+    // TODO: Make async
+    epoll_->Add(fd, EPOLLOUT, this);
 }
 
 void
-TCPClient::HandleEpollNotification(const epoll_event & ee)
+TCPConnector::Stop()
 {
-    const int fd = ee.data.fd;
+    client_ = NULL;
+    INFO(log_) << "Closing TCP client. ";
+}
 
-    DEBUG(log_) << "connected: events=" << ee.events << " fd=" << fd;
+void
+TCPConnector::EpollSetHandleFdEvent(int fd, uint32_t events)
+{
+    DEBUG(log_) << "connected: events=" << events << " fd=" << fd;
 
-    SendMessage(epoll_.get(), EPOLL_REMOVE_FD, new EpollSet::FdEvent(fd));
+    epoll_->Remove(fd);
 
-    if (ee.events == EPOLLOUT) {
+    if (events == EPOLLOUT) {
         DEBUG(log_) << "TCP Client connected. fd=" << fd;
         // Crate and return tcp channel object
-        TCPChannel * ch = new TCPChannel(fd, epoll_, TCPChannelLogPath(fd));
+        TCPChannel * ch = new TCPChannel( TCPChannelLogPath(fd), fd, epoll_);
         // add to the list of channels under the client object
-        SendMessage(epoll_.get(), ch, EPOLL_ADD_FD,
-                    new EpollSet::FdEvent(fd, EPOLLOUT));
-        SendMessage(connector_, TCP_CONNECT_DONE, ch);
+        // SendMessage(epoll_.get(), ch, EPOLL_ADD_FD,
+        //            new EpollSet::FdEvent(fd, EPOLLOUT));
+        ThreadPool::Schedule(client_,
+                             &TCPConnectorClient::TCPConnectorHandleConnection,
+                             /*status=*/ 0, ch);
         // reset the connector
-        connector_ = NULL;
+        client_ = NULL;
         return;
     }
 
     // failed to connect to the specified server
-    ASSERT(ee.events & EPOLLERR);
-    ERROR(log_) << "Failed to connect. fd=" << ee.data.fd;
-    SendMessage(connector_, TCP_CONNECT_ERROR);
+    ASSERT(events & EPOLLERR);
+    ERROR(log_) << "Failed to connect. fd=" << fd;
 
-    // reset the connector
-    connector_ = NULL;
-}
-
-void
-TCPClient::Stop()
-{
-    ASSERT(!connector_);
-    INFO(log_) << "Closing TCP client. ";
+    // notify error and reset the connector
+    ThreadPool::Schedule(client_, &client_t::TCPConnectorHandleConnection,
+                         /*status=*/ -1, (TCPChannel *) NULL);
+    client_ = NULL;
 }

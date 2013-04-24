@@ -1,26 +1,9 @@
 #include <iostream>
 
-#include "core/thread-pool.h"
-#include "core/atomic.h"
+#include "core/test/unit-test.h"
 
 using namespace dh_core;
 using namespace std;
-
-#define TEST(x) cout << #x << endl; x();
-
-void InitTestSetup()
-{
-    LogHelper::InitConsoleLogger();
-    RRCpuId::Init();
-    NonBlockingThreadPool::Init();
-}
-
-void TeardownTestSetup()
-{
-    NonBlockingThreadPool::Destroy();
-    RRCpuId::Destroy();
-    LogHelper::DestroyLogger();
-}
 
 struct Th : public NonBlockingLogic
 {
@@ -34,10 +17,10 @@ struct Th : public NonBlockingLogic
 
         i_++;
         if (i_ > 1000000) {
-            NonBlockingThreadPool::Instance().Shutdown();
+            ThreadPool::Shutdown();
             return;
         } else {
-            NonBlockingThreadPool::Instance().Schedule(th, &Th::Run, this);
+            ThreadPool::Schedule(th, &Th::Run, this);
         }
     }
 
@@ -48,14 +31,14 @@ struct Th : public NonBlockingLogic
 void
 simple_test()
 {
-    NonBlockingThreadPool::Instance().Start(/*maxCores=*/   1);
+    ThreadPool::Start(/*maxCores=*/   1);
 
     Th th1;
     Th th2;
 
     th1.Run(&th2);
 
-    NonBlockingThreadPool::Instance().Wait();
+    ThreadPool::Wait();
 }
 
 class ThMaster;
@@ -77,7 +60,7 @@ struct ThMaster : public NonBlockingLogic
     void Start(ThSlave * th)
     {
         out_.Add(1);
-        NonBlockingThreadPool::Instance().Schedule(this, &ThMaster::Run, th);
+        ThreadPool::Schedule(this, &ThMaster::Run, th);
     }
 
     virtual void Run(ThSlave * th)
@@ -91,13 +74,13 @@ struct ThMaster : public NonBlockingLogic
 
         if (i_.Count() > 50000) {
             if (!out_.Count()) {
-                NonBlockingThreadPool::Instance().Shutdown();
+                ThreadPool::Shutdown();
             }
             return;
         }
 
         out_.Add(1);
-        NonBlockingThreadPool::Instance().Schedule(th, &ThSlave::Run, this);
+        ThreadPool::Schedule(th, &ThSlave::Run, this);
     }
 
     AtomicCounter i_;
@@ -106,14 +89,14 @@ struct ThMaster : public NonBlockingLogic
 
 void ThSlave::Run(ThMaster * th)
 {
-    NonBlockingThreadPool::Instance().Schedule(th, &ThMaster::Run, this);
+    ThreadPool::Schedule(th, &ThMaster::Run, this);
 }
 
 void
 parallel_test()
 {
     const unsigned int cores = 4;
-    NonBlockingThreadPool::Instance().Start(cores);
+    ThreadPool::Start(cores);
 
     ThMaster m;
     std::vector<ThSlave *> ss;
@@ -123,7 +106,7 @@ parallel_test()
         ss.push_back(s);
     }
 
-    NonBlockingThreadPool::Instance().Wait();
+    ThreadPool::Wait();
 
     for (unsigned int i = 0; i < ss.size(); ++i) {
         delete ss[i];

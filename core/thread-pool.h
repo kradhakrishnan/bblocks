@@ -5,6 +5,11 @@
 
 namespace dh_core {
 
+#define COMMA ,
+#define SEMICOLON ;
+#define OPENBRACKET (
+#define CLOSEBRACKET )
+
 class NonBlockingThread;
 
 /**
@@ -21,29 +26,47 @@ public:
 /**
  *
  */
-template<class _OBJ_, class _PARAM_>
-class MemberFnPtr : public ThreadRoutine
-{
-public:
-
-    MemberFnPtr(_OBJ_ * obj, void (_OBJ_::*fn)(_PARAM_), const _PARAM_ & param)
-        : obj_(obj), fn_(fn), param_(param)
-    {
-    }
-
-    virtual void Run()
-    {
-        (*obj_.*fn_)(param_);
-        delete this;
-    }
-
-private:
-
-    _OBJ_ * obj_;
-    void (_OBJ_::*fn_)(_PARAM_);
-    _PARAM_ param_;
-}
+#define MEMBERFNPTR(A, B, C, D, E, F, G) \
+template<class _OBJ_, B> \
+class MemberFnPtr##A : public ThreadRoutine \
+{ \
+public: \
+\
+    MemberFnPtr##A(_OBJ_ * obj, void (_OBJ_::*fn)(C), D) \
+        : obj_(obj), fn_(fn) \
+    { \
+        E; \
+    } \
+\
+    virtual void Run() \
+    { \
+        (obj_->*fn_)(F); \
+        delete this; \
+    } \
+\
+private: \
+\
+    _OBJ_ * obj_; \
+    void (_OBJ_::*fn_)(C); \
+    G; \
+}\
 ALIGNED(sizeof(uint64_t));
+
+MEMBERFNPTR(, class _P_, _P_, const _P_ p, p_ = p, p_, _P_ p_)
+
+MEMBERFNPTR(2, class _P1_ COMMA class _P2_, _P1_ COMMA _P2_,
+            const _P1_ p1 COMMA const _P2_ p2,
+            p1_ = p1 SEMICOLON p2_ = p2, p1_ COMMA p2_,
+            _P1_ p1_ SEMICOLON _P2_ p2_)
+
+MEMBERFNPTR(3,
+            class _P1_ COMMA class _P2_ COMMA class _P3_,
+            _P1_ COMMA _P2_ COMMA _P3_,
+            const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3,
+            p1_ = p1 SEMICOLON p2_ = p2 SEMICOLON p3_ = p3,
+            p1_ COMMA p2_ COMMA p3_,
+            _P1_ p1_ SEMICOLON _P2_ p2_ SEMICOLON _P3_ p3_)
+
 
 /**
  *
@@ -141,14 +164,22 @@ public:
         condExit_.Wait(&lock_);
     }
 
-
-    template<class _OBJ_, class _PARAM_>
-    void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(_PARAM_),
-                  const _PARAM_ & param)
-    {
-        ThreadRoutine * r = new MemberFnPtr<_OBJ_, _PARAM_>(obj, fn, param);
-        threads_[nextTh_++ % threads_.size()]->Push(r);
+#define NBTP_SCHEDULE(A, B, C, D, E) \
+    template<class _OBJ_, A> \
+    void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(B), C) \
+    { \
+        ThreadRoutine * r = new MemberFnPtr##E<_OBJ_, B>(obj, fn, D); \
+        threads_[nextTh_++ % threads_.size()]->Push(r); \
     }
+
+    NBTP_SCHEDULE(class _P_, _P_, const _P_ p, p, )
+    NBTP_SCHEDULE(class _P1_ COMMA class _P2_, _P1_ COMMA _P2_,
+                  const _P1_ p1 COMMA const _P2_ p2, p1 COMMA p2, 2)
+    NBTP_SCHEDULE(class _P1_ COMMA class _P2_ COMMA class _P3_,
+                  _P1_ COMMA _P2_ COMMA _P3_,
+                  const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3,
+                  p1 COMMA p2 COMMA p3, 3)
+
 
     void Schedule(ThreadRoutine * r)
     {
@@ -177,6 +208,51 @@ private:
     threads_t threads_;
     WaitCondition condExit_;
     uint32_t nextTh_;
+};
+
+class ThreadPool
+{
+public:
+
+    static void Start(const uint32_t ncores)
+    {
+        NonBlockingThreadPool::Instance().Start(ncores);
+    }
+
+    static void Shutdown()
+    {
+        NonBlockingThreadPool::Instance().Shutdown();
+    }
+
+    static void Wait()
+    {
+        NonBlockingThreadPool::Instance().Wait();
+    }
+
+#define SCHEDULE(A, B, C, D) \
+    template<class _OBJ_, A> \
+    static void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(B), C) \
+    { \
+        NonBlockingThreadPool::Instance().Schedule(obj, fn, D); \
+    }
+
+    SCHEDULE(class _P_, _P_, const _P_ p, p)
+
+    SCHEDULE(class _P1_ COMMA class _P2_,
+             _P1_ COMMA _P2_,
+             const _P1_ p1 COMMA const _P2_ p2,
+             p1 COMMA p2)
+
+    SCHEDULE(class _P1_ COMMA class _P2_ COMMA class _P3_,
+             _P1_ COMMA _P2_ COMMA _P3_,
+             const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3,
+             p1 COMMA p2 COMMA p3)
+
+
+    static void Schedule(ThreadRoutine * r)
+    {
+        NonBlockingThreadPool::Instance().Schedule(r);
+    }
 };
 
 } // namespace dh_core

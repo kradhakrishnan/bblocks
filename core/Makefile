@@ -12,6 +12,7 @@ TARGET +=
 # .cc
 #
 SRCS += core/epollset.cc \
+        core/tcpserver.cc
 
 #	core/assert.cc \
 #        core/logger.cc \

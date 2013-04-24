@@ -11,9 +11,15 @@
 
 #include "core/thread.h"
 #include "core/lock.h"
-#include "core/fn.hpp"
 
 namespace dh_core {
+
+class EpollSetClient
+{
+public:
+
+    virtual void EpollSetHandleFdEvent(int fd, uint32_t events) = 0;
+};
 
 /**
  */
@@ -21,31 +27,18 @@ class EpollSet : public Thread
 {
 public:
 
-    /**
-     */
-    struct FdEvent
-    {
-        FdEvent(int fd, uint32_t events)
-            : fd_(fd), events_(events)
-        {}
-
-        int fd_;
-        uint32_t events_;
-    };
-
-    typedef Fn1<FdEvent> epoll_client_t;
-    typedef boost::function<bool> cb_t;
+    typedef int fd_t;
 
     // ctor and dtor
     EpollSet(const std::string & logPath);
     virtual ~EpollSet();
 
     // Add a fd for polling
-    void Add(const fd_t fd, const uint32_t events, epoll_client_t & client);
+    void Add(const fd_t fd, const uint32_t events, EpollSetClient * client);
+    // Remove a fd from polling
+    void Remove(const fd_t fd);
     // Add an event to an existing fd
     void AddEvent(const fd_t fd, const uint32_t events);
-    // Remove a fd from poll list
-    void Remove(const fd_t fd, const cb_t & cb);
     // Stop polling for an event for a given fd
     void RemoveEvent(const fd_t fd, const uint32_t events);
 
@@ -63,12 +56,12 @@ private:
     {
         FDRecord() {}
 
-        FDRecord(const uint32_t events, const cb_t & cb)
-            : events_(events), cb_(cb)
+        FDRecord(const uint32_t events, EpollSetClient * client)
+            : events_(events), client_(client)
         {}
 
         uint32_t events_;
-        epoll_client_t client_;
+        EpollSetClient * client_;
     };
 
     typedef std::tr1::unordered_map<fd_t, FDRecord> fd_map_t;

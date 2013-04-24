@@ -84,6 +84,32 @@ protected:
     AtomicCounter refs_;
 };
 
+template<class T>
+class Ref
+{
+public:
+
+    Ref(T * t) : t_(t) {}
+    ~Ref()
+    {
+        if (t_) {
+            t_->DecRef();
+            t_ = NULL;
+        }
+    }
+
+    Ref(Ref<T> & rhs)
+    {
+        ASSERT(!t_);
+        rhs.t_->IncRef();
+        t_ = rhs.t_;
+    }
+
+private:
+
+    T * t_;
+};
+
 /**
  */
 template<class T>

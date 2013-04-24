@@ -34,7 +34,7 @@ EpollSet::NotifyHandled(fd_t fd)
 }
 
 void
-EpollSet::Add(const fd_t fd, const uint32_t events, epoll_client_t * client)
+EpollSet::Add(const fd_t fd, const uint32_t events, EpollSetClient * client)
 {
     AutoLock _(&lock_);
 
@@ -53,6 +53,28 @@ EpollSet::Add(const fd_t fd, const uint32_t events, epoll_client_t * client)
 
     INVARIANT(fdmap_.find(fd) == fdmap_.end());
     fdmap_.insert(make_pair(fd, FDRecord(events, client)));
+}
+
+void
+EpollSet::Remove(const fd_t fd)
+{
+    AutoLock _(&lock_);
+
+    DEBUG(log_) << "Remove. fd:" << fd;
+
+    epoll_event ee;
+#ifdef VALGRIND_BUILD
+    memset(&ee, 0, sizeof(epoll_event));
+#endif
+    ee.data.fd = fd;
+    ee.events = 0;
+
+    int status = epoll_ctl(fd_, EPOLL_CTL_DEL, ee.data.fd, &ee);
+    INVARIANT(status != -1);
+
+    fd_map_t::iterator it = fdmap_.find(fd);
+    INVARIANT(it != fdmap_.end());
+    fdmap_.erase(it);
 }
 
 void
@@ -78,24 +100,6 @@ EpollSet::AddEvent(const fd_t fd, const uint32_t events)
 
     int status = epoll_ctl(fd_, EPOLL_CTL_MOD, fd, &ee);
     INVARIANT(status != -1);
-}
-
-void
-EpollSet::Remove(const fd_t fd, const cb_t & cb)
-{
-    AutoLock _(&lock_);
-
-    DEBUG(log_) << "Remove. fd=" << fd;
-
-    int status = epoll_ctl(fd_, EPOLL_CTL_DEL, fd, NULL);
-    INVARIANT(status != -1);
-
-    fd_map_t::iterator it = fdmap_.find(fd);
-    ASSERT(it != fdmap_.end());
-    fdmap_.erase(it);
-
-    // this is racy
-    cb(true);
 }
 
 void
@@ -181,8 +185,9 @@ EpollSet::ThreadMain()
             pendingAcks_.insert(fd);
 
             // make a callback
-            epoll_client_t & client = fdrecord.client_;
-            cb->Schedule(FdEvent(fd, events_mask));
+            NonBlockingThreadPool::Instance().Schedule(
+                    fdrecord.client_, &EpollSetClient::EpollSetHandleFdEvent, 
+                    fd, events_mask);
         }
 
         // Go into a wait
