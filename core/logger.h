@@ -13,6 +13,7 @@
  BUGS/TODO:
  1. Write LogMessage using proper c++ mechanism
  **/
+
 namespace dh_core {
 
 #if !defined(DISABLE_VERBOSE) && defined(DEBUG_BUILD)
@@ -23,6 +24,8 @@ namespace dh_core {
 
 #define ERROR(x) LogMessage(Logger::LEVEL_ERROR, x.GetPath())
 #define INFO(x) LogMessage(Logger::LEVEL_INFO, x.GetPath())
+
+//............................................................... LogWriter ....
 
 /**
  */
@@ -43,6 +46,8 @@ class LogWriter
 
     virtual void Append(const std::string & data, const Priority & priority) = 0;
 };
+
+//.................................................................. Logger ....
 
 /**
  */
@@ -84,6 +89,8 @@ private:
 
     SharedPtr<LogWriter> writer_;
 };
+
+//.............................................................. LogMessage ....
 
 /**
  */
@@ -140,6 +147,8 @@ protected:
     StringListType msg_;
 };
 
+//................................................................. LogPath ....
+
 /**
  */
 class LogPath
@@ -161,6 +170,8 @@ private:
     std::string path_;
 };
 
+//........................................................... ConsoleWriter ....
+
 /**
  */
 class ConsoleLogWriter : public LogWriter
@@ -176,6 +187,8 @@ class ConsoleLogWriter : public LogWriter
         }
     }
 };
+
+//............................................................... LogHelper ....
 
 /**
  */

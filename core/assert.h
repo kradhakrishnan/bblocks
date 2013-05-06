@@ -5,11 +5,23 @@
 #include <iostream>
 #include <string>
 #include <string.h>
+#include <errno.h>
+
+#define __async__ /* async notification */
+#define __sync__ /* synchronous callback */
 
 #define STD_ERROR std::cerr
 #define STD_INFO std::cout
 #define ENDL std::endl
 
+#define DEADEND {\
+    STD_ERROR << "Unexpected code path reached. "\
+              << __FILE__ << " : " << __LINE__\
+              << ENDL;\
+    abort();\
+}
+
+// depricate NOTREACHED
 #define NOTREACHED {\
     STD_ERROR << "Unexpected code path reached. "\
               << __FILE__ << " : " << __LINE__\
@@ -41,7 +53,8 @@
     if (! bool(x)) {\
         STD_ERROR << "Invariant condition violated. The system is halting"\
                   << " to prevent corruption. INVARIANT: " << #x\
-                  << __FILE__ << ":" << __LINE__ << ENDL;\
+                  << __FILE__ << ":" << __LINE__ \
+                  << " errnor: " << errno << ENDL;\
         abort();\
     }\
 }

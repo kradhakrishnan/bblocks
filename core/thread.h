@@ -18,12 +18,23 @@ public:
     {
     }
 
-    void StartThread()
+    void StartBlockingThread()
     {
         int ok = pthread_create(&tid_, /*attr=*/ NULL, ThFn, (void *)this);
         INVARIANT(!ok);
 
-        SetProcessorAffinity();
+        // SetProcessorAffinity();
+
+        INFO(log_) << "Thread " << tid_ << " created.";
+    }
+
+
+    void StartNonBlockingThread()
+    {
+        int ok = pthread_create(&tid_, /*attr=*/ NULL, ThFn, (void *)this);
+        INVARIANT(!ok);
+
+        // SetProcessorAffinity();
 
         INFO(log_) << "Thread " << tid_ << " created.";
     }

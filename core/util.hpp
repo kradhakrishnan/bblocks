@@ -15,6 +15,17 @@
 
 namespace dh_core {
 
+typedef int fd_t;
+typedef uint32_t __u32;
+typedef uint64_t __u64;
+typedef int status_t;
+
+enum
+{
+    OK = 0,
+    FAIL = -1
+};
+
 #define SharedPtr boost::shared_ptr
 #define SharedPtrBase boost::enable_shared_from_this
 #define STR(x) boost::lexical_cast<std::string>(x)
@@ -325,6 +336,12 @@ public:
         buffer_.pop_front();
     }
 
+    void CutFront(const uint32_t size)
+    {
+        buffer_.front().Cut(size);
+        size_ -= size;
+    }
+
     uint32_t Size() const
     {
         return size_;
@@ -468,6 +485,61 @@ class Singleton
 
 template<class T>
 T * Singleton<T>::instance_ = NULL;
+
+//............................................................ BoundedQueue ....
+
+template<class T>
+class BoundedQ
+{
+public:
+
+    BoundedQ(const size_t capacity)
+    {
+        q_.reserve(capacity);
+    }
+
+    void Push(const T & t)
+    {
+        q_.push_back(t);
+    }
+
+    bool IsEmpty() const
+    {
+        return q_.empty();
+    }
+
+    size_t Size() const
+    {
+        return q_.size();
+    }
+
+    T Pop()
+    {
+        T t = q_.front();
+        // pop front
+        q_.erase(q_.begin());
+        return t;
+    }
+
+    T & Front()
+    {
+        return q_.front();
+    }
+
+    typename std::vector<T>::iterator Begin()
+    {
+        return q_.begin();
+    }
+
+    typename std::vector<T>::iterator End()
+    {
+        return q_.end();
+    }
+
+private:
+
+    std::vector<T> q_;
+};
 
 };
 

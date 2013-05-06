@@ -30,8 +30,13 @@ class TCPServerBenchmark : public TCPServerClient, public TCPChannelClient
 {
 public:
 
+    static const uint32_t RBUFFERSIZE = 1 * 1024 * 1024; // 1MB
+
+    //.... create/destroy ....//
+
     TCPServerBenchmark(const sockaddr_in & addr)
         : epoll_("/server"), server_(addr, &epoll_)
+        , buf_(IOBuffer::Alloc(RBUFFERSIZE))
     {
     }
 
@@ -47,7 +52,9 @@ public:
                              static_cast<Callback<status_t> *>(NULL));
     }
 
-    virtual void TCPServerHandleConnection(int status, TCPChannel * ch)
+    //.... handlers ....//
+
+    __async__ virtual void TCPServerHandleConnection(int status, TCPChannel * ch)
     {
         cout << "Got ch " << ch << endl;
 
@@ -56,24 +63,50 @@ public:
             chstats_.insert(make_pair(ch, ChStats()));
         }
 
-        ch->InitChannel(this);
+        ch->RegisterClient(this);
+        ch->Read(buf_);
     }
 
-    virtual void TCPChannelHandleRead(TCPChannel * ch, int status,
-                                      DataBuffer * buf)
+    __async__ virtual void TcpReadDone(TCPChannel * ch, int status, IOBuffer)
     {
-        {
-            AutoLock _(&lock_);
+        ASSERT((size_t) status == buf_.Size());
+        UpdateStats(ch, status);
 
-            auto it = chstats_.find(ch);
-            ASSERT(it != chstats_.end());
-            it->second.bytes_read_ += buf->Size();
-        }
-
-        delete buf;
+        ch->Read(buf_);
     }
+
+    __async__ virtual void TcpWriteDone(TCPChannel * ch, int status)
+    {
+        DEADEND
+    } 
 
 private:
+
+    void UpdateStats(TCPChannel * ch, const uint32_t size)
+    {
+        AutoLock _(&lock_);
+
+        auto it = chstats_.find(ch);
+        ASSERT(it != chstats_.end());
+        it->second.bytes_read_ += size;
+
+        uint64_t elapsed_s = MS2SEC(Timer::Elapsed(it->second.start_ms_));
+        if (elapsed_s >= 5) {
+            cout << "ch " << it->first << endl
+                 << " bytes " << it->second.bytes_read_ << endl
+                 << " MBps "
+                 << ((it->second.bytes_read_ / (1024 * 1024)) 
+                                                / (double) elapsed_s) << endl;
+
+            it->second.bytes_read_ = 0;
+            it->second.start_ms_ = NowInMilliSec();
+        }
+    }
+
+    void DeleteBuf(DataBuffer * buf)
+    {
+        delete buf;
+    }
 
     typedef map<TCPChannel *, ChStats> chstats_map_t;
 
@@ -81,6 +114,7 @@ private:
     EpollSet epoll_;
     TCPServer server_;
     chstats_map_t chstats_;
+    IOBuffer buf_;
 };
 
 //...................................................... TCPClientBenchmark ....
@@ -97,16 +131,13 @@ public:
                        const size_t nconn, const size_t nsec)
         : epoll_("/client"), connector_(&epoll_), addr_(addr)
         , iosize_(iosize), nconn_(nconn), nsec_(nsec)
+        , buf_(IOBuffer::Alloc(iosize)), wakeup_(false)
     {
-        buf_ = new DataBuffer();
-        RawData data(iosize_);
-        data.FillRandom();
-        buf_->Append(data);
     }
 
     virtual ~TCPClientBenchmark()
     {
-        delete buf_;
+        buf_.Trash();
     }
 
     void Start(int)
@@ -120,37 +151,14 @@ public:
 
     /*.... handler functions ....*/
 
-    virtual void TCPChannelHandleRead(TCPChannel *, int, DataBuffer *)
+    __async__ virtual void TcpReadDone(TCPChannel *, int, IOBuffer)
     {
         ASSERT(!"Not Reached");
     }
 
-    /*.... callbacks ....*/
-
-    void Connected(int status, TCPChannel * ch)
+    __async__ virtual void TcpWriteDone(TCPChannel * ch, int status)
     {
-        ASSERT(status == OK);
-        ASSERT(buf_->Size() == iosize_);
-
-        {
-            AutoLock _(&lock_);
-            chstats_.insert(make_pair(ch, ChStats()));
-        }
-
-        ch->InitChannel(this);
-        SendData(ch);
-    }
-
-    void WriteDone(int status, TCPChannel * ch)
-    {
-        ASSERT(status == OK);
-
-        {
-            AutoLock _(&lock_);
-            auto it = chstats_.find(ch);
-            ASSERT(it != chstats_.end());
-            it->second.bytes_written_ += iosize_;
-        }
+        ASSERT(status);
 
         if (timer_.Elapsed() > SEC2MS(nsec_)) {
             nactiveconn_.Add(/*count=*/ -1);
@@ -161,6 +169,30 @@ public:
             return;
         }
 
+        AutoLock _(&lock_);
+        if (wakeup_) {
+            wakeup_ = false;
+            ThreadPool::Schedule(this, &TCPClientBenchmark::SendData, ch);
+        }
+
+        auto it = chstats_.find(ch);
+        ASSERT(it != chstats_.end());
+        it->second.bytes_written_ += status;
+    }
+
+    /*.... callbacks ....*/
+
+    __async__ void Connected(int status, TCPChannel * ch)
+    {
+        ASSERT(status == OK);
+        ASSERT(buf_.Size() == iosize_);
+
+        {
+            AutoLock _(&lock_);
+            chstats_.insert(make_pair(ch, ChStats()));
+        }
+
+        ch->RegisterClient(this);
         SendData(ch);
     }
 
@@ -178,18 +210,24 @@ public:
         }
     }
 
-
 private:
 
     void SendData(TCPChannel * ch)
     {
-        ThreadPool::Schedule(ch, &TCPChannel::Write, buf_,
-                             make_cb(this, &TCPClientBenchmark::WriteDone, ch));
+
+        AutoLock _(&lock_);
+        if (!ch->EnqueueWrite(buf_)) {
+            ASSERT(!wakeup_);
+            wakeup_ = true;
+            return;
+        }
+
+        ThreadPool::Schedule(this, &TCPClientBenchmark::SendData, ch);
     }
 
     typedef map<TCPChannel *, ChStats> chstats_map_t;
 
-    SpinMutex lock_;
+    PThreadMutex lock_;
     EpollSet epoll_;
     TCPConnector connector_;
     const SocketAddress addr_;
@@ -197,9 +235,10 @@ private:
     const size_t nconn_;
     const size_t nsec_;
     chstats_map_t chstats_;     //< Stats holder
-    DataBuffer * buf_;
+    IOBuffer buf_;
     Timer timer_;
     AtomicCounter nactiveconn_;
+    bool wakeup_;
 };
 
 

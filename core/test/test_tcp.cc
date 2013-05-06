@@ -9,14 +9,7 @@
 using namespace std;
 using namespace dh_core;
 
-uint64_t
-NowInMilliSec()
-{
-    timeval tv;
-    int status = gettimeofday(&tv, /*tz=*/ NULL);
-    ASSERT(!status);
-    return tv.tv_sec * 1000 + (tv.tv_usec / 1000);
-}
+//............................................................ basictcptest ....
 
 class BasicTCPTest : public TCPServerClient, public TCPChannelClient
 {
@@ -26,13 +19,16 @@ public:
     static const uint32_t WBUFFERSIZE = 4 * 1024;  // 4 KiB
     static const uint32_t TIMEINTERVAL_MS = 1 * 1000;   // 1 s
 
+    //.... create/destroy ....//
+
     BasicTCPTest()
         : log_("testtcp/")
-        , addr_("127.0.0.1", 9999 + (rand() % 100))
+        , addr_(SocketAddress::GetAddr("127.0.0.1", 9999 + (rand() % 100)))
         , server_ch_(NULL)
         , client_ch_(NULL)
         , count_(0)
         , iter_(0)
+        , rbuf_(IOBuffer::Alloc(WBUFFERSIZE))
     {
     }
 
@@ -44,11 +40,13 @@ public:
     void Start(int nonce)
     {
         epoll_ = new EpollSet("serverEpoll/");
-        tcpServer_ = new TCPServer(addr_, epoll_);
+        tcpServer_ = new TCPServer(addr_.RemoteAddr(), epoll_);
         tcpServer_->Accept(this, make_cb(this, &BasicTCPTest::AcceptStarted));
     }
 
-    void AcceptStarted(int status)
+    //.... handlers ....//
+
+    __async__ void AcceptStarted(int status)
     {
         ASSERT(status == 0);
 
@@ -57,84 +55,71 @@ public:
                              make_cb(this, &BasicTCPTest::HandleClientConn));
     }
 
-    virtual void TCPServerHandleConnection(int status, TCPChannel * ch)
+    __async__ virtual void TCPServerHandleConnection(int status, TCPChannel * ch)
     {
         ASSERT(status == 0);
 
         INFO(log_) << "Accepted.";
 
         server_ch_ = ch;
-        server_ch_->InitChannel(this);
+        server_ch_->RegisterClient(this);
+
+        server_ch_->Read(rbuf_);
     }
 
-    virtual void HandleClientConn(int status, TCPChannel * ch)
+    __async__ virtual void HandleClientConn(int status, TCPChannel * ch)
     {
         ASSERT(status == 0);
 
         INFO(log_) << "Connected.";
 
         client_ch_ = ch;
-        client_ch_->InitChannel(this);
+        client_ch_->RegisterClient(this);
 
         SendData();
     }
 
-    virtual void TCPChannelClientHandleRead(int status, DataBuffer * buf)
+    __async__ virtual void TcpReadDone(TCPChannel * ch, int status, IOBuffer buf)
     {
-        ASSERT(status == 0);
+        ASSERT((size_t) status == rbuf_.Size());
+        ASSERT(buf == rbuf_);
 
-        ThreadPool::Schedule(this, &BasicTCPTest::VerifyData, buf);
-    }
+        VerifyData(rbuf_);
+        ch->Read(rbuf_);
+   }
 
-    void ClientWriteDone(int status)
+    __async__ virtual void TcpWriteDone(TCPChannel *, int status)
     {
-        ASSERT(status == 0);
+        ASSERT(status > 0 &&  ((size_t) status <= wbuf_.Size()));
+
+        if ((size_t) status < wbuf_.Size()) {
+            wbuf_.Cut(status);
+            return;
+        }
 
         INFO(log_) << "ClientWriteDone.";
 
+        wbuf_.Trash();
         SendData();
     }
 
-    void VerifyData(DataBuffer *buf)
+private: 
+
+    void VerifyData(IOBuffer & buf)
     {
-        for (DataBuffer::iterator it = buf->Begin(); it != buf->End();) {
-            ASSERT(!cksum_.empty());
-            ASSERT(it->Size());
+        const uint32_t cksum = Adler32::Calc(buf.Ptr(), buf.Size());
 
-            // DEBUG(log_) << it->Dump();
+        INVARIANT(cksum_.front() == cksum);
+        cksum_.pop_front();
 
-            const uint32_t peeksize = WBUFFERSIZE - count_;
-            const uint32_t size = std::min(peeksize, it->Size());
-            adler32_.Update(it->Get(), size);
-
-            if (it->Size() <= peeksize) {
-                count_ += it->Size();
-                ++it;
-            } else {
-                it->Cut(peeksize);
-                count_ += peeksize;
-            }
-
-            if (count_ >= WBUFFERSIZE) {
-                ASSERT(count_ == WBUFFERSIZE);
-                ASSERT(cksum_.front() == adler32_.Hash());
-                count_ = 0;
-                cksum_.pop_front();
-                adler32_.Reset();
-
-                DEBUG(log_) << "POP NEXT:" << (int) cksum_.front()
-                            << " EMPTY:" << cksum_.empty();
-           }
-        }
+        DEBUG(log_) << "POP NEXT:" << (int) cksum_.front()
+                    << " EMPTY:" << cksum_.empty();
 
         if (cksum_.empty() && iter_ > MAX_ITERATION) {
             ASSERT(!"Stop");
             // we have reached our sending limit
             return;
         }
-
-
-        delete buf;
     }
 
     int MBps(uint64_t bytes, uint64_t ms)
@@ -151,16 +136,15 @@ public:
 
         INFO(log_) << "SendData.";
 
-        DataBuffer * buf = new DataBuffer();
-        RawData data(WBUFFERSIZE);
-        data.FillRandom();
-        buf->Append(data);
+        ASSERT(!wbuf_);
+        wbuf_ = IOBuffer::Alloc(WBUFFERSIZE);
+        wbuf_.FillRandom();
 
-        const uint32_t cksum = Adler32::Calc(data);
+        const uint32_t cksum = Adler32::Calc(wbuf_.Ptr(), wbuf_.Size());
         DEBUG(log_) << "PUSH " << (uint32_t) cksum;
         cksum_.push_back(cksum);
 
-        client_ch_->Write(buf, make_cb(this, &BasicTCPTest::ClientWriteDone));
+        INVARIANT(client_ch_->EnqueueWrite(wbuf_));
 
         ++iter_;
     }
@@ -176,6 +160,8 @@ public:
     uint32_t count_;
     uint32_t iter_;
     Adler32 adler32_;
+    IOBuffer wbuf_;
+    IOBuffer rbuf_;
 };
 
 void
@@ -188,6 +174,8 @@ test_tcp_basic()
 
     ThreadPool::Wait();
 }
+
+//.................................................................... main ....
 
 int
 main(int argc, char ** argv)

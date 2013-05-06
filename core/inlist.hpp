@@ -103,7 +103,7 @@ public:
 
     InQueue(const std::string & name)
         : log_("/q/" + name)
-        , maxSpin_(2)
+        , maxSpin_(1000)
     {
     }
 
@@ -118,7 +118,6 @@ public:
 
     inline T * Pop()
     {
-/*
         for (unsigned int i = 0; i < maxSpin_; ++i) {
             lock_.Lock();
             if (!q_.IsEmpty()) {
@@ -127,14 +126,15 @@ public:
                 return t;
             }
             lock_.Unlock();
+            sched_yield();
         }
 
         // lame adaptive spinning
-        maxSpin_ = maxSpin_ * maxSpin_;
-        if (maxSpin_ > MAX_SPIN) {
-            maxSpin_ = 10;
-        }
-*/
+        // maxSpin_ = maxSpin_ * maxSpin_;
+        // if (maxSpin_ > MAX_SPIN) {
+        //    maxSpin_ = 10;
+        // }
+
         lock_.Lock();
         while (q_.IsEmpty()) {
             conditionEmpty_.Wait(&lock_);
@@ -148,11 +148,60 @@ public:
 
 private:
 
+    InQueue();
+
     LogPath log_;
     PThreadMutex lock_;
     WaitCondition conditionEmpty_;
     InList<T> q_;
     unsigned int maxSpin_;
+};
+
+
+/**
+ *
+ */
+template<class T>
+class Queue
+{
+public:
+
+    Queue(const std::string & name)
+        : log_("/q/" + name)
+    {
+    }
+
+    inline void Push(T * t)
+    {
+        lock_.Lock();
+        q_.push(t);
+        lock_.Unlock();
+
+        conditionEmpty_.Signal();
+    }
+
+    inline T Pop()
+    {
+        lock_.Lock();
+        while (q_.empty()) {
+            conditionEmpty_.Wait(&lock_);
+        }
+
+        T t = q_.front();
+        q_.pop();
+        lock_.Unlock();
+
+        return t;
+    }
+
+private:
+
+    Queue();
+
+    LogPath log_;
+    PThreadMutex lock_;
+    WaitCondition conditionEmpty_;
+    std::queue<T> q_;
 };
 
 

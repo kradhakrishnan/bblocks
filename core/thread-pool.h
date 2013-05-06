@@ -67,6 +67,16 @@ MEMBERFNPTR(3,
             p1_ COMMA p2_ COMMA p3_,
             _P1_ p1_ SEMICOLON _P2_ p2_ SEMICOLON _P3_ p3_)
 
+MEMBERFNPTR(4,
+            class _P1_ COMMA class _P2_ COMMA class _P3_ COMMA class _P4_,
+            _P1_ COMMA _P2_ COMMA _P3_ COMMA _P4_,
+            const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3 COMMA \
+            const _P4_ p4,
+            p1_ = p1 SEMICOLON p2_ = p2 SEMICOLON p3_ = p3 SEMICOLON p4_ = p4,
+            p1_ COMMA p2_ COMMA p3_ COMMA p4_,
+            _P1_ p1_ SEMICOLON _P2_ p2_ SEMICOLON _P3_ p3_ SEMICOLON _P4_ p4_)
+
+
 
 /**
  *
@@ -147,7 +157,7 @@ public:
         for (size_t i = 0; i < maxCores; ++i) {
             NonBlockingThread * th = new NonBlockingThread("/th/" + STR(i));
             threads_.push_back(th);
-            th->StartThread();
+            th->StartNonBlockingThread();
         }
     }
 
@@ -178,7 +188,15 @@ public:
     NBTP_SCHEDULE(class _P1_ COMMA class _P2_ COMMA class _P3_,
                   _P1_ COMMA _P2_ COMMA _P3_,
                   const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3,
-                  p1 COMMA p2 COMMA p3, 3)
+                  p1 COMMA p2 COMMA p3,
+                  3)
+    NBTP_SCHEDULE(class _P1_ COMMA class _P2_ COMMA class _P3_ COMMA class _P4_,
+                  _P1_ COMMA _P2_ COMMA _P3_ COMMA _P4_,
+                  const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3 \
+                  COMMA const _P4_ p4,
+                  p1 COMMA p2 COMMA p3 COMMA p4,
+                  4)
+
 
 
     void Schedule(ThreadRoutine * r)
@@ -247,6 +265,12 @@ public:
              _P1_ COMMA _P2_ COMMA _P3_,
              const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3,
              p1 COMMA p2 COMMA p3)
+
+    SCHEDULE(class _P1_ COMMA class _P2_ COMMA class _P3_ COMMA class _P4_,
+             _P1_ COMMA _P2_ COMMA _P3_ COMMA _P4_,
+             const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3 \
+             COMMA const _P4_ p4,
+             p1 COMMA p2 COMMA p3 COMMA p4)
 
 
     static void Schedule(ThreadRoutine * r)

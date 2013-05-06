@@ -1,6 +1,7 @@
 #ifndef _TCPSERVER_H_
 #define _TCPSERVER_H_
 
+#include <boost/algorithm/string.hpp>
 #include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -12,8 +13,11 @@
 #include "core/epollset.h"
 #include "core/thread-pool.h"
 #include "core/callback.hpp"
+#include "core/buffer.h"
 
 namespace dh_core {
+
+//................................................................. Helpers ....
 
 /**
  *
@@ -50,22 +54,12 @@ class SocketAddress
 
 public:
 
-    SocketAddress()
-    {
-    }
+    /*.... Static Function ....*/
 
-    SocketAddress(const std::string & hostname, const short & port)
+    static sockaddr_in GetAddr(const std::string & hostname, const short port)
     {
-        LookupByHost(hostname, port);
-    }
+        sockaddr_in addr;
 
-    SocketAddress(const short & port)
-    {
-        SetAddress(INADDR_ANY, port);
-    }
-
-    void LookupByHost(const std::string & hostname, const short port)
-    {
         addrinfo hints;
         memset(&hints, 0, sizeof(hints));
         hints.ai_family = AF_INET;
@@ -75,43 +69,113 @@ public:
 
         addrinfo * result = NULL;
         int status = getaddrinfo(hostname.c_str(), NULL, &hints, &result);
-        ASSERT(status != -1);
+        INVARIANT(status != -1);
         ASSERT(result);
         ASSERT(result->ai_addrlen == sizeof(sockaddr_in));
 
         // sockaddr_in ret = *((sockaddr_in *)result->ai_addr);
-        memset(&addr_, 0, sizeof(sockaddr_in)); 
-        addr_.sin_family = AF_INET;
-        addr_.sin_port = htons(port);
-        addr_.sin_addr.s_addr = ((sockaddr_in *)result->ai_addr)->sin_addr.s_addr;
+        memset(&addr, 0, sizeof(sockaddr_in)); 
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        addr.sin_addr.s_addr = ((sockaddr_in *)result->ai_addr)->sin_addr.s_addr;
 
         freeaddrinfo(result);
+
+        return addr;
     }
 
-    const sockaddr_in & sockaddr() const
+    static sockaddr_in GetAddr(const in_addr_t & addr, const short port)
     {
-        return addr_;
+        sockaddr_in sockaddr;
+        memset(&sockaddr, /*ch=*/ 0, sizeof(sockaddr_in));
+        sockaddr.sin_family = AF_INET;
+        sockaddr.sin_port = htons(port);
+        sockaddr.sin_addr.s_addr = addr;
+
+        return sockaddr;
+    }
+
+    static sockaddr_in GetAddr(const std::string & saddr)
+    {
+        std::vector<std::string> tokens;
+        boost::split(tokens, saddr, boost::is_any_of(":"));
+
+        ASSERT(tokens.size() == 2);
+
+        const std::string host = tokens[0];
+        const short port = atoi(tokens[1].c_str());
+
+        return GetAddr(host, port);
+    }
+
+    static SocketAddress GetAddr(const std::string & laddr,
+                                 const std::string & raddr)
+    {
+        return SocketAddress(GetAddr(laddr), GetAddr(raddr));
+    }
+
+    /*.... ctor/dtor ....*/
+
+    SocketAddress()
+    {
+    }
+
+    SocketAddress(const sockaddr_in & raddr)
+        : laddr_(GetAddr(INADDR_ANY, /*port=*/ 0)), raddr_(raddr)
+    {}
+
+    SocketAddress(const sockaddr_in & laddr, const sockaddr_in & raddr)
+        : laddr_(laddr), raddr_(raddr)
+    {}
+
+    /*.... get/set ....*/
+
+    const sockaddr_in & LocalAddr() const
+    {
+        return laddr_;
+    }
+
+    const sockaddr_in & RemoteAddr() const
+    {
+        return raddr_;
     }
 
 private:
 
-    void SetAddress(const in_addr_t & addr, const short port)
-    {
-        memset(&addr_, 0, sizeof(sockaddr_in));
-        addr_.sin_family = AF_INET;
-        addr_.sin_port = htons(port);
-        addr_.sin_addr.s_addr = addr;
-    }
+    struct sockaddr_in laddr_;
+    struct sockaddr_in raddr_;
+};
 
-    struct sockaddr_in addr_;
+class TCPConnector;
+class TCPServer;
+class TCPChannel;
+
+//.............................................................. TCPChannel ....
+
+/**
+ *
+ */
+class TCPChannelClient
+{
+public:
+
+    virtual ~TCPChannelClient() {}
+
+    /**
+     *
+     */
+    __async__ virtual void TcpReadDone(TCPChannel * ch, int status,
+                                       IOBuffer buf) = 0;
+
+    /**
+     *
+     */
+    __async__ virtual void TcpWriteDone(TCPChannel * ch, int status) = 0;
 };
 
 /**
  *
  */
-class TCPConnector;
-class TCPServer;
-
 class TCPChannel : public EpollSetClient
 {
 public:
@@ -119,39 +183,76 @@ public:
     friend class TCPConnector;
     friend class TCPServer;
 
-    typedef Callback<int> writercb_t;
-    typedef Callback2<int, DataBuffer *> readercb_t;
+    //.... statics ....//
+
+    static const uint32_t DEFAULT_WRITE_BACKLOG = IOV_MAX; 
+
+    //.... construction/destruction ....//
 
     TCPChannel(const std::string & name, int fd, EpollSet * epoll)
         : log_(name)
         , fd_(fd)
         , epoll_(epoll)
-        , reader_cb_(NULL)
-        , writer_cb_(NULL)
+        , client_(NULL)
+        , wbuf_(DEFAULT_WRITE_BACKLOG)
     {
         ASSERT(fd_ >= 0);
         ASSERT(epoll_);
     }
 
-    ~TCPChannel()
+    virtual ~TCPChannel()
     {
-        ASSERT(!reader_cb_);
-        ASSERT(!writer_cb_);
+        ASSERT(client_);
     }
 
-    void Write(const DataBuffer & buf, writercb_t * cb);
+    //.... member fns ....//
 
-    // TODO: Make reader subscribe/unsubscribe model
-    void RegisterRead(readercb_t * cb);
+    /**
+     *
+     */
+    bool EnqueueWrite(const IOBuffer & data);
 
-    // TODO: Make this asynchronous, that is the correct protocol
+    /**
+     *
+     */
+    void Read(IOBuffer & data);
+
+    /**
+     *
+     */
+    void RegisterClient(TCPChannelClient * client_);
+
+    /**
+     *
+     */
+    void UnregisterClient(TCPChannelClient * client_, Callback<int> * cb);
+
+    /**
+     *
+     */
     void Close();
 
+    /**
+     *
+     */
     void EpollSetHandleFdEvent(int fd, uint32_t events);
 
 private:
 
-    static const uint32_t DEFAULT_READ_SIZE = 640 * 1024; // 640K
+    struct ReadCtx
+    {
+        ReadCtx() : bytesRead_(0) {}
+        ReadCtx(const IOBuffer & buf) : buf_(buf), bytesRead_(0) {}
+
+        void Reset()
+        {
+            buf_.Reset();
+            bytesRead_ = 0;
+        }
+
+        IOBuffer buf_;
+        uint32_t bytesRead_;
+    };
 
     TCPChannel();
 
@@ -160,17 +261,16 @@ private:
     // Write data from internal buffer to socket
     void WriteDataToSocket();
 
-    // close socket
-    void CloseInternal();
-
+    SpinMutex lock_;
     LogPath log_;
     int fd_;
     EpollSet * epoll_;
-    DataBuffer inq_;
-    DataBuffer outq_;
-    readercb_t * reader_cb_;
-    writercb_t * writer_cb_;
+    TCPChannelClient * client_;
+    BoundedQ<IOBuffer> wbuf_;
+    ReadCtx rctx_;
 };
+
+//............................................................... TCPServer ....
 
 /**
  *
@@ -180,6 +280,7 @@ class TCPServerClient
 public:
 
     virtual void TCPServerHandleConnection(int status, TCPChannel * ch) = 0;
+    virtual ~TCPServerClient() {}
 };
 
 /**
@@ -189,7 +290,7 @@ class TCPServer : public EpollSetClient
 {
 public:
 
-    TCPServer(const SocketAddress & addr, EpollSet * epoll)
+    TCPServer(const sockaddr_in & addr, EpollSet * epoll)
         : log_(GetLogPath())
         , epoll_(epoll)
         , servaddr_(addr)
@@ -199,7 +300,7 @@ public:
         ASSERT(!client_);
     }
 
-    ~TCPServer()
+    virtual ~TCPServer()
     {
         INVARIANT(!client_);
         INVARIANT(!epoll_);
@@ -210,9 +311,10 @@ public:
         return (uint64_t) this;
     }
 
-    void StartAccepting(TCPServerClient * client);
+    void Accept(TCPServerClient * client, Callback<status_t> * cb = NULL);
     // TODO: Make it async 
-    void Shutdown();
+    void Shutdown(Callback<int> * cb = NULL);
+    void ShutdownFdRemoved(int status, Callback<int> * cb); 
 
 private:
 
@@ -236,20 +338,12 @@ private:
     LogPath log_;
     EpollSet * epoll_;
     socket_t sockfd_;
-    const SocketAddress servaddr_;
+    const sockaddr_in servaddr_;
     iochs_t iochs_;
     TCPServerClient * client_;
 };
 
-/**
- *
- */
-class TCPConnectorClient
-{
-public:
-
-    virtual void TCPConnectorHandleConnection(int status, TCPChannel * ch) = 0;
-};
+//............................................................ TCPConnector ....
 
 /**
  * TCPClient
@@ -259,35 +353,37 @@ class TCPConnector : public EpollSetClient
 
 public:
 
-    typedef TCPConnectorClient client_t;
-
     TCPConnector(EpollSet * epoll, const std::string & name = "tcpclient/")
         : log_(name)
         , epoll_(epoll)
-        , client_(NULL)
     {
     }
 
-    ~TCPConnector()
+    virtual ~TCPConnector()
     {
-        ASSERT(!client_);
+        ASSERT(clients_.empty());
     }
 
-    void Connect(const SocketAddress & addr, TCPConnectorClient *cb);
-    void Stop();
+    void Connect(const SocketAddress addr, Callback2<int, TCPChannel *> * cb);
+
+    void Stop(Callback<int> * cb = NULL);
 
 private:
 
     void EpollSetHandleFdEvent(int fd, uint32_t events);
+    void EpollSetAddDone(const int status);
+
+    typedef std::map<fd_t, Callback2<int, TCPChannel *> *> clients_map_t;
 
     std::string TCPChannelLogPath(int fd) const
     {
         return  log_.GetPath() + "ch/" + STR(fd) + "/";
     }
 
+    SpinMutex lock_;
     LogPath log_;
     EpollSet * epoll_;
-    TCPConnectorClient * client_;
+    clients_map_t clients_;
 };
 
 } // namespace kware {

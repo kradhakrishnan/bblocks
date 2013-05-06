@@ -10,6 +10,52 @@
 using namespace dh_core;
 using namespace std;
 
+//.................................................... time based functions ....
+
+#define SEC2MS(x) (x * 1000)
+#define MS2SEC(x) (x / 1000)
+#define B2MB(x) (x / (1024 * 1024))
+
+uint64_t
+NowInMilliSec()
+{
+    timeval tv;
+    int status = gettimeofday(&tv, /*tz=*/ NULL);
+    (void) status;
+    ASSERT(!status);
+    return tv.tv_sec * 1000 + (tv.tv_usec / 1000);
+}
+
+class Timer
+{
+public:
+
+    Timer()
+        : start_ms_(NowInMilliSec())
+    {}
+
+    uint64_t Elapsed() const
+    {
+        return NowInMilliSec() - start_ms_;
+    }
+
+    static uint64_t Elapsed(const uint64_t start_ms)
+    {
+        return NowInMilliSec() - start_ms;
+    }
+
+    void Reset()
+    {
+        start_ms_ = NowInMilliSec();
+    }
+
+private:
+
+    uint64_t start_ms_;
+};
+
+//............................................... thread pool util funtions ....
+
 void InitTestSetup()
 {
     LogHelper::InitConsoleLogger();
