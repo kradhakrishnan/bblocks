@@ -7,8 +7,13 @@
 #include <string.h>
 #include <errno.h>
 
-#define __async__ /* async notification */
-#define __sync__ /* synchronous callback */
+#define __completion_handler__ /* async notification */
+#define __interrupt__ /* synchronous callback */
+#define __async_operation__ /* async operation function */
+
+// pointer meta information
+
+#define __own__ /* own the ptr henceforth */
 
 #define STD_ERROR std::cerr
 #define STD_INFO std::cout

@@ -77,7 +77,6 @@ MEMBERFNPTR(4,
             _P1_ p1_ SEMICOLON _P2_ p2_ SEMICOLON _P3_ p3_ SEMICOLON _P4_ p4_)
 
 
-
 /**
  *
  */
@@ -145,6 +144,36 @@ class NonBlockingThreadPool : public Singleton<NonBlockingThreadPool>
 {
 public:
 
+    class BarrierRoutine : public ThreadRoutine
+    {
+    public:
+
+        BarrierRoutine(ThreadRoutine * cb, const size_t count)
+            : cb_(cb), pendingCalls_(count)
+        {
+        }
+
+        virtual void Run()
+        { 
+            const uint64_t count = pendingCalls_.Add(/*count=*/ -1);
+
+            INFO(LogPath("/barrierRoutine")) << "Count=" << count;
+
+            if (count == 1) {
+                INVARIANT(!pendingCalls_.Count());
+                NonBlockingThreadPool::Instance().Schedule(cb_);
+                cb_ = NULL;
+                delete this;
+            }
+        }
+
+    private:
+
+        ThreadRoutine * cb_;
+        AtomicCounter pendingCalls_;
+    };
+
+
     NonBlockingThreadPool()
         : nextTh_(0)
     {
@@ -202,6 +231,14 @@ public:
     void Schedule(ThreadRoutine * r)
     {
         threads_[nextTh_++ % threads_.size()]->Push(r);
+    }
+
+    void ScheduleBarrier(ThreadRoutine * r)
+    {
+        BarrierRoutine * br = new BarrierRoutine(r, threads_.size());
+        for (size_t i = 0; i < threads_.size(); ++i) {
+            threads_[i]->Push(br);
+        }
     }
 
 private:
@@ -277,7 +314,13 @@ public:
     {
         NonBlockingThreadPool::Instance().Schedule(r);
     }
+
+    static void ScheduleBarrier(ThreadRoutine * r)
+    {
+        NonBlockingThreadPool::Instance().ScheduleBarrier(r);
+    }
 };
+
 
 } // namespace dh_core
 

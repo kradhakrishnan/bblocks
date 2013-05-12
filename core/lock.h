@@ -208,6 +208,8 @@ public:
             status = __sync_bool_compare_and_swap(&mutex_, OPEN, CLOSED);
 
             if (status) {
+                ASSERT(Is(CLOSED));
+                owner_ = pthread_self();
                 break;
             }
 
@@ -217,7 +219,7 @@ public:
 
     virtual void Unlock()
     {
-        ASSERT(Is(CLOSED));
+        ASSERT(IsOwner());
         bool status = __sync_bool_compare_and_swap(&mutex_, CLOSED, OPEN);
         (void) status;
         ASSERT(status);
@@ -230,11 +232,12 @@ public:
 
     virtual bool IsOwner()
     {
-        INVARIANT(!"Not Supported");
+        return Is(CLOSED) && pthread_equal(owner_, pthread_self());
     }
 
 protected:
 
+    pthread_t owner_;
     volatile _Atomic_word mutex_;
 };
 

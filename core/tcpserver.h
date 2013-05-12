@@ -6,6 +6,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <fcntl.h>
+
 #include <netdb.h>
 #include <list>
 
@@ -14,8 +16,13 @@
 #include "core/thread-pool.h"
 #include "core/callback.hpp"
 #include "core/buffer.h"
+#include "core/async.h"
 
 namespace dh_core {
+
+class TCPChannel;
+class TCPServer;
+class TCPConnector;
 
 //................................................................. Helpers ....
 
@@ -130,15 +137,10 @@ public:
 
     /*.... get/set ....*/
 
-    const sockaddr_in & LocalAddr() const
-    {
-        return laddr_;
-    }
-
-    const sockaddr_in & RemoteAddr() const
-    {
-        return raddr_;
-    }
+    /*! get local binding socket address */
+    const sockaddr_in & LocalAddr() const { return laddr_; }
+    /*! get remote socket address */
+    const sockaddr_in & RemoteAddr() const { return raddr_; }
 
 private:
 
@@ -146,42 +148,24 @@ private:
     struct sockaddr_in raddr_;
 };
 
-class TCPConnector;
-class TCPServer;
-class TCPChannel;
-
 //.............................................................. TCPChannel ....
 
 /**
  *
  */
-class TCPChannelClient
-{
-public:
-
-    virtual ~TCPChannelClient() {}
-
-    /**
-     *
-     */
-    __async__ virtual void TcpReadDone(TCPChannel * ch, int status,
-                                       IOBuffer buf) = 0;
-
-    /**
-     *
-     */
-    __async__ virtual void TcpWriteDone(TCPChannel * ch, int status) = 0;
-};
-
-/**
- *
- */
-class TCPChannel : public EpollSetClient
+class TCPChannel : public AsyncProcessor, public CompletionHandle
 {
 public:
 
     friend class TCPConnector;
     friend class TCPServer;
+    friend class EpollSet;
+
+    //.... callback defintions ....//
+
+    typedef void (CHandle::*ReadDoneFn)(TCPChannel *, int, IOBuffer);
+    typedef void (CHandle::*WriteDoneFn)(TCPChannel *, int);
+    typedef AsyncProcessor::UnregisterDoneFn UnregisterDoneFn;
 
     //.... statics ....//
 
@@ -193,7 +177,6 @@ public:
         : log_(name)
         , fd_(fd)
         , epoll_(epoll)
-        , client_(NULL)
         , wbuf_(DEFAULT_WRITE_BACKLOG)
     {
         ASSERT(fd_ >= 0);
@@ -202,47 +185,70 @@ public:
 
     virtual ~TCPChannel()
     {
-        ASSERT(client_);
+        INVARIANT(!client_.h_);
+        INVARIANT(!epoll_);
     }
 
-    //.... member fns ....//
+    //.... CHandle override ....//
+
+    void RegisterHandle(CHandle * h);
+    __async_operation__ void UnregisterHandle(CHandle * h, UnregisterDoneFn cb);
+
+    //.... async operations ....//
 
     /**
      *
      */
-    bool EnqueueWrite(const IOBuffer & data);
+    __async_operation__ bool EnqueueWrite(const IOBuffer & data);
 
-    /**
+    /*!
+     * \brief Invoke asynchronous read operation
      *
+     * Will try to read data from the socket. If not readily available it will
+     * return asynchronous call when read otherwise will read and return
+     * immediately.
+     *
+     * \param   data    Data to be written to the socket
+     * \param   fn      Callback when read (if data not readily available)
+     * \return  true if data read is done else false
      */
-    void Read(IOBuffer & data);
+    __async_operation__ void Read(IOBuffer & data, const ReadDoneFn fn);
 
-    /**
-     *
-     */
-    void RegisterClient(TCPChannelClient * client_);
 
-    /**
-     *
-     */
-    void UnregisterClient(TCPChannelClient * client_, Callback<int> * cb);
+    //.... sync operations ....//
 
-    /**
-     *
-     */
+    /*! Close the channel communication paths */
     void Close();
 
-    /**
-     *
-     */
-    void EpollSetHandleFdEvent(int fd, uint32_t events);
+    /*! Set callback function for write done */
+    void SetWriteDoneFn(CHandle * h, const WriteDoneFn fn)
+    {
+        INVARIANT(fn);
+        INVARIANT(h && client_.h_ == h);
+
+        client_.writeDoneFn_ = fn;
+    }
 
 private:
 
+    // Represent client and its callbacks
+    struct Client
+    {
+        Client() : h_(NULL), writeDoneFn_(NULL), unregisterDoneFn_(NULL) {}
+        Client(CHandle * h)
+            : h_(h), writeDoneFn_(NULL), unregisterDoneFn_(NULL) {}
+
+        CHandle * h_;
+        WriteDoneFn writeDoneFn_;
+        UnregisterDoneFn unregisterDoneFn_;
+    };
+
+    // represent read operation context
     struct ReadCtx
     {
         ReadCtx() : bytesRead_(0) {}
-        ReadCtx(const IOBuffer & buf) : buf_(buf), bytesRead_(0) {}
+        ReadCtx(const IOBuffer & buf, const ReadDoneFn fn)
+            : buf_(buf), bytesRead_(0), fn_(fn) {}
 
         void Reset()
         {
@@ -252,133 +258,175 @@ private:
 
         IOBuffer buf_;
         uint32_t bytesRead_;
+        ReadDoneFn fn_;
+
     };
+
+    //.... inaccessible ....//
 
     TCPChannel();
 
+    //.... private member fns ....//
+
+    // epoll interrupt for socket notification
+    __interrupt__ void HandleFdEvent(EpollSet * epoll, int fd, uint32_t events);
     // Read data from the socket to internal buffer
     void ReadDataFromSocket();
     // Write data from internal buffer to socket
     void WriteDataToSocket();
+    // Notification back from thread pool about drained events
+    void BarrierDone(int);
+
+    //.... private member variables ....//
 
     SpinMutex lock_;
     LogPath log_;
     int fd_;
     EpollSet * epoll_;
-    TCPChannelClient * client_;
+    Client client_;
     BoundedQ<IOBuffer> wbuf_;
     ReadCtx rctx_;
 };
 
 //............................................................... TCPServer ....
 
-/**
+/*!
+ * \class TCPServer
+ * \brief Asynchronous TCP server implementation
  *
+ * Provides a TCP listener implementation. Helps accept connections
+ * from clients asynchronously. Designed on the acceptor design pattern.
  */
-class TCPServerClient
+class TCPServer : public CompletionHandle
 {
 public:
 
-    virtual void TCPServerHandleConnection(int status, TCPChannel * ch) = 0;
-    virtual ~TCPServerClient() {}
-};
+    //.... callback definitions ....//
 
-/**
- * TCPServer
- */
-class TCPServer : public EpollSetClient
-{
-public:
+    typedef void (CHandle::*ConnDoneFn)(TCPServer *, int, TCPChannel *);
 
-    TCPServer(const sockaddr_in & addr, EpollSet * epoll)
+    //.... create/destroy ....//
+
+    TCPServer(EpollSet * epoll)
         : log_(GetLogPath())
         , epoll_(epoll)
-        , servaddr_(addr)
-        , client_(NULL)
     {
         ASSERT(epoll_);
-        ASSERT(!client_);
+        ASSERT(!client_.h_);
     }
 
     virtual ~TCPServer()
     {
-        INVARIANT(!client_);
+        INVARIANT(!client_.h_);
         INVARIANT(!epoll_);
     }
 
-    uint64_t UId() const
-    {
-        return (uint64_t) this;
-    }
+    //.... member fns ....//
 
-    void Accept(TCPServerClient * client, Callback<status_t> * cb = NULL);
-    // TODO: Make it async 
-    void Shutdown(Callback<int> * cb = NULL);
-    void ShutdownFdRemoved(int status, Callback<int> * cb); 
+    void Listen(CHandle * h, sockaddr_in saddr, const ConnDoneFn cb);
+
+    void Shutdown();
 
 private:
 
-    void EpollSetHandleFdEvent(int fd, uint32_t events);
+    static const size_t MAXBACKLOG = 100;
 
-    const std::string GetLogPath() const
+    struct Client
     {
-        return "tcpserver/" + STR((uint64_t) this);
-    }
+        Client(CHandle * h = NULL, const ConnDoneFn connDoneFn = NULL)
+            : h_(h), connDoneFn_(connDoneFn)
+        {}
 
-    const std::string TCPChannelLogPath(int fd)
-    {
-        return "tcpserver/" + STR(sockfd_) + "/ch/" + STR(fd) + "/";
-    }
-
-    static const unsigned int MAXBACKLOG = 100;
+        CHandle * h_;
+        ConnDoneFn connDoneFn_;
+    };
 
     typedef int socket_t;
-    typedef std::list<TCPChannel *> iochs_t;
 
+    //.... private member fns ....//
+
+    __interrupt__ void HandleFdEvent(EpollSet *, int fd, uint32_t events);
+
+    const std::string GetLogPath() const
+    { return "tcpserver/" + STR((uint64_t) this); }
+
+    const std::string TCPChannelLogPath(int fd)
+    { return "tcpserver/" + STR(sockfd_) + "/ch/" + STR(fd) + "/"; }
+
+    //.... private member variables ....//
+
+    SpinMutex lock_;
     LogPath log_;
     EpollSet * epoll_;
     socket_t sockfd_;
-    const sockaddr_in servaddr_;
-    iochs_t iochs_;
-    TCPServerClient * client_;
+    Client client_;
 };
 
 //............................................................ TCPConnector ....
 
-/**
- * TCPClient
+/*!
+ * \class TCPConnector
+ * \brief Asynchronous TCP connection provider
+ *
+ * Helps establish TCP connections asynchronously. This follows the connector
+ * design pattern.
+ *
  */
-class TCPConnector : public EpollSetClient
+class TCPConnector : public CompletionHandle
 {
-
 public:
+
+    //.... callback definition ....//
+
+    typedef AsyncProcessor::UnregisterDoneFn UnregisterDoneFn;
+    typedef void (CHandle::*ConnDoneFn)(TCPConnector *, int, TCPChannel *);
+
+    //.... create/destroy ....//
 
     TCPConnector(EpollSet * epoll, const std::string & name = "tcpclient/")
         : log_(name)
         , epoll_(epoll)
     {
+        ASSERT(epoll_);
     }
 
     virtual ~TCPConnector()
     {
         ASSERT(clients_.empty());
+        epoll_ = NULL;
     }
 
-    void Connect(const SocketAddress addr, Callback2<int, TCPChannel *> * cb);
+    //.... async operations ....//
 
-    void Stop(Callback<int> * cb = NULL);
+    __async_operation__ void Connect(const SocketAddress addr,
+                                     CHandle * h, const ConnDoneFn cb);
+
+
+    //.... sync functions ....//
+
+    void Shutdown();
 
 private:
 
-    void EpollSetHandleFdEvent(int fd, uint32_t events);
-    void EpollSetAddDone(const int status);
-
-    typedef std::map<fd_t, Callback2<int, TCPChannel *> *> clients_map_t;
-
-    std::string TCPChannelLogPath(int fd) const
+    struct Client
     {
-        return  log_.GetPath() + "ch/" + STR(fd) + "/";
-    }
+        Client(CHandle * h = NULL, const ConnDoneFn connDoneFn = NULL)
+            : h_(h), connDoneFn_(connDoneFn) {}
+
+        CHandle * h_;
+        ConnDoneFn connDoneFn_;
+    };
+
+    typedef std::map<fd_t, Client> clients_map_t;
+
+    //.... private member fns ....//
+
+    __interrupt__ void HandleFdEvent(EpollSet *, int fd, uint32_t events);
+
+    const std::string TCPChannelLogPath(const int fd) const
+    { return  log_.GetPath() + "ch/" + STR(fd) + "/"; }
+
+    //.... private member variables ....//
 
     SpinMutex lock_;
     LogPath log_;

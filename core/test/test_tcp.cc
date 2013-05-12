@@ -5,15 +5,18 @@
 #include "core/test/unit-test.h"
 #include "core/util.hpp"
 #include "core/tcpserver.h"
+#include "core/async.h"
 
 using namespace std;
 using namespace dh_core;
 
 //............................................................ basictcptest ....
 
-class BasicTCPTest : public TCPServerClient, public TCPChannelClient
+class BasicTCPTest : public CompletionHandle
 {
 public:
+
+    typedef BasicTCPTest This;
 
     static const uint32_t MAX_ITERATION = 20;
     static const uint32_t WBUFFERSIZE = 4 * 1024;  // 4 KiB
@@ -40,55 +43,56 @@ public:
     void Start(int nonce)
     {
         epoll_ = new EpollSet("serverEpoll/");
-        tcpServer_ = new TCPServer(addr_.RemoteAddr(), epoll_);
-        tcpServer_->Accept(this, make_cb(this, &BasicTCPTest::AcceptStarted));
+
+        tcpServer_ = new TCPServer(epoll_);
+        tcpServer_->Listen(this, addr_.RemoteAddr(),
+                           async_fn(&This::HandleServerConn));
+
+        tcpClient_ = new TCPConnector(epoll_);
+        tcpClient_->Connect(addr_, this, async_fn(&This::HandleClientConn));
     }
 
     //.... handlers ....//
 
-    __async__ void AcceptStarted(int status)
-    {
-        ASSERT(status == 0);
-
-        tcpClient_ = new TCPConnector(epoll_);
-        ThreadPool::Schedule(tcpClient_, &TCPConnector::Connect, addr_,
-                             make_cb(this, &BasicTCPTest::HandleClientConn));
-    }
-
-    __async__ virtual void TCPServerHandleConnection(int status, TCPChannel * ch)
+    __completion_handler__
+    virtual void HandleServerConn(TCPServer *, int status, TCPChannel * ch)
     {
         ASSERT(status == 0);
 
         INFO(log_) << "Accepted.";
 
         server_ch_ = ch;
-        server_ch_->RegisterClient(this);
+        server_ch_->RegisterHandle(this);
 
-        server_ch_->Read(rbuf_);
+        server_ch_->Read(rbuf_, async_fn(&This::ReadDone));
     }
 
-    __async__ virtual void HandleClientConn(int status, TCPChannel * ch)
+    __completion_handler__
+    virtual void HandleClientConn(TCPConnector *, int status, TCPChannel * ch)
     {
         ASSERT(status == 0);
 
         INFO(log_) << "Connected.";
 
         client_ch_ = ch;
-        client_ch_->RegisterClient(this);
+        client_ch_->RegisterHandle(this);
+        client_ch_->SetWriteDoneFn(this, async_fn(&This::WriteDone));
 
         SendData();
     }
 
-    __async__ virtual void TcpReadDone(TCPChannel * ch, int status, IOBuffer buf)
+    __completion_handler__
+    virtual void ReadDone(TCPChannel * ch, int status, IOBuffer buf)
     {
         ASSERT((size_t) status == rbuf_.Size());
         ASSERT(buf == rbuf_);
 
         VerifyData(rbuf_);
-        ch->Read(rbuf_);
+        ch->Read(rbuf_, async_fn(&This::ReadDone));
    }
 
-    __async__ virtual void TcpWriteDone(TCPChannel *, int status)
+    __completion_handler__
+    virtual void WriteDone(TCPChannel *, int status)
     {
         ASSERT(status > 0 &&  ((size_t) status <= wbuf_.Size()));
 
@@ -101,6 +105,37 @@ public:
 
         wbuf_.Trash();
         SendData();
+    }
+
+    __interrupt__
+    virtual void ClientUnregistered(int status)
+    {
+        client_ch_->Close();
+        delete client_ch_;
+        client_ch_ = NULL;
+
+        server_ch_->UnregisterHandle(this, async_fn(&This::ServerUnregistered));
+    }
+
+    __interrupt__
+    virtual void ServerUnregistered(int status)
+    {
+        server_ch_->Close();
+        delete server_ch_;
+        server_ch_ = NULL;
+
+        tcpServer_->Shutdown();
+        delete tcpServer_;
+        tcpServer_ = NULL;
+
+        tcpClient_->Shutdown();
+        delete tcpClient_;
+        tcpClient_ = NULL;
+
+        delete epoll_;
+        epoll_ = NULL;
+
+        ThreadPool::Shutdown();
     }
 
 private: 
@@ -116,8 +151,8 @@ private:
                     << " EMPTY:" << cksum_.empty();
 
         if (cksum_.empty() && iter_ > MAX_ITERATION) {
-            ASSERT(!"Stop");
-            // we have reached our sending limit
+            client_ch_->UnregisterHandle(this,
+                                            async_fn(&This::ClientUnregistered));
             return;
         }
     }
@@ -170,6 +205,7 @@ test_tcp_basic()
     ThreadPool::Start(/*ncores=*/ 4);
 
     BasicTCPTest test;
+
     ThreadPool::Schedule(&test, &BasicTCPTest::Start, /*nonce=*/ 0);
 
     ThreadPool::Wait();

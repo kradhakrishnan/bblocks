@@ -536,6 +536,11 @@ public:
         return q_.end();
     }
 
+    void Clear()
+    {
+        q_.clear();
+    }
+
 private:
 
     std::vector<T> q_;

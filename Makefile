@@ -6,6 +6,7 @@ STDCPP = /usr/include/c++/4.6.3/
 
 SUBDIR = core/ \
          core/test \
+         core/bmark \
 
 -include ${SUBDIR:%=%/Makefile}
 
@@ -88,10 +89,10 @@ endif
 CC = g++
 AR = $(shell which ar)
 
-CCFLAGS += -Wall -Werror -D__STDC_LIMIT_MACROS $(BUILD_CCFLAGS)
+CCFLAGS += -Wall -std=c++11 -Werror -D__STDC_LIMIT_MACROS $(BUILD_CCFLAGS)
 LDFLAGS += -L$(OBJDIR)  -L/usr/lib
 INCLUDE += -I$(PWD) -Ipublic -I/usr/include/boost -I$(STDCPP)
-LIBS    += -lrt -lpthread  -lz
+LIBS    += -lrt -lpthread  -lz -lboost_program_options
 
 PWD 	:= $(shell pwd)
 OBJDIR	:= $(PWD)/../build
@@ -158,14 +159,12 @@ build-setup:
 	mkdir -p $(OBJDIR)
 	mkdir -p $(OBJDIR)/core
 	mkdir -p $(OBJDIR)/core/test
-	mkdir -p $(OBJDIR)/nfs
-	mkdir -p $(OBJDIR)/nfs/test
-	mkdir -p $(OBJDIR)/clefdb
+	mkdir -p $(OBJDIR)/core/bmark
 
 ubuntu-setup:
 	apt-get install build-essential libaio-dev libaio1 libaio1-dbg \
                         libboost-dev libboost-doc libboost-dbg \
-                        zlibc zlib1g-dev \
+                        libboost-program-options-dev zlibc zlib1g-dev \
                         libtcmalloc-minimal4 libtcmalloc-minimal4-dbg \
                         valgrind \
 

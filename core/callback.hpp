@@ -12,6 +12,7 @@ class A : public ThreadRoutine \
 public: \
 \
     virtual void ScheduleCallback(C) = 0; \
+    virtual void Set(C) = 0; \
 }; \
 \
 template<class _OBJ_, B> \
@@ -27,6 +28,11 @@ public: \
     { \
         E; \
         NonBlockingThreadPool::Instance().Schedule(this); \
+    } \
+\
+    virtual void Set(D) \
+    { \
+        E; \
     } \
 \
     virtual void Run() \

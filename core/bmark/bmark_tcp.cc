@@ -26,35 +26,35 @@ struct ChStats
 
 /**
  */
-class TCPServerBenchmark : public TCPServerClient, public TCPChannelClient
+class TCPServerBenchmark : public CompletionHandle
 {
 public:
+
+    typedef TCPServerBenchmark This;
 
     static const uint32_t RBUFFERSIZE = 1 * 1024 * 1024; // 1MB
 
     //.... create/destroy ....//
 
-    TCPServerBenchmark(const sockaddr_in & addr)
-        : epoll_("/server"), server_(addr, &epoll_)
+    TCPServerBenchmark()
+        : epoll_("/server")
+        , server_(&epoll_)
         , buf_(IOBuffer::Alloc(RBUFFERSIZE))
-    {
-    }
+    {}
 
-    virtual ~TCPServerBenchmark()
-    {
-    }
+    virtual ~TCPServerBenchmark() {}
 
-    void Start(int)
+    void Start(sockaddr_in addr)
     {
         // Start listening
-        ThreadPool::Schedule(&server_, &TCPServer::Accept,
-                             static_cast<TCPServerClient *>(this),
-                             static_cast<Callback<status_t> *>(NULL));
+        auto cb = TCPServer::ConnDoneFn(&This::HandleServerConn);
+        server_.Listen(this, addr, cb);
     }
 
     //.... handlers ....//
 
-    __async__ virtual void TCPServerHandleConnection(int status, TCPChannel * ch)
+    __completion_handler__
+    virtual void HandleServerConn(TCPServer *, int status, TCPChannel * ch)
     {
         cout << "Got ch " << ch << endl;
 
@@ -63,22 +63,24 @@ public:
             chstats_.insert(make_pair(ch, ChStats()));
         }
 
-        ch->RegisterClient(this);
-        ch->Read(buf_);
+        ch->RegisterHandle(this);
+        ch->Read(buf_, async_fn(&This::ReadDone));
     }
 
-    __async__ virtual void TcpReadDone(TCPChannel * ch, int status, IOBuffer)
+    __completion_handler__
+    virtual void ReadDone(TCPChannel * ch, int status, IOBuffer)
     {
         ASSERT((size_t) status == buf_.Size());
         UpdateStats(ch, status);
 
-        ch->Read(buf_);
+        ch->Read(buf_, async_fn(&This::ReadDone));
     }
 
-    __async__ virtual void TcpWriteDone(TCPChannel * ch, int status)
+    __interrupt__
+    virtual void HandleUnregistered(TCPChannel *)
     {
         DEADEND
-    } 
+    }
 
 private:
 
@@ -121,9 +123,11 @@ private:
 
 /**
  */
-class TCPClientBenchmark : public TCPChannelClient
+class TCPClientBenchmark : public CompletionHandle
 {
 public:
+
+    typedef TCPClientBenchmark This;
 
     /*.... create/destroy ....*/
 
@@ -144,19 +148,14 @@ public:
     {
         for (size_t i = 0; i < nconn_; ++i) {
             nactiveconn_.Add(/*count=*/ 1);
-            ThreadPool::Schedule(&connector_, &TCPConnector::Connect, addr_,
-                                 make_cb(this, &TCPClientBenchmark::Connected));
+            connector_.Connect(addr_, this, async_fn(&This::Connected));
         }
     }
 
     /*.... handler functions ....*/
 
-    __async__ virtual void TcpReadDone(TCPChannel *, int, IOBuffer)
-    {
-        ASSERT(!"Not Reached");
-    }
-
-    __async__ virtual void TcpWriteDone(TCPChannel * ch, int status)
+    __completion_handler__
+    virtual void WriteDone(TCPChannel * ch, int status)
     {
         ASSERT(status);
 
@@ -182,7 +181,8 @@ public:
 
     /*.... callbacks ....*/
 
-    __async__ void Connected(int status, TCPChannel * ch)
+    __completion_handler__
+    void Connected(TCPConnector *, int status, TCPChannel * ch)
     {
         ASSERT(status == OK);
         ASSERT(buf_.Size() == iosize_);
@@ -192,7 +192,8 @@ public:
             chstats_.insert(make_pair(ch, ChStats()));
         }
 
-        ch->RegisterClient(this);
+        ch->RegisterHandle(this);
+        ch->SetWriteDoneFn(this, async_fn(&This::WriteDone));
         SendData(ch);
     }
 
@@ -304,8 +305,9 @@ main(int argc, char ** argv)
              << " ncpu " << ncpu << endl;
 
         ASSERT(!laddr.empty());
-        TCPServerBenchmark s(SocketAddress::GetAddr(laddr));
-        ThreadPool::Schedule(&s, &TCPServerBenchmark::Start, /*status=*/ 0);
+        TCPServerBenchmark s;
+        ThreadPool::Schedule(&s, &TCPServerBenchmark::Start,
+                             SocketAddress::GetAddr(laddr));
         ThreadPool::Wait();
     }
 
