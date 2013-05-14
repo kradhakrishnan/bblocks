@@ -1,18 +1,18 @@
-#include "core/epollset.h"
+#include "core/net/epoll.h"
 #include "core/thread-pool.h"
 
 using namespace std;
 using namespace dh_core;
 
-//................................................................ EpollSet ....
+//................................................................ Epoll ....
 
 //
 // Create/destroy
 //
 
-EpollSet::EpollSet(const string & logPath)
-    : Thread("epollset/" + STR(this))
-    , log_(logPath + "epollset/")
+Epoll::Epoll(const string & logPath)
+    : Thread("Epoll/" + STR(this))
+    , log_(logPath + "Epoll/")
 {
     fd_ = epoll_create(/*size=*/ MAX_EPOLL_EVENT);
     ASSERT(fd_ != -1);
@@ -22,7 +22,7 @@ EpollSet::EpollSet(const string & logPath)
     StartBlockingThread();
 }
 
-EpollSet::~EpollSet()
+Epoll::~Epoll()
 {
     INFO(log_) << "Stopping epoll.";
 
@@ -39,7 +39,7 @@ EpollSet::~EpollSet()
 //
 
 bool
-EpollSet::Add(const fd_t fd, const uint32_t events, CHandle * chandle,
+Epoll::Add(const fd_t fd, const uint32_t events, CHandle * chandle,
               NotifyFn fn)
 {
     ASSERT(!lock_.IsOwner());
@@ -47,13 +47,13 @@ EpollSet::Add(const fd_t fd, const uint32_t events, CHandle * chandle,
     DEBUG(log_) << "Add. fd:" << fd << ", events:" << events
                 << " , chandle: " << hex << chandle;
 
-    // insert to fdmap
-    {
-        AutoLock _(&lock_);
+    ENTER_CRITICAL_SECTION(lock_);
 
-        INVARIANT(fdmap_.find(fd) == fdmap_.end());
-        fdmap_.insert(make_pair(fd, FDRecord(events, chandle, fn)));
-    }
+    // insert to fdmap
+    INVARIANT(fdmap_.find(fd) == fdmap_.end());
+    fdmap_.insert(make_pair(fd, FDRecord(events, chandle, fn)));
+
+    LEAVE_CRITICAL_SECTION
 
     epoll_event ee;
     memset(&ee, 0, sizeof(epoll_event));
@@ -65,7 +65,7 @@ EpollSet::Add(const fd_t fd, const uint32_t events, CHandle * chandle,
 }
 
 bool
-EpollSet::Remove(const fd_t fd)
+Epoll::Remove(const fd_t fd)
 {
     ASSERT(!lock_.IsOwner());
 
@@ -90,7 +90,7 @@ EpollSet::Remove(const fd_t fd)
 }
 
 void
-EpollSet::AddEvent(const fd_t fd, const uint32_t events)
+Epoll::AddEvent(const fd_t fd, const uint32_t events)
 {
     ASSERT(!lock_.IsOwner());
 
@@ -118,7 +118,7 @@ EpollSet::AddEvent(const fd_t fd, const uint32_t events)
 }
 
 void
-EpollSet::RemoveEvent(const fd_t fd, const uint32_t events)
+Epoll::RemoveEvent(const fd_t fd, const uint32_t events)
 {
     ASSERT(!lock_.IsOwner());
 
@@ -149,7 +149,7 @@ EpollSet::RemoveEvent(const fd_t fd, const uint32_t events)
 //
 
 void *
-EpollSet::ThreadMain()
+Epoll::ThreadMain()
 {
     vector<epoll_event> events;
     events.resize(MAX_EPOLL_EVENT);

@@ -12,11 +12,12 @@
 #include <list>
 
 #include "core/util.hpp"
-#include "core/epollset.h"
 #include "core/thread-pool.h"
 #include "core/callback.hpp"
 #include "core/buffer.h"
 #include "core/async.h"
+
+#include "core/net/epoll.h"
 
 namespace dh_core {
 
@@ -159,7 +160,7 @@ public:
 
     friend class TCPConnector;
     friend class TCPServer;
-    friend class EpollSet;
+    friend class Epoll;
 
     //.... callback defintions ....//
 
@@ -169,11 +170,11 @@ public:
 
     //.... statics ....//
 
-    static const uint32_t DEFAULT_WRITE_BACKLOG = IOV_MAX; 
+    static const uint32_t DEFAULT_WRITE_BACKLOG = 1.5 * IOV_MAX; 
 
     //.... construction/destruction ....//
 
-    TCPChannel(const std::string & name, int fd, EpollSet * epoll)
+    TCPChannel(const std::string & name, int fd, Epoll * epoll)
         : log_(name)
         , fd_(fd)
         , epoll_(epoll)
@@ -199,7 +200,7 @@ public:
     /**
      *
      */
-    __async_operation__ bool EnqueueWrite(const IOBuffer & data);
+    __async_operation__ int EnqueueWrite(const IOBuffer & data);
 
     /*!
      * \brief Invoke asynchronous read operation
@@ -212,7 +213,7 @@ public:
      * \param   fn      Callback when read (if data not readily available)
      * \return  true if data read is done else false
      */
-    __async_operation__ void Read(IOBuffer & data, const ReadDoneFn fn);
+    __async_operation__ bool Read(IOBuffer & data, const ReadDoneFn fn);
 
 
     //.... sync operations ....//
@@ -269,11 +270,11 @@ private:
     //.... private member fns ....//
 
     // epoll interrupt for socket notification
-    __interrupt__ void HandleFdEvent(EpollSet * epoll, int fd, uint32_t events);
+    __interrupt__ void HandleFdEvent(Epoll * epoll, int fd, uint32_t events);
     // Read data from the socket to internal buffer
-    void ReadDataFromSocket();
+    bool ReadDataFromSocket(const bool isasync);
     // Write data from internal buffer to socket
-    void WriteDataToSocket();
+    size_t WriteDataToSocket(const bool isasync);
     // Notification back from thread pool about drained events
     void BarrierDone(int);
 
@@ -282,7 +283,7 @@ private:
     SpinMutex lock_;
     LogPath log_;
     int fd_;
-    EpollSet * epoll_;
+    Epoll * epoll_;
     Client client_;
     BoundedQ<IOBuffer> wbuf_;
     ReadCtx rctx_;
@@ -307,7 +308,7 @@ public:
 
     //.... create/destroy ....//
 
-    TCPServer(EpollSet * epoll)
+    TCPServer(Epoll * epoll)
         : log_(GetLogPath())
         , epoll_(epoll)
     {
@@ -345,7 +346,7 @@ private:
 
     //.... private member fns ....//
 
-    __interrupt__ void HandleFdEvent(EpollSet *, int fd, uint32_t events);
+    __interrupt__ void HandleFdEvent(Epoll *, int fd, uint32_t events);
 
     const std::string GetLogPath() const
     { return "tcpserver/" + STR((uint64_t) this); }
@@ -357,7 +358,7 @@ private:
 
     SpinMutex lock_;
     LogPath log_;
-    EpollSet * epoll_;
+    Epoll * epoll_;
     socket_t sockfd_;
     Client client_;
 };
@@ -383,7 +384,7 @@ public:
 
     //.... create/destroy ....//
 
-    TCPConnector(EpollSet * epoll, const std::string & name = "tcpclient/")
+    TCPConnector(Epoll * epoll, const std::string & name = "tcpclient/")
         : log_(name)
         , epoll_(epoll)
     {
@@ -421,7 +422,7 @@ private:
 
     //.... private member fns ....//
 
-    __interrupt__ void HandleFdEvent(EpollSet *, int fd, uint32_t events);
+    __interrupt__ void HandleFdEvent(Epoll *, int fd, uint32_t events);
 
     const std::string TCPChannelLogPath(const int fd) const
     { return  log_.GetPath() + "ch/" + STR(fd) + "/"; }
@@ -430,7 +431,7 @@ private:
 
     SpinMutex lock_;
     LogPath log_;
-    EpollSet * epoll_;
+    Epoll * epoll_;
     clients_map_t clients_;
 };
 

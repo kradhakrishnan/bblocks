@@ -2,7 +2,7 @@
 #include <string>
 #include <iostream>
 
-#include "core/tcpserver.h"
+#include "core/net/tcp-linux.h"
 #include "core/test/unit-test.h"
 
 using namespace std;
@@ -32,14 +32,14 @@ public:
 
     typedef TCPServerBenchmark This;
 
-    static const uint32_t RBUFFERSIZE = 1 * 1024 * 1024; // 1MB
+    static const uint32_t RBUFFERSIZE = 4 * 1024; // 1MB
 
     //.... create/destroy ....//
 
-    TCPServerBenchmark()
+    TCPServerBenchmark(const size_t iosize)
         : epoll_("/server")
         , server_(&epoll_)
-        , buf_(IOBuffer::Alloc(RBUFFERSIZE))
+        , buf_(IOBuffer::Alloc(iosize))
     {}
 
     virtual ~TCPServerBenchmark() {}
@@ -47,8 +47,7 @@ public:
     void Start(sockaddr_in addr)
     {
         // Start listening
-        auto cb = TCPServer::ConnDoneFn(&This::HandleServerConn);
-        server_.Listen(this, addr, cb);
+        server_.Listen(this, addr, async_fn(&This::HandleServerConn));
     }
 
     //.... handlers ....//
@@ -64,16 +63,20 @@ public:
         }
 
         ch->RegisterHandle(this);
-        ch->Read(buf_, async_fn(&This::ReadDone));
+        while (ch->Read(buf_, async_fn(&This::ReadDone))) {
+            UpdateStats(ch, buf_.Size());
+        }
     }
 
     __completion_handler__
     virtual void ReadDone(TCPChannel * ch, int status, IOBuffer)
     {
         ASSERT((size_t) status == buf_.Size());
-        UpdateStats(ch, status);
+        UpdateStats(ch, buf_.Size());
 
-        ch->Read(buf_, async_fn(&This::ReadDone));
+        while (ch->Read(buf_, async_fn(&This::ReadDone))) {
+            UpdateStats(ch, buf_.Size());
+        }
     }
 
     __interrupt__
@@ -113,7 +116,7 @@ private:
     typedef map<TCPChannel *, ChStats> chstats_map_t;
 
     SpinMutex lock_;
-    EpollSet epoll_;
+    Epoll epoll_;
     TCPServer server_;
     chstats_map_t chstats_;
     IOBuffer buf_;
@@ -215,13 +218,23 @@ private:
 
     void SendData(TCPChannel * ch)
     {
-
-        AutoLock _(&lock_);
-        if (!ch->EnqueueWrite(buf_)) {
-            ASSERT(!wakeup_);
-            wakeup_ = true;
+        if (timer_.Elapsed() > SEC2MS(nsec_)) {
+            // time elapsed, stop sending data
             return;
         }
+
+        ENTER_CRITICAL_SECTION(lock_)
+
+        int status;
+        while ((status = ch->EnqueueWrite(buf_)) != -EBUSY) {
+            if (status != 0) {
+                WriteDone(ch, status);
+            }
+        }
+        ASSERT(!wakeup_);
+        wakeup_ = true;
+
+        LEAVE_CRITICAL_SECTION
 
         ThreadPool::Schedule(this, &TCPClientBenchmark::SendData, ch);
     }
@@ -229,7 +242,7 @@ private:
     typedef map<TCPChannel *, ChStats> chstats_map_t;
 
     PThreadMutex lock_;
-    EpollSet epoll_;
+    Epoll epoll_;
     TCPConnector connector_;
     const SocketAddress addr_;
     const size_t iosize_;
@@ -305,7 +318,7 @@ main(int argc, char ** argv)
              << " ncpu " << ncpu << endl;
 
         ASSERT(!laddr.empty());
-        TCPServerBenchmark s;
+        TCPServerBenchmark s(iosize);
         ThreadPool::Schedule(&s, &TCPServerBenchmark::Start,
                              SocketAddress::GetAddr(laddr));
         ThreadPool::Wait();

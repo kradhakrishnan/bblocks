@@ -4,7 +4,7 @@
 
 #include "core/test/unit-test.h"
 #include "core/util.hpp"
-#include "core/tcpserver.h"
+#include "core/net/tcp-linux.h"
 #include "core/async.h"
 
 using namespace std;
@@ -42,7 +42,7 @@ public:
 
     void Start(int nonce)
     {
-        epoll_ = new EpollSet("serverEpoll/");
+        epoll_ = new Epoll("serverEpoll/");
 
         tcpServer_ = new TCPServer(epoll_);
         tcpServer_->Listen(this, addr_.RemoteAddr(),
@@ -64,7 +64,9 @@ public:
         server_ch_ = ch;
         server_ch_->RegisterHandle(this);
 
-        server_ch_->Read(rbuf_, async_fn(&This::ReadDone));
+        if (server_ch_->Read(rbuf_, async_fn(&This::ReadDone))) {
+            VerifyData(rbuf_);
+        }
     }
 
     __completion_handler__
@@ -88,7 +90,9 @@ public:
         ASSERT(buf == rbuf_);
 
         VerifyData(rbuf_);
-        ch->Read(rbuf_, async_fn(&This::ReadDone));
+        while (ch->Read(rbuf_, async_fn(&This::ReadDone))) {
+            VerifyData(rbuf_);
+        }
    }
 
     __completion_handler__
@@ -179,14 +183,19 @@ private:
         DEBUG(log_) << "PUSH " << (uint32_t) cksum;
         cksum_.push_back(cksum);
 
-        INVARIANT(client_ch_->EnqueueWrite(wbuf_));
+        int status = client_ch_->EnqueueWrite(wbuf_);
+        if ((size_t) status == wbuf_.Size()) {
+            WriteDone(client_ch_, status);
+        } else {
+            INVARIANT(status == 0);
+        }
 
         ++iter_;
     }
 
     LogPath log_;
     SocketAddress addr_;
-    EpollSet * epoll_;
+    Epoll * epoll_;
     TCPServer * tcpServer_;
     TCPConnector * tcpClient_;
     TCPChannel * server_ch_;

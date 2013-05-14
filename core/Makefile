@@ -1,7 +1,7 @@
 #
 # Libraries to build
 #
-LIBRARY += core
+LIBRARY += core/net
 
 #
 # .cc that define main
@@ -11,8 +11,8 @@ TARGET +=
 #
 # .cc
 #
-SRCS += core/epollset.cc \
-        core/tcpserver.cc
+SRCS += core/net/epoll.cc \
+        core/net/tcp-linux.cc
 
 #	core/assert.cc \
 #        core/logger.cc \

@@ -158,6 +158,7 @@ clean: build-teardown build-setup
 build-setup:
 	mkdir -p $(OBJDIR)
 	mkdir -p $(OBJDIR)/core
+	mkdir -p $(OBJDIR)/core/net
 	mkdir -p $(OBJDIR)/core/test
 	mkdir -p $(OBJDIR)/core/bmark
 

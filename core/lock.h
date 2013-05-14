@@ -6,6 +6,9 @@
 
 namespace dh_core {
 
+#define ENTER_CRITICAL_SECTION(x) { AutoLock _(&x);
+#define LEAVE_CRITICAL_SECTION }
+
 class WaitCondition;
 
 class Mutex
