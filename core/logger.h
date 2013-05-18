@@ -6,6 +6,7 @@
 #include <sstream>
 #include <streambuf>
 #include <stdio.h>
+#include <tr1/memory>
 
 #include "core/util.hpp"
 

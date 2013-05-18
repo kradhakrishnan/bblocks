@@ -108,11 +108,6 @@ private:
         }
     }
 
-    void DeleteBuf(DataBuffer * buf)
-    {
-        delete buf;
-    }
-
     typedef map<TCPChannel *, ChStats> chstats_map_t;
 
     SpinMutex lock_;
@@ -172,14 +167,13 @@ public:
         }
 
         AutoLock _(&lock_);
+
         if (wakeup_) {
             wakeup_ = false;
             ThreadPool::Schedule(this, &TCPClientBenchmark::SendData, ch);
         }
 
-        auto it = chstats_.find(ch);
-        ASSERT(it != chstats_.end());
-        it->second.bytes_written_ += status;
+        UpdateStats(ch, status);
     }
 
     /*.... callbacks ....*/
@@ -216,6 +210,15 @@ public:
 
 private:
 
+    void UpdateStats(TCPChannel * ch, const int bytes_written)
+    {
+        ASSERT(lock_.IsOwner());
+
+        auto it = chstats_.find(ch);
+        ASSERT(it != chstats_.end());
+        it->second.bytes_written_ += bytes_written;
+    }
+
     void SendData(TCPChannel * ch)
     {
         if (timer_.Elapsed() > SEC2MS(nsec_)) {
@@ -223,25 +226,24 @@ private:
             return;
         }
 
-        ENTER_CRITICAL_SECTION(lock_)
+        AutoLock _(&lock_);
 
         int status;
         while ((status = ch->EnqueueWrite(buf_)) != -EBUSY) {
             if (status != 0) {
-                WriteDone(ch, status);
+                UpdateStats(ch, status);
             }
         }
+
         ASSERT(!wakeup_);
         wakeup_ = true;
-
-        LEAVE_CRITICAL_SECTION
 
         ThreadPool::Schedule(this, &TCPClientBenchmark::SendData, ch);
     }
 
     typedef map<TCPChannel *, ChStats> chstats_map_t;
 
-    PThreadMutex lock_;
+    SpinMutex lock_;
     Epoll epoll_;
     TCPConnector connector_;
     const SocketAddress addr_;

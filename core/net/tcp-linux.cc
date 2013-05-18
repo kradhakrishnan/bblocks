@@ -291,7 +291,7 @@ TCPServer::Listen(CHandle * h, const sockaddr_in saddr, const ConnDoneFn cb)
     int status = fcntl(sockfd_, F_SETFL, O_NONBLOCK);
     INVARIANT(status == 0);
 
-    status = bind(sockfd_, (struct sockaddr *) &saddr, sizeof(sockaddr_in));
+    status = ::bind(sockfd_, (struct sockaddr *) &saddr, sizeof(sockaddr_in));
     ASSERT(status == 0);
 
 #if 0
@@ -380,7 +380,7 @@ TCPConnector::Connect(const SocketAddress addr, CHandle * h, const ConnDoneFn cb
     status = SocketOptions::SetTcpWindow(fd, /*size=*/ 640 * 1024);
     ASSERT(status);
 
-    status = bind(fd, (sockaddr *) &addr.LocalAddr(), sizeof(sockaddr_in));
+    status = ::bind(fd, (sockaddr *) &addr.LocalAddr(), sizeof(sockaddr_in));
     ASSERT(status == 0);
 
     status = connect(fd, (sockaddr *) &addr.RemoteAddr(), sizeof(sockaddr_in));

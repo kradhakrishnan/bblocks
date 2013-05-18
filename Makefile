@@ -166,7 +166,7 @@ ubuntu-setup:
 	apt-get install build-essential libaio-dev libaio1 libaio1-dbg \
                         libboost-dev libboost-doc libboost-dbg \
                         libboost-program-options-dev zlibc zlib1g-dev \
-                        libtcmalloc-minimal4 libtcmalloc-minimal4-dbg \
+                        libtcmalloc-minimal0 libtcmalloc-minimal0-dbg \
                         valgrind \
 
 	ln /usr/lib/libtcmalloc_minimal.so.4 /usr/lib/libtcmalloc_minimal.so
