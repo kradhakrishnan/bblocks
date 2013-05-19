@@ -16,7 +16,7 @@ TCPChannel::EnqueueWrite(const IOBuffer & data)
             return -EBUSY;
         }
 
-        if (!wbuf_.IsEmpty()) {
+        if (wbuf_.IsEmpty()) {
             wbuf_.Push(data);
             return WriteDataToSocket(/*isasync=*/ false);
         }
@@ -24,7 +24,6 @@ TCPChannel::EnqueueWrite(const IOBuffer & data)
         wbuf_.Push(data);
         WriteDataToSocket(/*isasync=*/ true);
     }
-
 
     return 0;
 }
@@ -250,6 +249,11 @@ TCPChannel::WriteDataToSocket(const bool isasync)
                 IOBuffer data = wbuf_.Pop();
                 bytes -= data.Size();
 
+                if (isasync) {
+                    ThreadPool::Schedule(client_.h_, client_.writeDoneFn_, this,
+                                         bytesWritten);
+                }
+
                 if (bytes == 0) {
                     break;
                 }
@@ -259,11 +263,6 @@ TCPChannel::WriteDataToSocket(const bool isasync)
                 break;
             }
         }
-    }
-
-    if (isasync && bytesWritten != 0) {
-        ThreadPool::Schedule(client_.h_, client_.writeDoneFn_, this,
-                                 bytesWritten);
     }
 
     return bytesWritten;

@@ -56,6 +56,20 @@ static inline unsigned long long rdtsc(void)
 }
 #endif
 
+class Time
+{
+public:
+
+    static uint64_t NowInMilliSec()
+    {
+        timeval tv;
+        int status = gettimeofday(&tv, /*tz=*/ NULL);
+        (void) status;
+        ASSERT(!status);
+        return tv.tv_sec * 1000 + (tv.tv_usec / 1000);
+    }
+};
+
 template<class T>
 SharedPtr<T>
 MakeSharedPtr(T * t)

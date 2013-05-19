@@ -144,7 +144,7 @@ class NonBlockingThreadPool : public Singleton<NonBlockingThreadPool>
 {
 public:
 
-    class BarrierRoutine : public ThreadRoutine
+    class BarrierRoutine
     {
     public:
 
@@ -153,7 +153,7 @@ public:
         {
         }
 
-        virtual void Run()
+        void Run(int)
         { 
             const uint64_t count = pendingCalls_.Add(/*count=*/ -1);
 
@@ -237,7 +237,9 @@ public:
     {
         BarrierRoutine * br = new BarrierRoutine(r, threads_.size());
         for (size_t i = 0; i < threads_.size(); ++i) {
-            threads_[i]->Push(br);
+            ThreadRoutine * r = new MemberFnPtr<BarrierRoutine, int>
+                                      (br, &BarrierRoutine::Run, /*status=*/ 0);
+            threads_[i]->Push(r);
         }
     }
 

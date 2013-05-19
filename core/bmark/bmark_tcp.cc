@@ -133,14 +133,24 @@ public:
                        const size_t nconn, const size_t nsec)
         : epoll_("/client"), connector_(&epoll_), addr_(addr)
         , iosize_(iosize), nconn_(nconn), nsec_(nsec)
-        , buf_(IOBuffer::Alloc(iosize)), wakeup_(false)
+        , buf_(IOBuffer::Alloc(iosize))
     {
     }
 
     virtual ~TCPClientBenchmark()
     {
+        AutoLock _(&lock_);
+
         buf_.Trash();
-    }
+
+        for (auto it = chstats_.begin(); it != chstats_.end(); ++it) {
+            TCPChannel * ch = it->first;
+            ch->Close();
+            delete ch;
+        }
+
+        chstats_.clear();
+   }
 
     void Start(int)
     {
@@ -156,24 +166,11 @@ public:
     virtual void WriteDone(TCPChannel * ch, int status)
     {
         ASSERT(status);
-
-        if (timer_.Elapsed() > SEC2MS(nsec_)) {
-            nactiveconn_.Add(/*count=*/ -1);
-            if (!nactiveconn_.Count()) {
-                PrintStats();
-                ThreadPool::Shutdown();
-            }
-            return;
-        }
-
-        AutoLock _(&lock_);
-
-        if (wakeup_) {
-            wakeup_ = false;
-            ThreadPool::Schedule(this, &TCPClientBenchmark::SendData, ch);
-        }
-
         UpdateStats(ch, status);
+
+        pendingios_.Add(/*val=*/ -1);
+
+        SendData(ch);
     }
 
     /*.... callbacks ....*/
@@ -194,6 +191,39 @@ public:
         SendData(ch);
     }
 
+    void Stop()
+    {
+        ASSERT(timer_.Elapsed() > SEC2MS(nsec_));
+        if (!pendingios_.Count()) {
+            cout << "Stopping channels." << endl;
+
+            AutoLock _(&lock_);
+            for (auto it = chstats_.begin(); it != chstats_.end(); ++it) {
+                TCPChannel * ch = it->first;
+                ch->UnregisterHandle((CHandle *) this,
+                            async_fn(&TCPClientBenchmark::Unregistered));
+            }
+        }
+    }
+
+
+    __interrupt__
+    void Unregistered(int status)
+    {
+        cout << "Unregistered." << endl;
+
+        if (nactiveconn_.Add(/*val=*/ -1) == 1) {
+            // all clients disconnected
+            ThreadPool::Schedule(this, &TCPClientBenchmark::Halt, /*val=*/ 0);
+        }
+    }
+
+    void Halt(int)
+    {
+        PrintStats();
+        ThreadPool::Shutdown();
+    }
+
     void PrintStats()
     {
         AutoLock _(&lock_);
@@ -212,7 +242,7 @@ private:
 
     void UpdateStats(TCPChannel * ch, const int bytes_written)
     {
-        ASSERT(lock_.IsOwner());
+        AutoLock _(&lock_);
 
         auto it = chstats_.find(ch);
         ASSERT(it != chstats_.end());
@@ -221,24 +251,32 @@ private:
 
     void SendData(TCPChannel * ch)
     {
-        if (timer_.Elapsed() > SEC2MS(nsec_)) {
-            // time elapsed, stop sending data
-            return;
-        }
-
-        AutoLock _(&lock_);
-
         int status;
-        while ((status = ch->EnqueueWrite(buf_)) != -EBUSY) {
-            if (status != 0) {
+        while (true) {
+            if (timer_.Elapsed() > SEC2MS(nsec_)) {
+                // time elapsed, stop sending data
+                Stop();
+                break;
+            }
+
+            pendingios_.Add(/*val=*/ 1);
+
+            status = ch->EnqueueWrite(buf_);
+            INVARIANT(status == -EBUSY || size_t(status) <= buf_.Size());
+
+            if (status == -EBUSY) {
+                pendingios_.Add(/*val=*/ -1); 
+                break;
+            } else if (size_t(status) == buf_.Size()) {
                 UpdateStats(ch, status);
+                pendingios_.Add(/*val=*/ -1);
+            } else {
+                // operate in serial mode, ideally suited for most applications
+                // unless the IO is too small
+                // TODO: Provide a config param
+                break;
             }
         }
-
-        ASSERT(!wakeup_);
-        wakeup_ = true;
-
-        ThreadPool::Schedule(this, &TCPClientBenchmark::SendData, ch);
     }
 
     typedef map<TCPChannel *, ChStats> chstats_map_t;
@@ -254,7 +292,7 @@ private:
     IOBuffer buf_;
     Timer timer_;
     AtomicCounter nactiveconn_;
-    bool wakeup_;
+    AtomicCounter pendingios_;
 };
 
 

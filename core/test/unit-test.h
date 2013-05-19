@@ -4,6 +4,7 @@
 #include "core/thread-pool.h"
 #include "core/atomic.h"
 #include "core/callback.hpp"
+#include "core/util.hpp"
 
 #define TEST(x) cout << #x << endl; x();
 
@@ -16,8 +17,7 @@ using namespace std;
 #define MS2SEC(x) (x / 1000)
 #define B2MB(x) (x / (1024 * 1024))
 
-uint64_t
-NowInMilliSec()
+static uint64_t NowInMilliSec()
 {
     timeval tv;
     int status = gettimeofday(&tv, /*tz=*/ NULL);

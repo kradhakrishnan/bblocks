@@ -199,12 +199,22 @@ public:
 
     SpinMutex()
         : mutex_(OPEN)
+        , stat_spin_ms_(0)
     {
         ASSERT(Is(OPEN));
     }
 
+    ~SpinMutex()
+    {
+        INFO(LogPath("/SpinMutex")) << stat_spin_ms_;
+    }
+
     virtual void Lock()
     {
+        INVARIANT(Is(OPEN) || !IsOwner());
+
+        uint64_t start_ms = Time::NowInMilliSec();
+
         bool status = false;
         while (true)
         {
@@ -218,11 +228,14 @@ public:
 
             pthread_yield();
         }
+
+        stat_spin_ms_ += Time::NowInMilliSec() - start_ms;
     }
 
     virtual void Unlock()
     {
         ASSERT(IsOwner());
+        owner_ = 0;
         bool status = __sync_bool_compare_and_swap(&mutex_, CLOSED, OPEN);
         (void) status;
         ASSERT(status);
@@ -242,6 +255,8 @@ protected:
 
     pthread_t owner_;
     volatile _Atomic_word mutex_;
+
+    uint64_t stat_spin_ms_;
 };
 
 #define READ_LOCK(x) AutoReadLock _(x);
