@@ -1,6 +1,7 @@
 #ifndef _DH_CORE_ASYNC_H_
 #define _DH_CORE_ASYNC_H_
 
+#include "core/defs.h"
 #include "core/buffer.h"
 
 namespace dh_core {

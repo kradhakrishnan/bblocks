@@ -47,14 +47,26 @@ public:
         ASSERT(!t->prev_);
 
         t->next_ = head_;
-        if (head_) {
-            head_->prev_ = t;
-        }
+        if (head_) head_->prev_ = t;
 
         head_ = t;
-        if (!tail_) {
-            tail_ = head_;
-        }
+        if (!tail_) tail_ = head_;
+    }
+
+    inline void Unlink(T * t)
+    {
+        ASSERT(t);
+        ASSERT(head_ && tail_);
+        ASSERT(t->prev_ || head_ == t);
+        ASSERT(t->next_ || tail_ == t);
+
+        if (t->prev_) t->prev_->next_ = t->next_;
+        if (t->next_) t->next_->prev_ = t->prev_;
+
+        if (tail_ == t) tail_ = t->prev_;
+        if (head_ == t) head_ = t->next_;
+
+        t->next_ = t->prev_ = NULL;
     }
 
     inline T * Pop()
@@ -66,9 +78,7 @@ public:
         T * t = tail_;
 
         tail_ = tail_->prev_;
-        if (tail_) {
-            tail_->next_ = NULL;
-        }
+        if (tail_) tail_->next_ = NULL;
 
         if (t == head_) {
             ASSERT(!tail_);

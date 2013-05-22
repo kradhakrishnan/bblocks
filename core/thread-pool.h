@@ -1,14 +1,10 @@
 #ifndef _DH_CORE_THREADPOOL_H_
 #define _DH_CORE_THREADPOOL_H_
 
+#include "core/defs.h"
 #include "core/thread.h"
 
 namespace dh_core {
-
-#define COMMA ,
-#define SEMICOLON ;
-#define OPENBRACKET (
-#define CLOSEBRACKET )
 
 class NonBlockingThread;
 

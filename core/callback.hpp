@@ -1,6 +1,7 @@
 #ifndef _DHCORE_CALLBACK_H_
 #define _DHCORE_CALLBACK_H_
 
+#include "core/defs.h"
 #include "core/thread-pool.h"
 
 namespace dh_core {

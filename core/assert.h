@@ -46,6 +46,7 @@
     if (!bool(x)) {\
         STD_ERROR << "ASSERT: " << #x << " ."\
                   << __FILE__ << " : " << __LINE__\
+                  << " system-error: " << strerror(errno) \
                   << ENDL;\
         abort();\
     }\
@@ -59,7 +60,7 @@
         STD_ERROR << "Invariant condition violated. The system is halting"\
                   << " to prevent corruption. INVARIANT: " << #x\
                   << __FILE__ << ":" << __LINE__ \
-                  << " errnor: " << errno << ENDL;\
+                  << " system-error: " << strerror(errno) << ENDL;\
         abort();\
     }\
 }
