@@ -18,8 +18,6 @@
 namespace dh_core {
 
 typedef int fd_t;
-typedef uint32_t __u32;
-typedef uint64_t __u64;
 typedef int status_t;
 
 enum
