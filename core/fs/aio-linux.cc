@@ -215,7 +215,7 @@ SpinningDevice::~SpinningDevice()
 int
 SpinningDevice::OpenDevice()
 {
-    fd_ = ::open(devPath_.c_str(), O_RDWR|O_CREAT, 0777);
+    fd_ = ::open(devPath_.c_str(), O_RDWR|O_CREAT|O_DIRECT, 0777);
     return fd_;
 }
 
@@ -223,7 +223,7 @@ int
 SpinningDevice::Write(const IOBuffer & buf, const diskoff_t off,
                       const size_t nblks, const CompletionHandler<int> & cb)
 {
-    ASSERT((off + nblks) * SECTOR_SIZE < nsectors_);
+    INVARIANT((off + nblks) < nsectors_);
 
     Op * op = new Op(fd_, buf, off * SECTOR_SIZE, nblks * SECTOR_SIZE,
                      intr_fn(this, &SpinningDevice::WriteDone), cb);
@@ -237,7 +237,7 @@ int
 SpinningDevice::Read(IOBuffer & buf, const diskoff_t off,
                      const size_t nblks, const CompletionHandler<int> & cb)
 {
-    ASSERT((off + nblks) * SECTOR_SIZE < nsectors_);
+    INVARIANT((off + nblks) < nsectors_);
 
     Op * op = new Op(fd_, buf, off * SECTOR_SIZE, nblks * SECTOR_SIZE,
                      intr_fn(this, &SpinningDevice::WriteDone), cb);

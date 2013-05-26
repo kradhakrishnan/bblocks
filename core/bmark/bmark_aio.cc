@@ -10,13 +10,15 @@ using namespace dh_core;
 
 namespace po = boost::program_options;
 
+size_t _time_s = 10; // 10s
+
 struct Stats
 {
     Stats()
-        : start_ms_(NowInMilliSec()), bytes_(0), ops_time_ms_(0), ops_count_(0)
+        : bytes_(0), ops_time_ms_(0), ops_count_(0)
     {}
 
-    uint64_t start_ms_;
+    Timer ms_;
     uint64_t bytes_;
     uint64_t ops_time_ms_;
     uint64_t ops_count_;
@@ -59,8 +61,11 @@ public:
         , aio_(new LinuxAioProcessor())
         , dev_(devname_, devsize_ / 512, aio_)
         , buf_(IOBuffer::Alloc(iosize_))
-        , nextOff_(-1) 
-    {}
+        , nextOff_(UINT64_MAX) 
+    {
+        INVARIANT(!(iosize_ % 512));
+        INVARIANT(!(devsize_ % 512));
+    }
 
     virtual ~AIOBenchmark() {}
 
@@ -68,13 +73,18 @@ public:
     {
         AutoLock _(&lock_);
 
+        if (nextOff_ == UINT64_MAX) {
+            nextOff_ = 0;
+            return nextOff_;
+        }
+
         if (iopattern_ == SEQUENTIAL) {
-            nextOff_ += (iosize_ / 512);
-            if (nextOff_ >= (devsize_ / 512)) {
+            nextOff_ += iosize_;
+            if ((nextOff_ + iosize_) >= devsize_) {
                 nextOff_ = 0;
             }
         } else {
-            nextOff_ = rand() % (devsize_ / (iosize_ / 512));
+            nextOff_ = rand() % (devsize_  - iosize_);
         }
 
         return nextOff_;
@@ -99,7 +109,18 @@ public:
 
         INVARIANT(status > 0 && size_t(status) == buf_.Size());
 
-        IssueNextIO();
+        {
+            AutoLock _(&lock_);
+            stats_.bytes_ += status;
+        }
+
+        pendingOps_.Add(/*val=*/ -1);
+
+        if (stats_.ms_.Elapsed() < (_time_s * 1000)) {
+            IssueNextIO();
+        } else if (!pendingOps_.Count()) {
+            Stop();
+        }
     }
 
     __completion_handler__
@@ -109,22 +130,54 @@ public:
 
         INVARIANT(status > 0 && size_t(status) == buf_.Size());
 
-        IssueNextIO();
+        {
+            AutoLock _(&lock_);
+            stats_.bytes_ += status;
+        }
+
+        pendingOps_.Add(/*val=*/ -1);
+
+        if (stats_.ms_.Elapsed() < (_time_s * 1000)) {
+            IssueNextIO();
+        } else if (!pendingOps_.Count()) {
+            Stop();
+        }
     }
 
 private:
 
     void IssueNextIO()
     {
+        pendingOps_.Add(/*val=*/ 1);
+
         if (iotype_ == READ) {
             diskoff_t off = NextOff();
-            dev_.Read(buf_, off, iosize_ / 512,
+            dev_.Read(buf_, off / 512, iosize_ / 512,
                       async_fn(this, &AIOBenchmark::ReadDone, off));
         } else {
             diskoff_t off = NextOff();
-            dev_.Write(buf_, off, iosize_ / 512,
+            dev_.Write(buf_, off / 512, iosize_ / 512,
                        async_fn(this, &AIOBenchmark::WriteDone, off));
         }
+    }
+
+    void Stop()
+    {
+        PrintStats();
+        ThreadPool::Shutdown();
+    }
+
+    void PrintStats()
+    {
+        AutoLock _(&lock_);
+
+        double MiB = stats_.bytes_ / (1024 * 1024);
+        double s = stats_.ms_.Elapsed() / 1000;
+
+        cout << "Result :" << endl
+             << " bytes " << stats_.bytes_ << endl
+             << " time " << stats_.ms_.Elapsed() << " ms" << endl
+             << " MBps " << (s ? (MiB / s) : 0) << endl;
     }
 
     LogPath log_;
@@ -139,6 +192,8 @@ private:
     SpinningDevice dev_;
     IOBuffer buf_;
     diskoff_t nextOff_;
+    Stats stats_;
+    AtomicCounter pendingOps_;
 };
 
 //.................................................................... Main ....
@@ -159,12 +214,13 @@ main(int argc, char ** argv)
         ("help,h", "Print usage")
         ("devpath", po::value<string>(&devname)->required(), "Device path")
         ("devsize", po::value<disksize_t>(&devsize)->required(), 
-         "Device size in B")
+         "Device size in GiB")
         ("iosize", po::value<size_t>(&iosize)->required(), "io size in B")
         ("iotype", po::value<string>(&iotype)->required(), "read/write")
         ("iopattern", po::value<string>(&iopattern)->required(), "seq/random")
         ("qdepth", po::value<size_t>(&qdepth)->required(), "Queue depth")
-        ("ncpu", po::value<size_t>(&ncpu)->required(), "Number of cores");
+        ("ncpu", po::value<size_t>(&ncpu)->required(), "Number of cores")
+        ("secs,s", po::value<size_t>(&_time_s), "Test time in s");
 
     try {
         po::variables_map parg;
@@ -188,13 +244,13 @@ main(int argc, char ** argv)
 
     cout << "Running benchmark for"
          << " devname " << devname << endl
-         << " devsize " << devsize << endl
+         << " devsize " << devsize << " Gib" << endl
          << " iosize " << iosize << endl
          << " iotype " << iotype << endl
          << " iopattern " << iopattern << endl
          << " qdepth " << qdepth << endl;
 
-    AIOBenchmark bmark(devname, devsize, iosize,
+    AIOBenchmark bmark(devname, devsize * 1024 * 1024 * 1024, iosize,
                        iotype == "read" ? AIOBenchmark::READ
                                         : AIOBenchmark::WRITE,
                        iopattern == "random" ? AIOBenchmark::RANDOM

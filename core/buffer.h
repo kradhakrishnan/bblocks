@@ -1,8 +1,10 @@
 #ifndef _DH_CORE_BUFFER_H_
 #define _DH_CORE_BUFFER_H_
 
-#include <core/assert.h>
-#include <core/atomic.h>
+#include <malloc.h>
+
+#include "core/assert.h"
+#include "core/atomic.h"
 
 namespace dh_core {
 
@@ -182,7 +184,7 @@ public:
 
     static IOBuffer Alloc(const size_t size)
     {
-        return IOBuffer(new uint8_t[size], size);
+        return IOBuffer((uint8_t *) memalign(512, size), size);
     }
 
     //.... create/destroy ....//
