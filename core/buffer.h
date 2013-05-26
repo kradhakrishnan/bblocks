@@ -241,6 +241,11 @@ public:
         }
     }
 
+    void Fill(const uint8_t ch = 0)
+    {
+        memset(data_ + off_, ch, size_);
+    }
+
 private:
 
     IOBuffer(uint8_t * data, const size_t size, const size_t off = 0)

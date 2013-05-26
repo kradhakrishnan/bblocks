@@ -86,9 +86,43 @@ LinuxAioProcessor::Write(Op * op)
     cb.aio_offset = op->off_;
     cb.aio_data = (u_int64_t) op;
 
-    // consider for later to be used with epoll
-    // op->iocb_.aio_flags = IOCB_FLAG_RESFD;
-    // op->iocb_.aio_resfd = ...;
+    op->piocb_[0] = &cb;
+
+    {
+        AutoLock _(&lock_);
+        ops_.Push(op);
+    }
+
+    DEBUG(log_) << "io_submit: PWRITE op:" << (uint64_t) op
+                << " off: " << op->off_
+                << " size: " << op->size_;
+
+    long status = io_submit(ctx_, /*n=*/ 1, op->piocb_);
+
+    if (status != 1) {
+        ERROR(log_) << "Failed to submit io. PWRITE op: " << (uint64_t) op
+                    << " strerror: " << strerror(errno);
+    }
+
+    return status;
+}
+
+int
+LinuxAioProcessor::Read(Op * op)
+{
+    ASSERT(op->buf_.Ptr());
+    ASSERT(op->size_);
+
+    iocb & cb = op->iocb_;
+
+    memset(&cb, 0, sizeof(iocb));
+    cb.aio_fildes = op->fd_;
+    cb.aio_lio_opcode = IOCB_CMD_PREAD;
+    cb.aio_reqprio = 0;
+    cb.aio_buf = (u_int64_t) op->buf_.Ptr();
+    cb.aio_nbytes = op->size_;
+    cb.aio_offset = op->off_;
+    cb.aio_data = (u_int64_t) op;
 
     op->piocb_[0] = &cb;
 
@@ -97,11 +131,17 @@ LinuxAioProcessor::Write(Op * op)
         ops_.Push(op);
     }
 
-    DEBUG(log_) << "io_submit: op:" << (uint64_t) op
+    DEBUG(log_) << "io_submit: PREAD op:" << (uint64_t) op
                 << " off: " << op->off_
                 << " size: " << op->size_;
 
     long status = io_submit(ctx_, /*n=*/ 1, op->piocb_);
+
+    if (status != 1) {
+        ERROR(log_) << "Failed to submit io. PREAD op: " << (uint64_t) op
+                    << " strerror: " << strerror(errno);
+    }
+
     return status;
 }
 
@@ -119,12 +159,12 @@ LinuxAioProcessor::ThreadMain()
             DEBUG(log_) << "No events returned";
             continue;
         } else if (status < 0) {
-            if (errno == -EINTR) {
+            if (errno == EINTR) {
                 // got interrupted by signal
                 continue;
             }
 
-            ERROR(log_) << "Error reading events.";
+            ERROR(log_) << "Error reading events. err:" << strerror(errno);
             DEADEND
         }
 
@@ -147,7 +187,7 @@ LinuxAioProcessor::ThreadMain()
             }
 
             // callback as interrupt for perf reasons
-            (op->h_->*op->fn_)(this, op, ev.res);
+            op->ch_.Interrupt(int(ev.res), op);
        }
     }
 
@@ -181,24 +221,39 @@ SpinningDevice::OpenDevice()
 
 int
 SpinningDevice::Write(const IOBuffer & buf, const diskoff_t off,
-                      const size_t size, CHandle * h, const DoneFn cb)
+                      const size_t nblks, const CompletionHandler<int> & cb)
 {
-    Op * op = new Op(fd_, buf, off, size * SECTOR_SIZE, this,
-                     async_fn(&SpinningDevice::WriteDone), h, cb);
+    ASSERT((off + nblks) * SECTOR_SIZE < nsectors_);
+
+    Op * op = new Op(fd_, buf, off * SECTOR_SIZE, nblks * SECTOR_SIZE,
+                     intr_fn(this, &SpinningDevice::WriteDone), cb);
 
     int status = aio_->Write(op);
 
     return status;
 }
 
+int
+SpinningDevice::Read(IOBuffer & buf, const diskoff_t off,
+                     const size_t nblks, const CompletionHandler<int> & cb)
+{
+    ASSERT((off + nblks) * SECTOR_SIZE < nsectors_);
+
+    Op * op = new Op(fd_, buf, off * SECTOR_SIZE, nblks * SECTOR_SIZE,
+                     intr_fn(this, &SpinningDevice::WriteDone), cb);
+
+    int status = aio_->Read(op);
+
+    return status;
+}
+
 __interrupt__
 void
-SpinningDevice::WriteDone(AioProcessor *, AioProcessor::Op * op, int res)
+SpinningDevice::WriteDone(int res, AioProcessor::Op * op)
 {
     Op * wop = (Op *) op;
 
-    ThreadPool::Schedule(wop->clienth_, wop->clientfn_,
-                         static_cast<BlockDevice *>(this), res);
+    wop->clientch_.Wakeup(res);
 
     // we don't track the ops, so delete
     delete wop;

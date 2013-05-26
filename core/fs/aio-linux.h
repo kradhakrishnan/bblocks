@@ -18,14 +18,13 @@ public:
 
     virtual ~BlockDevice() {}
 
-    //.... callbacks ....//
-
-    typedef void (CHandle::*DoneFn)(BlockDevice *, int);
-
     //.... pure virtual ....//
 
     virtual int Write(const IOBuffer & buf, const diskoff_t off,
-                      const size_t size, CHandle * h, const DoneFn cb) = 0;
+                      const size_t size, const CompletionHandler<int> & h) = 0;
+
+    virtual int Read(IOBuffer & buf, const diskoff_t off,
+                     const size_t size, const CompletionHandler<int> & ch) = 0;
 };
 
 //............................................................ AioProcessor ....
@@ -38,27 +37,24 @@ public:
 
     struct Op;
 
-    //.... callbacks ....//
-
-    typedef void (CHandle::*DoneFn)(AioProcessor *, Op *, int res);
-
     //.... pure virtual ....//
 
     virtual int Write(Op * op) = 0;
 
+    virtual int Read(Op * op) = 0;
+
     struct Op : public InListElement<Op>
     {
         Op(const fd_t fd, const IOBuffer & buf, const diskoff_t off,
-           const size_t size, CHandle * h, DoneFn fn)
-            : fd_(fd), buf_(buf), off_(off), size_(size), h_(h), fn_(fn)
+           const size_t size, const CompletionHandler2<int, Op*> & ch)
+            : fd_(fd), buf_(buf), off_(off), size_(size), ch_(ch)
         {}
 
         fd_t fd_;
         IOBuffer buf_;
         diskoff_t off_;
         size_t size_;
-        CHandle * h_;
-        DoneFn fn_;
+        CompletionHandler2<int, Op*> ch_;
         iocb iocb_;
         iocb * piocb_[1];
     };
@@ -82,6 +78,7 @@ public:
     //.... AioProcessor override ....//
 
     virtual int Write(Op * op);
+    virtual int Read(Op * op);
 
     //.... Thread override ....//
 
@@ -111,6 +108,10 @@ public:
 
     static const uint64_t SECTOR_SIZE = 512; // 512 bytes
 
+    //.... callback defs ....//
+
+    typedef void (CHandle::*DoneFn)(int);
+
     //.... Create/destroy ....//
 
     SpinningDevice(const std::string & devPath, const disksize_t nsectors,
@@ -125,30 +126,29 @@ public:
     //.... BlockDevice override ....//
 
     virtual int Write(const IOBuffer & buf, const diskoff_t off,
-                      const size_t nblks, CHandle * h, const DoneFn cb);
+                      const size_t nblks, const CompletionHandler<int> & ch);
+    virtual int Read(IOBuffer & buf, const diskoff_t off,
+                     const size_t nblks, const CompletionHandler<int> & ch);
 
 private:
 
     struct Op : AioProcessor::Op
     {
         Op(fd_t fd, const IOBuffer & buf, const diskoff_t off, const size_t size,
-           CHandle * cbh, const AioProcessor::DoneFn cbfn, 
-           CHandle * h, const DoneFn fn)
-            : AioProcessor::Op(fd, buf, off, size, cbh, cbfn)
-            , clienth_(h), clientfn_(fn)
+           const CompletionHandler2<int, AioProcessor::Op*> & opch,
+           const CompletionHandler<int> & clientch)
+            : AioProcessor::Op(fd, buf, off, size, opch), clientch_(clientch)
         {}
 
-        CHandle * clienth_;
-        BlockDevice::DoneFn clientfn_;
+        CompletionHandler<int> clientch_;
     };
 
     //.... completion handlers ....//
 
     __interrupt__
-    void WriteDone(AioProcessor *, AioProcessor::Op * op, int res);
+    void WriteDone(int res, AioProcessor::Op * op);
 
     //.... private members ....//
-
 
     const std::string devPath_;
     LogPath log_;

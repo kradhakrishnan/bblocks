@@ -22,15 +22,21 @@ public:
     static const uint32_t WBUFFERSIZE = 4 * 1024; // 4k
     static const uint32_t TIMEINTERVAL_MS = 1 * 1000;   // 1 s
 
+    struct IOCtx
+    {
+        IOCtx(const int off, const IOBuffer & buf) : off_(off), buf_(buf) {}
+
+        int off_;
+        IOBuffer buf_;
+    };
+
     //.... create/destroy ....//
 
     BasicAioTest()
         : log_("testaio/")
         , aio_(new LinuxAioProcessor())
         , iter_(0)
-        , wbuf_(IOBuffer::Alloc(WBUFFERSIZE))
-        , rbuf_(IOBuffer::Alloc(WBUFFERSIZE))
-        , dev_("test.out", /*size=*/ 10 * 1024 * 1024, aio_)
+        , dev_("../build/test.out", /*size=*/ 10 * 1024 * 1024, aio_)
     {
     }
 
@@ -47,20 +53,55 @@ public:
         // fill up the buffer
 
         // start writing data to device
-        for (int i = 0; i < 100; ++i) {
-            int status = dev_.Write(wbuf_, i, WBUFFERSIZE / 512, this,
-                                    async_fn(&BasicAioTest::WriteDone));
+        for (int i = 0; i < 1000; ++i) {
+            count_.Add(/*val=*/ 1);
+
+            IOBuffer buf = IOBuffer::Alloc(WBUFFERSIZE);
+            IOCtx * ctx = new IOCtx(i, buf);
+            buf.Fill('a' + (i % 26));
+            const int status = dev_.Write(ctx->buf_, (i * WBUFFERSIZE) / 512,
+                                          WBUFFERSIZE / 512,
+                                          async_fn(this, &BasicAioTest::WriteDone,
+                                                   ctx));
             INVARIANT(status == 1);
         }
     }
 
     //.... handlers ....//
 
-    void WriteDone(BlockDevice *, int status)
+    __completion_handler__
+    void WriteDone(int status, IOCtx * ctx)
     {
-        ASSERT(status != -1 && size_t(status) == wbuf_.Size());
+        ASSERT(ctx);
+        ASSERT(status != -1 && size_t(status) == ctx->buf_.Size());
 
-        DEBUG(log_) << "WriteDone(" << status << ")";
+        DEBUG(log_) << "WriteDone(" << status << ", " << ctx->off_ << ")";
+
+        ctx->buf_.Fill(/*ch=*/ 0);
+        dev_.Read(ctx->buf_, (ctx->off_ * WBUFFERSIZE) / 512, WBUFFERSIZE / 512,
+                  async_fn(this, &BasicAioTest::ReadDone, ctx));
+    }
+
+    __completion_handler__
+    void ReadDone(int status, IOCtx * ctx)
+    {
+        ASSERT(ctx);
+        ASSERT(status != -1 && size_t(status) == ctx->buf_.Size());
+
+        DEBUG(log_) << "Read done(" << status << ", " << ctx->off_ << ")";
+
+        for (size_t i = 0; i < ctx->buf_.Size(); ++i) {
+            ASSERT(ctx->buf_.Ptr()[i] == uint8_t('a' + (ctx->off_ % 26)));
+        }
+
+        ctx->buf_.Trash();
+        delete ctx;
+
+        // TODO: Unregister and then shutdown
+
+        if (count_.Add(/*val=*/ -1) == 1) {
+            ThreadPool::Shutdown();
+        }
     }
 
 private: 
@@ -68,9 +109,8 @@ private:
     LogPath log_;
     AioProcessor * aio_;
     uint32_t iter_;
-    IOBuffer wbuf_;
-    IOBuffer rbuf_;
     SpinningDevice dev_;
+    AtomicCounter count_;
 };
 
 void
