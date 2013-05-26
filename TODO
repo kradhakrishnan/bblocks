@@ -1,0 +1,26 @@
+/core
+
+- Implement buffer management
+  - IOBuffer types -- smart, raw, managed
+  - Per thread and global preallocator to make memory operations faster
+
+/core/net
+
+- Move TCP implementations to use CHandler
+- Implement UDP and ICMP processors
+
+/core/fs
+
+- Implement AIO readv and writev equivalent
+- Put together a system for testing upto 500 MBps
+
+/core/test
+
+- Framework for fuzz testing
+  - Make all unit tests more random and ready for longevity
+- Framework for logevity test
+- Framework for sustained performance
+
+/core/fs/logfs
+
+- Start laying the disklayout 
