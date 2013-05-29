@@ -44,7 +44,7 @@
 #ifdef DEBUG_BUILD
 #define ASSERT(x) {\
     if (!bool(x)) {\
-        STD_ERROR << "ASSERT: " << #x << " ."\
+        STD_ERROR << "ASSERT: " << #x << " . "\
                   << __FILE__ << " : " << __LINE__\
                   << " system-error: " << strerror(errno) \
                   << ENDL;\
@@ -58,9 +58,9 @@
 #define INVARIANT(x) {\
     if (! bool(x)) {\
         STD_ERROR << "Invariant condition violated. The system is halting"\
-                  << " to prevent corruption. INVARIANT: " << #x\
+                  << " to prevent corruption. INVARIANT: " << #x << " "\
                   << __FILE__ << ":" << __LINE__ \
-                  << " system-error: " << strerror(errno) << ENDL;\
+                  << " syserror: " << strerror(errno) << ENDL;\
         abort();\
     }\
 }

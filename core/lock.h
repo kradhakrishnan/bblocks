@@ -62,6 +62,8 @@ private:
     AutoLock(AutoLock &);
 };
 
+using Guard = AutoLock;
+
 class AutoUnlock : public AutoLock
 {
 public:

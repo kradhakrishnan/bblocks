@@ -153,11 +153,11 @@ private:
         if (iotype_ == READ) {
             diskoff_t off = NextOff();
             dev_.Read(buf_, off / 512, iosize_ / 512,
-                      async_fn(this, &AIOBenchmark::ReadDone, off));
+                      intr_fn(this, &AIOBenchmark::ReadDone, off));
         } else {
             diskoff_t off = NextOff();
             dev_.Write(buf_, off / 512, iosize_ / 512,
-                       async_fn(this, &AIOBenchmark::WriteDone, off));
+                       intr_fn(this, &AIOBenchmark::WriteDone, off));
         }
     }
 
