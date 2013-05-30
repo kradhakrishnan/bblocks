@@ -185,7 +185,8 @@ private:
 
         int status = client_ch_->EnqueueWrite(wbuf_);
         if ((size_t) status == wbuf_.Size()) {
-            WriteDone(client_ch_, status);
+            ThreadPool::Schedule(this, &BasicTCPTest::WriteDone,
+                                 client_ch_, status);
         } else {
             INVARIANT(status == 0);
         }
