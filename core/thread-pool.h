@@ -22,56 +22,34 @@ public:
 /**
  *
  */
-#define MEMBERFNPTR(A, B, C, D, E, F, G) \
-template<class _OBJ_, B> \
-class MemberFnPtr##A : public ThreadRoutine \
-{ \
-public: \
-\
-    MemberFnPtr##A(_OBJ_ * obj, void (_OBJ_::*fn)(C), D) \
-        : obj_(obj), fn_(fn) \
-    { \
-        E; \
-    } \
-\
-    virtual void Run() \
-    { \
-        (obj_->*fn_)(F); \
-        delete this; \
-    } \
-\
-private: \
-\
-    _OBJ_ * obj_; \
-    void (_OBJ_::*fn_)(C); \
-    G; \
-}\
-ALIGNED(sizeof(uint64_t));
+#define MEMBERFNPTR(n)                                                          \
+template<class _OBJ_, TDEF(T,n)>                                                \
+class MemberFnPtr##n : public ThreadRoutine                                     \
+{                                                                               \
+public:                                                                         \
+                                                                                \
+    MemberFnPtr##n(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), TPARAM(T,t,n))   \
+        : obj_(obj), fn_(fn), TASSIGN(t,n)                                      \
+    {                                                                           \
+    }                                                                           \
+                                                                                \
+    virtual void Run()                                                          \
+    {                                                                           \
+        (obj_->*fn_)(TARGEX(t,_,n));                                            \
+        delete this;                                                            \
+    }                                                                           \
+                                                                                \
+private:                                                                        \
+                                                                                \
+    _OBJ_ * obj_;                                                               \
+    void (_OBJ_::*fn_)(TENUM(T,n));                                             \
+    TMEMBERDEF(T,t,n);                                                                          \
+};                                                                              \
 
-MEMBERFNPTR(, class _P_, _P_, const _P_ p, p_ = p, p_, _P_ p_)
-
-MEMBERFNPTR(2, class _P1_ COMMA class _P2_, _P1_ COMMA _P2_,
-            const _P1_ p1 COMMA const _P2_ p2,
-            p1_ = p1 SEMICOLON p2_ = p2, p1_ COMMA p2_,
-            _P1_ p1_ SEMICOLON _P2_ p2_)
-
-MEMBERFNPTR(3,
-            class _P1_ COMMA class _P2_ COMMA class _P3_,
-            _P1_ COMMA _P2_ COMMA _P3_,
-            const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3,
-            p1_ = p1 SEMICOLON p2_ = p2 SEMICOLON p3_ = p3,
-            p1_ COMMA p2_ COMMA p3_,
-            _P1_ p1_ SEMICOLON _P2_ p2_ SEMICOLON _P3_ p3_)
-
-MEMBERFNPTR(4,
-            class _P1_ COMMA class _P2_ COMMA class _P3_ COMMA class _P4_,
-            _P1_ COMMA _P2_ COMMA _P3_ COMMA _P4_,
-            const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3 COMMA \
-            const _P4_ p4,
-            p1_ = p1 SEMICOLON p2_ = p2 SEMICOLON p3_ = p3 SEMICOLON p4_ = p4,
-            p1_ COMMA p2_ COMMA p3_ COMMA p4_,
-            _P1_ p1_ SEMICOLON _P2_ p2_ SEMICOLON _P3_ p3_ SEMICOLON _P4_ p4_)
-
+MEMBERFNPTR(1)  // MemberFnPtr1<_OBJ_, T1>
+MEMBERFNPTR(2)  // MemberFnPtr2<_OBJ_, T1, T2>
+MEMBERFNPTR(3)  // MemberFnPtr3<_OBJ_, T1, T2, T3>
+MEMBERFNPTR(4)  // MemberFnPtr4<_OBJ_, T1, T2, T3, T4>
 
 /**
  *
@@ -199,30 +177,19 @@ public:
         condExit_.Wait(&lock_);
     }
 
-#define NBTP_SCHEDULE(A, B, C, D, E) \
-    template<class _OBJ_, A> \
-    void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(B), C) \
-    { \
-        ThreadRoutine * r = new MemberFnPtr##E<_OBJ_, B>(obj, fn, D); \
-        threads_[nextTh_++ % threads_.size()]->Push(r); \
-    }
+#define NBTP_SCHEDULE(n)                                                        \
+    template<class _OBJ_, TDEF(T,n)>                                            \
+    void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), TPARAM(T,t,n))    \
+    {                                                                           \
+        ThreadRoutine * r;                                                      \
+        r = new MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));          \
+        threads_[nextTh_++ % threads_.size()]->Push(r);                         \
+    }                                                                           \
 
-    NBTP_SCHEDULE(class _P_, _P_, const _P_ p, p, )
-    NBTP_SCHEDULE(class _P1_ COMMA class _P2_, _P1_ COMMA _P2_,
-                  const _P1_ p1 COMMA const _P2_ p2, p1 COMMA p2, 2)
-    NBTP_SCHEDULE(class _P1_ COMMA class _P2_ COMMA class _P3_,
-                  _P1_ COMMA _P2_ COMMA _P3_,
-                  const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3,
-                  p1 COMMA p2 COMMA p3,
-                  3)
-    NBTP_SCHEDULE(class _P1_ COMMA class _P2_ COMMA class _P3_ COMMA class _P4_,
-                  _P1_ COMMA _P2_ COMMA _P3_ COMMA _P4_,
-                  const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3 \
-                  COMMA const _P4_ p4,
-                  p1 COMMA p2 COMMA p3 COMMA p4,
-                  4)
-
-
+    NBTP_SCHEDULE(1) // void Schedule<T1>(...)
+    NBTP_SCHEDULE(2) // void Schedule<T1,T2>(...)
+    NBTP_SCHEDULE(3) // void Schedule<T1,T2,T3>(...)
+    NBTP_SCHEDULE(4) // void Schedule<T1,T2,T3,T4>(...)
 
     void Schedule(ThreadRoutine * r)
     {
@@ -233,7 +200,7 @@ public:
     {
         BarrierRoutine * br = new BarrierRoutine(r, threads_.size());
         for (size_t i = 0; i < threads_.size(); ++i) {
-            ThreadRoutine * r = new MemberFnPtr<BarrierRoutine, int>
+            ThreadRoutine * r = new MemberFnPtr1<BarrierRoutine, int>
                                       (br, &BarrierRoutine::Run, /*status=*/ 0);
             threads_[i]->Push(r);
         }
@@ -282,31 +249,18 @@ public:
         NonBlockingThreadPool::Instance().Wait();
     }
 
-#define SCHEDULE(A, B, C, D) \
-    template<class _OBJ_, A> \
-    static void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(B), C) \
-    { \
-        NonBlockingThreadPool::Instance().Schedule(obj, fn, D); \
-    }
+#define TP_SCHEDULE(n)                                                          \
+    template<class _OBJ_, TDEF(T,n)>                                            \
+    static void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)),            \
+                         TPARAM(T,t,n))                                         \
+    {                                                                           \
+        NonBlockingThreadPool::Instance().Schedule(obj, fn, TARG(t,n));         \
+    }                                                                           \
 
-    SCHEDULE(class _P_, _P_, const _P_ p, p)
-
-    SCHEDULE(class _P1_ COMMA class _P2_,
-             _P1_ COMMA _P2_,
-             const _P1_ p1 COMMA const _P2_ p2,
-             p1 COMMA p2)
-
-    SCHEDULE(class _P1_ COMMA class _P2_ COMMA class _P3_,
-             _P1_ COMMA _P2_ COMMA _P3_,
-             const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3,
-             p1 COMMA p2 COMMA p3)
-
-    SCHEDULE(class _P1_ COMMA class _P2_ COMMA class _P3_ COMMA class _P4_,
-             _P1_ COMMA _P2_ COMMA _P3_ COMMA _P4_,
-             const _P1_ p1 COMMA const _P2_ p2 COMMA const _P3_ p3 \
-             COMMA const _P4_ p4,
-             p1 COMMA p2 COMMA p3 COMMA p4)
-
+    TP_SCHEDULE(1) // void Schedule<T1>(...)
+    TP_SCHEDULE(2) // void Schedule<T1,T2>(...)
+    TP_SCHEDULE(3) // void Schedule<T1,T2,T3>(...)
+    TP_SCHEDULE(4) // void Schedule<T1,T2,T3,T4>(...)
 
     static void Schedule(ThreadRoutine * r)
     {
