@@ -35,25 +35,50 @@ io_getevents(aio_context_t ctx, long min_nr, long nr,
 
 //....................................................... LinuxAioProcessor ....
 
-LinuxAioProcessor::LinuxAioProcessor(const size_t nreqs)
-    : Thread("/linuxaioprocessor/th")
-    , log_("/linuxaioprocessor")
+LinuxAioProcessor::LinuxAioProcessor(const size_t nrthreads, const size_t nreqs)
+    : log_("/linuxaioprocessor")
 {
     AutoLock _(&lock_);
 
-    memset(&ctx_, /*ch=*/ 0, sizeof(ctx_));
-    long status = io_setup(nreqs, &ctx_);
-    INVARIANT(status != -1);
+    for (size_t i = 0; i < nrthreads; ++i) {
+        aio_context_t ctx;
+        memset(&ctx, /*ch=*/ 0, sizeof(aio_context_t));
+        long status = io_setup(nreqs, &ctx);
+        INVARIANT(status != -1);
 
-    StartBlockingThread();
+        INFO(log_) << "Starting aio thread " << i;
+
+        PollThread * th = new PollThread(lock_, ctx, ops_);
+        INVARIANT(th);
+
+        ctxs_.push_back(ctx);
+        aioths_.push_back(th);
+
+        th->StartBlockingThread();
+    }
 }
 
 LinuxAioProcessor::~LinuxAioProcessor()
 {
     AutoLock _(&lock_);
 
-    long status = io_destroy(ctx_);
-    INVARIANT(status != -1);
+    // stop and destroy threads
+    for (auto it = aioths_.begin(); it != aioths_.end(); ++it) {
+        PollThread * th = *it;
+        th->Stop();
+        delete th;
+
+        INFO(log_) << "Destroyed aio thread.";
+    }
+    aioths_.clear();
+
+    // close aio context
+    for (auto it = ctxs_.begin(); it != ctxs_.end(); ++it) {
+        aio_context_t & ctx = *it;
+        long status = io_destroy(ctx);
+        INVARIANT(status != -1);
+    }
+    ctxs_.clear();
 }
 
 void
@@ -97,7 +122,8 @@ LinuxAioProcessor::Write(Op * op)
                 << " off: " << op->off_
                 << " size: " << op->size_;
 
-    long status = io_submit(ctx_, /*n=*/ 1, op->piocb_);
+    aio_context_t & ctx = ctxs_[rand() % ctxs_.size()];
+    long status = io_submit(ctx, /*n=*/ 1, op->piocb_);
 
     if (status != 1) {
         ERROR(log_) << "Failed to submit io. PWRITE op: " << (uint64_t) op
@@ -135,7 +161,8 @@ LinuxAioProcessor::Read(Op * op)
                 << " off: " << op->off_
                 << " size: " << op->size_;
 
-    long status = io_submit(ctx_, /*n=*/ 1, op->piocb_);
+    aio_context_t & ctx = ctxs_[rand() % ctxs_.size()];
+    long status = io_submit(ctx, /*n=*/ 1, op->piocb_);
 
     if (status != 1) {
         ERROR(log_) << "Failed to submit io. PREAD op: " << (uint64_t) op
@@ -145,14 +172,16 @@ LinuxAioProcessor::Read(Op * op)
     return status;
 }
 
+// .......................................... LinuxAioProcessor::PollThread ....
+
 void *
-LinuxAioProcessor::ThreadMain()
+LinuxAioProcessor::PollThread::ThreadMain()
 {
-    io_event events[MAX_EVENTS];
+    io_event events[LinuxAioProcessor::DEFAULT_MAX_EVENTS];
 
     while (true) {
-        long status = io_getevents(ctx_, /*min_nr=*/ 1, MAX_EVENTS, events,
-                                   /*timeout=*/ NULL);
+        long status = io_getevents(ctx_, /*min_nr=*/ 1, sizeof(events),
+                                   events, /*timeout=*/ NULL);
 
         if (status == 0) {
             // no events returned

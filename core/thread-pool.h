@@ -43,7 +43,7 @@ private:                                                                        
                                                                                 \
     _OBJ_ * obj_;                                                               \
     void (_OBJ_::*fn_)(TENUM(T,n));                                             \
-    TMEMBERDEF(T,t,n);                                                                          \
+    TMEMBERDEF(T,t,n);                                                          \
 };                                                                              \
 
 MEMBERFNPTR(1)  // MemberFnPtr1<_OBJ_, T1>

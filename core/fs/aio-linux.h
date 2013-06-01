@@ -62,27 +62,47 @@ public:
 
 //....................................................... LinuxAioProcessor ....
 
-class LinuxAioProcessor : public AioProcessor, public Thread
+class LinuxAioProcessor : public AioProcessor
 {
 public:
 
+    static const size_t DEFAULT_NRTHREADS = 2; // ~1GBps
     static const size_t DEFAULT_MAX_EVENTS = 1024;
 
-    LinuxAioProcessor(const size_t nreqs = DEFAULT_MAX_EVENTS);
+    //.... class PollThread ....//
+
+    class PollThread : public Thread
+    {
+    public:
+
+        PollThread(SpinMutex & lock, aio_context_t & ctx, InList<Op> & ops)
+            : Thread("/linuxaioprocessor/th/?")
+            , lock_(lock), ctx_(ctx), ops_(ops)
+        {
+            StartBlockingThread();
+        }
+
+        /*.... Thread override ....*/
+
+        virtual void * ThreadMain();
+
+    private:
+
+        SpinMutex & lock_;
+        aio_context_t ctx_;
+        InList<Op> & ops_;
+    };
+
+    //.... create/destroy ....//
+
+    LinuxAioProcessor(const size_t nrthreads = DEFAULT_NRTHREADS,
+                      const size_t nreqs = DEFAULT_MAX_EVENTS);
     virtual ~LinuxAioProcessor();
-
-    //.... static members ....//
-
-    const uint32_t MAX_EVENTS = 1024;
 
     //.... AioProcessor override ....//
 
     virtual int Write(Op * op);
     virtual int Read(Op * op);
-
-    //.... Thread override ....//
-
-    virtual void * ThreadMain();
 
     //.... AsyncProcessor ....//
 
@@ -93,9 +113,9 @@ private:
 
     LogPath log_;
     SpinMutex lock_;
-    aio_context_t ctx_;
+    std::vector<aio_context_t> ctxs_;
+    std::vector<PollThread *> aioths_;
     InList<Op> ops_;
-
 };
 
 //.......................................................... SpinningDevice ....
