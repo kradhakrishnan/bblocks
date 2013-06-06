@@ -310,27 +310,34 @@ main(int argc, char ** argv)
 
     po::options_description desc("Options:");
     desc.add_options()
-        ("help,h", "Print usage")
-        ("server,s", "Start server component")
-        ("client,c", "Start client component")
-        ("laddr,l", po::value<string>(&laddr),
+        ("help", "Print usage")
+        ("server", "Start server component")
+        ("client", "Start client component")
+        ("laddr", po::value<string>(&laddr),
          "Local address (Default INADDR_ANY:0)")
-        ("raddr,r", po::value<string>(&raddr), "Remote address")
-        ("iosize,io", po::value<int>(&iosize), "IO size in bytes")
-        ("conn,nc", po::value<int>(&nconn), "Client connections (Default 1)")
-        ("time,t", po::value(&seconds), "Time in sec (only with -c)")
-        ("ncpu,n", po::value<int>(&ncpu), "CPUs to use");
+        ("raddr", po::value<string>(&raddr), "Remote address")
+        ("iosize", po::value<int>(&iosize), "IO size in bytes")
+        ("conn", po::value<int>(&nconn), "Client connections (Default 1)")
+        ("s", po::value(&seconds), "Time in sec (only with -c)")
+        ("ncpu", po::value<int>(&ncpu), "CPUs to use");
+
 
     po::variables_map parg;
-    po::store(po::parse_command_line(argc, argv, desc), parg);
-    po::notify(parg);
+
+    try {
+        po::store(po::parse_command_line(argc, argv, desc), parg);
+        po::notify(parg);
+    } catch (...) {
+        cerr << "Error parsing command arguments." << endl;
+        cout << desc << endl;
+        return -1;
+    }
 
     const bool showusage = parg.count("help")
                            || (parg.count("server") && parg.count("client"))
                            || (!parg.count("server") && !parg.count("client"));
 
     if (showusage) {
-        cerr << "Both -c and -s are provided." << endl;
         cout << desc << endl;
         return -1;
     }

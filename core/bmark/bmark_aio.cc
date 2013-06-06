@@ -211,7 +211,7 @@ main(int argc, char ** argv)
 
     po::options_description desc("Options:");
     desc.add_options()
-        ("help,h", "Print usage")
+        ("help", "Print usage")
         ("devpath", po::value<string>(&devname)->required(), "Device path")
         ("devsize", po::value<disksize_t>(&devsize)->required(), 
          "Device size in GiB")
@@ -220,10 +220,11 @@ main(int argc, char ** argv)
         ("iopattern", po::value<string>(&iopattern)->required(), "seq/random")
         ("qdepth", po::value<size_t>(&qdepth)->required(), "Queue depth")
         ("ncpu", po::value<size_t>(&ncpu)->required(), "Number of cores")
-        ("secs,s", po::value<size_t>(&_time_s), "Test time in s");
+        ("s", po::value<size_t>(&_time_s), "Test time in s");
+
+    po::variables_map parg;
 
     try {
-        po::variables_map parg;
         po::store(po::parse_command_line(argc, argv, desc), parg);
         po::notify(parg);
     } catch(...) {
@@ -232,6 +233,13 @@ main(int argc, char ** argv)
         return -1;
     }
 
+    // help command
+    if (parg.count("help")) {
+        cout << desc << endl;
+        return 0;
+    }
+
+    // invalid commands
     if ((iotype != "read" && iotype != "write")
         || (iopattern != "random" && iopattern != "seq")) {
         cerr << "unknown iotype or iopattern" << endl;
@@ -239,6 +247,7 @@ main(int argc, char ** argv)
         return -1;
     }
 
+    // run benchamark
     InitTestSetup();
     ThreadPool::Start(ncpu);
 

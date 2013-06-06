@@ -4,9 +4,10 @@ INCLUDE =
 
 STDCPP = /usr/include/c++/4.6.3/
 
-SUBDIR = core/ \
-         core/test \
-         core/bmark \
+SUBDIR = core/          \
+         core/test      \
+         core/bmark     \
+         extentfs       \
 
 -include ${SUBDIR:%=%/Makefile}
 
@@ -162,6 +163,8 @@ build-setup:
 	mkdir -p $(OBJDIR)/core/fs
 	mkdir -p $(OBJDIR)/core/test
 	mkdir -p $(OBJDIR)/core/bmark
+	mkdir -p $(OBJDIR)/extentfs
+
 
 ubuntu-setup:
 	apt-get install build-essential libaio-dev libaio1 libaio1-dbg \

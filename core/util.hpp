@@ -6,13 +6,13 @@
 #include <sstream>
 #include <boost/shared_ptr.hpp>
 #include <boost/enable_shared_from_this.hpp>
-#include <boost/lexical_cast.hpp>
 #include <inttypes.h>
 #include <rpc/xdr.h>
 #include <zlib.h>
 
 #include <tr1/memory>
 
+#include "core/defs.h"
 #include "core/atomic.h"
 
 namespace dh_core {
@@ -27,16 +27,6 @@ enum
 };
 
 template<class T> using SharedPtr = std::tr1::shared_ptr<T>;
-
-#define STR(x) boost::lexical_cast<std::string>(x)
-
-#ifdef __GNUC__
-#define likely(x)       __builtin_expect((x),1)
-#define unlikely(x)     __builtin_expect((x),0)
-#else
-#define likely(x)       (x)
-#define unlikely(x)     (x)
-#endif
 
 #if defined(__i386__)
 static inline unsigned long long rdtsc(void)
