@@ -258,7 +258,8 @@ private:                                                                        
     uintptr_t ctx_;                                                             \
 };                                                                              \
                                                                                 \
-using CHandler##TSUFFIX = CompletionHandler##TSUFFIX<TDEF(T,n)>;                \
+template<TDEF(T,n)>                                                             \
+using CHandler##TSUFFIX = CompletionHandler##TSUFFIX<TENUM(T,n)>;               \
                                                                                 \
 template<class _OBJ_, TDEF(T,n)>                                                \
 CompletionHandler##TSUFFIX<TENUM(T,n)>                                          \
@@ -272,7 +273,7 @@ intr_fn(_OBJ_ * h, void (_OBJ_::*fn)(TENUM(T,n)))                               
                                                                                 \
 template<class _OBJ_, TDEF(T,n), class TCTX>                                    \
 CompletionHandler##TSUFFIX<TENUM(T,n)>                                          \
-intr_fn(_OBJ_ * h, void (_OBJ_::*fn)(TENUM(T,n), TCTX), const TCTX ctx)         \
+intr_fn(_OBJ_ * h, void (_OBJ_::*fn)(TENUM(T,n), TCTX), TCTX ctx)               \
 {                                                                               \
     CompletionHandler##TSUFFIX<TENUM(T,n)> ch(                                  \
                 CompletionHandler##TSUFFIX<TENUM(T,n)>::INTERRUPT,              \
@@ -302,7 +303,7 @@ async_fn(_OBJ_ * h, void (_OBJ_::*fn)(TENUM(T,n), TCTX), TCTX ctx)              
     return ch;                                                                  \
 }                                                                               \
 
-COMPLETION_HANDLER( ,1) // CompletionHandler<T>
+COMPLETION_HANDLER(,1)  // CompletionHandler<T>
 COMPLETION_HANDLER(2,2) // CompletionHandler2<T1,T2>
 COMPLETION_HANDLER(3,3) // CompletionHandler3<T1,T2,T3>
 

@@ -1,5 +1,5 @@
-#ifndef _DHCORE_LOFF_H_
-#define _DHCORE_LOFF_H_
+#ifndef _EXTENTFS_LOFF_H_
+#define _EXTENTFS_LOFF_H_
 
 #include "core/defs.h"
 

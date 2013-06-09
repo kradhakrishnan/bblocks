@@ -1,16 +1,47 @@
-#ifndef _DHCORE_FS_LOGFS_BPLUSTREE_H_
-#define _DHCORE_FS_LOGFS_BPLUSTREE_H_
+#ifndef _EXTENTFS_BPLUSTREE_H_
+#define _EXTENTFS_BPLUSTREE_H_
 
 #include "core/fs/aio-linux.h"
 #include "extentfs/logoff.h"
 
-namespace dh_core {
+using namespace dh_core;
 
-// ............................................................. IOProvider ....
+namespace extentfs {
 
-/*!
- *  \class BTree
- *  \brief BTree implementation for LogFS
+// ........................................................ BTreeIOProvider ....
+
+/**
+ * @class BTreeIOProvider
+ *
+ * IO Provider interface for BTree. We want to decouple memory management and IO
+ * service from BTree. We want the BTree implementation focussed on the
+ * processing logic and effeciency.
+ *
+ */
+class BTreeIOProvider
+{
+public:
+
+    /**
+     * Allocate buffer for IO (usually from memory pool)
+     */
+    virtual void AllocBuffer(CHandler<IOBuffer> & cb /**< Callback */) = 0;
+
+    virtual void Read(const LogOff & off, CHandler<IOBuffer> & cb) = 0;
+
+    virtual void Write(const IOBuffer & buf, CHandler<LogOff> & cb) = 0;
+
+    virtual void Update(const IOBuffer & buf, const LogOff & off,
+                        CHandler<int> & cb) = 0;
+
+};
+
+// .................................................................. BTree ....
+
+/**
+ *  @class BTree
+ *
+ *  BTree implementation for LogFS
  *
  *  This class provides a B+Tree implementaiton designed for log structured file
  *  system. In a log structured file layout, records cannot be updated, hence
@@ -27,26 +58,41 @@ class BTree
 {
 public:
 
-    /*!
-     * \brief Create a new BTree on disk
-     */
-    void CreateTree();
+    BTree(BTreeIOProvider * iomgr)
+        : iomgr_(iomgr)
+        , n_(0)
+    {
+        INVARIANT(iomgr_);
+    }
 
-    /*!
-     * \brief Open an existing BTree from disk
-     *
-     * \param   off     Location of root node
+    virtual ~BTree()
+    {
+        INVARIANT(iomgr_);
+        iomgr_ = NULL;
+    }
+
+    /**
+     * Create a new BTree on disk
      */
-    void OpenTree(const LogOff & off);
+    void CreateTree(const LogOff & roff /**< Root node offset */);
+
+    /**
+     * Open an existing BTree from disk
+     */
+    void OpenTree(const LogOff & roff /**< Root node offset on disk*/);
 
 private:
 
-    /*!
-     * \class Node
-     * \brief BTree node
+    /**
+     * @struct Node
+     *
+     * BTree node representation
+     *
      */
     struct Node
     {
+        Node() : inMemory_(false) {}
+
         void Serialize(IOBuffer & buf);
         void Deserialize(const IOBuffer & buf);
 
@@ -63,10 +109,10 @@ private:
         data_;
     };
 
-    Node root_;                 // Root of the tree
-    uint64_t n_;                // Number of elements in the tree
-    BlockDevice * dev_;         // Blockdevice to write to
-    const size_t pageSize_;     // Page size on the block device
+    BTreeIOProvider iomgr_;     ///< Disk IO provider for persistence
+    Node root_;                 ///< Root of the tree
+    uint64_t n_;                ///< Number of elements in the tree
+    const size_t pageSize_;     ///< Page size on the block device
 };
 
 

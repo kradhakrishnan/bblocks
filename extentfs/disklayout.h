@@ -1,14 +1,20 @@
 #ifndef _EXTENTFS_DISKLAYOUT_H_
 #define _EXTENTFS_DISKLAYOUT_H_
 
+#include "core/defs.h"
+#include "extentfs/logoff.h"
+
+using namespace dh_core;
+
 namespace extentfs {
 
 #define SUPERBLOCK_MAGIC 0xdeeddeeddeeddeed
 #define EXTENT_MAGIC 0xfeedfeedfeedfeed
 
-#define RAID_STRIPE_SIZE (256 * 1024)
-#define MAX_EXTENT_SIZE (256 * 1024)
+#define RAID_STRIPE_SIZE KiB(256)
+#define MAX_EXTENT_SIZE KiB(256)
 #define MAX_BLKS_PER_EXTENT ((MAX_EXTENT_SIZE / 512) - 1)
+#define PAGE_SIZE_FACTOR KiB(4)
 
 struct SuperBlock
 {
@@ -41,8 +47,13 @@ struct SuperBlock
 
     LogOff extentIndexRootOff_;
     LogOff extentMapOff_;
+
+    // .... Padding .... //
+
+    uint8_t pad_[368];
 };
 
+static_assert(sizeof(SuperBlock) == 512, "Superblock not aligned");
 
 struct ExtentHeader
 {
@@ -55,16 +66,20 @@ struct ExtentHeader
     // .... Meta information .... //
 
     LogOff off_;
-    LogOff prev_;
+    LogOff prevOff_;
     uint64_t ctime_;
     uint64_t cksum_;
 
     // .... Block information .... //
 
-    uint32_t nblks_;
-    uint8_t blkbitmap_[MAX_BLKS_PER_EXTENT];
+    uint32_t nbytes_;
+
+    // .... Padding .... //
+
+    uint8_t pad_[432];
 };
 
+static_assert(sizeof(ExtentHeader) == 512, "ExtentHeader not aligned");
 
 } // namespace extentfs
 

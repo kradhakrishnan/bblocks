@@ -165,6 +165,10 @@ build-setup:
 	mkdir -p $(OBJDIR)/core/bmark
 	mkdir -p $(OBJDIR)/extentfs
 
+build-doc:
+	rm -f -r ../build/doc
+	mkdir $(OBJDIR)/doc
+	doxygen doc/doxygen/Doxyfile
 
 ubuntu-setup:
 	apt-get install build-essential libaio-dev libaio1 libaio1-dbg \
