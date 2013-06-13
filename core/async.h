@@ -186,6 +186,10 @@ public:                                                                         
         QUEUE,                                                                  \
     }                                                                           \
     cbtype_t;                                                                   \
+                                                                            \
+    CompletionHandler##TSUFFIX()                                            \
+        : h_(NULL)                                                          \
+    {}                                                                      \
                                                                                 \
     CompletionHandler##TSUFFIX(cbtype_t type, CHandle * h,                      \
                                void (CHandle::*fn)(TPARAM(T,t,n)))              \
@@ -318,6 +322,53 @@ void (CHandle::*async_fn(void (_OBJ_::*fn)(TENUM(T,n))))(TENUM(T,n))            
 ASYNCFN(1)  // async_fn<T>(fn)
 ASYNCFN(2)  // async_fn<T1,T2>(fn)
 ASYNCFN(3)  // async_fn<T1,T2,T3>(fn)
+
+// ........................................................... AsyncWait<T> ....
+
+template<class T>
+class AsyncWait
+{
+public:
+
+    AsyncWait()
+        : lock_(/*isRecursive=*/ false)
+        , done_(false)
+    {
+    }
+
+    void Done(T t)
+    {
+        {
+            AutoLock _(&lock_);
+
+            result_ = t;
+            INVARIANT(!done_);
+            done_ = true;
+        }
+
+        cond_.Broadcast();
+    }
+
+    T Wait()
+    {
+        AutoLock _(&lock_);
+
+        if (!done_) {
+            cond_.Wait(&lock_);
+            // we should reach here only after the processing finished
+        }
+
+        INVARIANT(done_);
+        return result_;
+    }
+
+private:
+
+    PThreadMutex lock_;
+    WaitCondition cond_;
+    T result_;
+    bool done_;
+};
 
 } // namespace dh_core
 

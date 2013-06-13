@@ -11,8 +11,10 @@
 #include "core/util.hpp"
 
 /**
- BUGS/TODO:
- 1. Write LogMessage using proper c++ mechanism
+ TODO:
+ Please note. This is an interim solution but good enough since we don't dump
+ logs at runtime. Please rewrite this at a later time using C++ IO stream buffer
+ manipulations.
  **/
 
 namespace dh_core {

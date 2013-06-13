@@ -248,6 +248,18 @@ public:
         memset(data_ + off_, ch, size_);
     }
 
+    void Copy(uint8_t * src, const size_t size)
+    {
+        memcpy(data_, src, size);
+    }
+
+    template<class T>
+    void Copy(const T & t)
+    {
+        INVARIANT(sizeof(t) <= size_);
+        memcpy(data_, (uint8_t *) &t, sizeof(T));
+    }
+
 private:
 
     IOBuffer(uint8_t * data, const size_t size, const size_t off = 0)

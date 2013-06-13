@@ -234,6 +234,10 @@ SpinningDevice::SpinningDevice(const std::string & devPath,
 {
     ASSERT(aio);
     ASSERT(nsectors);
+
+    INFO(log_) << "SpinningDevice: "
+               << " path: " << devPath
+               << " nsectors: " << nsectors_;
 }
 
 SpinningDevice::~SpinningDevice()
@@ -252,7 +256,7 @@ int
 SpinningDevice::Write(const IOBuffer & buf, const diskoff_t off,
                       const size_t nblks, const CompletionHandler<int> & cb)
 {
-    INVARIANT((off + nblks) < nsectors_);
+    INVARIANT((off + nblks) <= nsectors_);
 
     Op * op = new Op(fd_, buf, off * SECTOR_SIZE, nblks * SECTOR_SIZE,
                      intr_fn(this, &SpinningDevice::WriteDone), cb);
@@ -263,10 +267,19 @@ SpinningDevice::Write(const IOBuffer & buf, const diskoff_t off,
 }
 
 int
+SpinningDevice::Write(const IOBuffer & buf, const diskoff_t off,
+                      const size_t nblks)
+{
+    AsyncWait<int> waiter;
+    Write(buf, off, nblks, intr_fn(&waiter, &AsyncWait<int>::Done));
+    return waiter.Wait();
+}
+
+int
 SpinningDevice::Read(IOBuffer & buf, const diskoff_t off,
                      const size_t nblks, const CompletionHandler<int> & cb)
 {
-    INVARIANT((off + nblks) < nsectors_);
+    INVARIANT((off + nblks) <= nsectors_);
 
     Op * op = new Op(fd_, buf, off * SECTOR_SIZE, nblks * SECTOR_SIZE,
                      intr_fn(this, &SpinningDevice::WriteDone), cb);

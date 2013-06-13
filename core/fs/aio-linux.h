@@ -23,8 +23,13 @@ public:
     virtual int Write(const IOBuffer & buf, const diskoff_t off,
                       const size_t size, const CompletionHandler<int> & h) = 0;
 
+    virtual int Write(const IOBuffer & buf, const diskoff_t off,
+                      const size_t size) = 0;
+
     virtual int Read(IOBuffer & buf, const diskoff_t off,
                      const size_t size, const CompletionHandler<int> & ch) = 0;
+
+    virtual disksize_t GetDeviceSize() = 0;
 };
 
 //............................................................ AioProcessor ....
@@ -147,8 +152,15 @@ public:
 
     virtual int Write(const IOBuffer & buf, const diskoff_t off,
                       const size_t nblks, const CompletionHandler<int> & ch);
+    virtual int Write(const IOBuffer & buf, const diskoff_t off,
+                      const size_t nblks);
     virtual int Read(IOBuffer & buf, const diskoff_t off,
                      const size_t nblks, const CompletionHandler<int> & ch);
+
+    virtual disksize_t GetDeviceSize()
+    {
+        return nsectors_ * SECTOR_SIZE;
+    }
 
 private:
 

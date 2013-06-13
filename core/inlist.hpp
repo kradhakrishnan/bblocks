@@ -8,6 +8,13 @@
 
 namespace dh_core {
 
+// ....................................................... InListElement<T> ....
+
+/**
+ * Base class for an element which will be inserted into inlists.
+ *
+ * Usage : class X : public InListElement<X> {}
+ */
 template<class T>
 struct InListElement
 {
@@ -20,6 +27,16 @@ struct InListElement
     T * prev_;
 };
 
+// .............................................................. Inlist<T> ....
+
+/**
+ * Generic implementation of inlist. Provides typical list functionality with
+ * the overhead of allocation and deallocation of elements. Elements are
+ * linked-in and unlinked as per the operation.
+ *
+ * The elements are expected to fields next_ and prev_ defined. Typically you
+ * would extent InListElement<T>
+ */
 template<class T>
 class InList
 {
@@ -101,8 +118,13 @@ private:
     T * tail_; // push
 };
 
+// ............................................................. InQueue<T> ....
+
 /**
+ * In list used as queue. Provides all the same benefits and requirements of
+ * inlist, but provide the interface for a queue.
  *
+ * This is meant to be a fast queue, so we employ adaptive spinning.
  */
 template<class T>
 class InQueue
@@ -167,9 +189,11 @@ private:
     unsigned int maxSpin_;
 };
 
+// ............................................................... Queue<T> ....
 
 /**
- *
+ * Typical thread safe queue which uses blocking lock. You would use this queue
+ * for general purpose programming.
  */
 template<class T>
 class Queue

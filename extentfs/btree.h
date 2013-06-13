@@ -2,7 +2,7 @@
 #define _EXTENTFS_BPLUSTREE_H_
 
 #include "core/fs/aio-linux.h"
-#include "extentfs/logoff.h"
+#include "extentfs/logalloc.h"
 
 using namespace dh_core;
 
@@ -58,7 +58,7 @@ class BTree
 {
 public:
 
-    BTree(BTreeIOProvider * iomgr)
+    explicit BTree(BTreeIOProvider * iomgr)
         : iomgr_(iomgr)
         , n_(0)
     {
@@ -74,7 +74,7 @@ public:
     /**
      * Create a new BTree on disk
      */
-    void CreateTree(const LogOff & roff /**< Root node offset */);
+    void CreateTree(const LogOff & roff);
 
     /**
      * Open an existing BTree from disk
@@ -82,6 +82,11 @@ public:
     void OpenTree(const LogOff & roff /**< Root node offset on disk*/);
 
 private:
+
+    struct OnDiskNode
+    {
+        LogOff off_;
+    };
 
     /**
      * @struct Node
@@ -91,19 +96,15 @@ private:
      */
     struct Node
     {
-        Node() : inMemory_(false) {}
-
         void Serialize(IOBuffer & buf);
         void Deserialize(const IOBuffer & buf);
 
-        bool inMemory_;
-        LogOff diskOff_;
         std::vector<_Key_> keys_;
         bool isLeaf_;
 
         union
         {
-            std::vector<Node *> ptrs_;
+            std::vector<OnDiskNode *> ptrs_;
             std::vector<_Val_> vals_;
         }
         data_;

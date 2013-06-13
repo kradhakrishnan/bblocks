@@ -2,7 +2,7 @@
 #define _EXTENTFS_DISKLAYOUT_H_
 
 #include "core/defs.h"
-#include "extentfs/logoff.h"
+#include "extentfs/logalloc.h"
 
 using namespace dh_core;
 
@@ -45,7 +45,7 @@ struct SuperBlock
 
     // .... Special Block Index .... //
 
-    LogOff extentIndexRootOff_;
+    LogOff extentIndexOff_;
     LogOff extentMapOff_;
 
     // .... Padding .... //

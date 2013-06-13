@@ -6,10 +6,11 @@ LIBRARY += extentfs
 #
 # .cc that define main
 #
-TARGET += extentfs/extentfs.cc
+TARGET += extentfs/efs.cc
 
 #
 # .cc
 #
 SRCS += extentfs/btree.cc \
+        extentfs/extentfs.cc
 

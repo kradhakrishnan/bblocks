@@ -44,6 +44,16 @@ static inline unsigned long long rdtsc(void)
 }
 #endif
 
+template<class T>
+SharedPtr<T>
+MakeSharedPtr(T * t)
+{
+    return SharedPtr<T>(t);
+}
+
+// ................................................................... Time ....
+
+
 class Time
 {
 public:
@@ -58,115 +68,10 @@ public:
     }
 };
 
-template<class T>
-SharedPtr<T>
-MakeSharedPtr(T * t)
-{
-    return SharedPtr<T>(t);
-}
+// ................................................................ Adler32 ....
 
 /**
- */
-class RefCounted
-{
-public:
-
-    RefCounted()
-        : refs_(1)
-    {
-    }
-
-    void IncRef()
-    {
-        refs_.Add(/*count=*/ 1);
-    }
-
-    void DecRef()
-    {
-        const uint64_t count = refs_.Add(/*count=*/ -1);
-        if (!count) {
-            delete this;
-        }
-    }
-
-
-protected:
-
-    virtual ~RefCounted()
-    {
-    }
-
-    AtomicCounter refs_;
-};
-
-template<class T>
-class Ref
-{
-public:
-
-    Ref(T * t) : t_(t) {}
-    ~Ref()
-    {
-        if (t_) {
-            t_->DecRef();
-            t_ = NULL;
-        }
-    }
-
-    Ref(Ref<T> & rhs)
-    {
-        ASSERT(!t_);
-        rhs.t_->IncRef();
-        t_ = rhs.t_;
-    }
-
-private:
-
-    T * t_;
-};
-
-/**
- */
-template<class T>
-class AutoPtr
-{
-public:
-
-    AutoPtr(T * t = NULL)
-        : t_(t)
-    {}
-
-    ~AutoPtr()
-    {
-        Destroy();
-    }
-
-    inline T * Get() const
-    {
-        return t_;
-    }
-
-    inline T * operator->()
-    {
-        ASSERT(t_);
-        return t_;
-    }
-
-    void Destroy()
-    {
-        if (!t_) {
-            delete t_;
-            t_ = NULL;
-        }
-    }
-
-private:
-
-    T * t_;
-};
-
-
-/**
+ * Adler32 checksume wrapper.
  */
 class Adler32
 {
@@ -202,8 +107,12 @@ private:
     uint32_t cksum_;
 };
 
+// ........................................................ StateMachine<T> ....
 
 /**
+ * A generic state machine implementation for tracking states. Typically you
+ * would pass an enum as T.
+ *
  */
 template<class T>
 class StateMachine
@@ -258,7 +167,15 @@ class StateMachine
     T state_;
 };
 
+// ........................................................... Singleton<T> ....
+
 /**
+ * A generic implementation of singleton design pattern
+ *
+ * TODO:
+ * - Implement check and lock pattern and make it thread safe (refer to
+ * architectural design pattern)
+ *
  */
 template<class T>
 class Singleton

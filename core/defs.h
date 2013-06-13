@@ -19,8 +19,8 @@
 //
 #define KiB(x) (x * 1024)
 #define MiB(x) (KiB(x) * 1024)
-#define GiB(x) (Mib(x) * 1024)
-#define TiB(x) (Gib(x) * 1024)
+#define GiB(x) (MiB(x) * 1024)
+#define TiB(x) (GiB(x) * 1024)
 
 #define COMMA ,
 #define SEMICOLON ;

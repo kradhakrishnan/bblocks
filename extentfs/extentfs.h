@@ -12,9 +12,60 @@ namespace extentfs {
 
 class ExtentFs;
 class FormatHelper;
+class SuperblockHelper;
+
+// ........................................................... FormatHelper ....
 
 /**
- * /class   ExtentFs
+ * Help format the device for ExtentFs.
+ *
+ * Format the device with superblock and root node for the extent index.
+ *
+ */
+class FormatHelper
+{
+public:
+
+    FormatHelper(ExtentFs & fs) : log_("/efs/fmtHelper"), fs_(fs) {}
+
+    /**
+     * Format the specified device and create extent fs footprint.
+     *
+     */
+    void Start(CHandler<int> chandler);
+
+private:
+
+    void LayoutSuperblock();
+
+    LogPath log_;
+    ExtentFs & fs_;
+    CHandler<int> chandler_;
+};
+
+// ....................................................... SuperblockHelper ....
+
+/**
+ * Help IO operations for superblock
+ *
+ * Encapsulates logical operations to superblock. Typically they include
+ * reading, writing and manipulating content.
+ */
+class SuperblockHelper
+{
+public:
+
+    SuperblockHelper(ExtentFs & fs) : fs_(fs) {}
+
+private:
+
+    ExtentFs & fs_;
+};
+
+// ............................................................... ExtentFs ....
+
+/**
+ * @class ExtentFs
  * 
  * Implementation of the extent file system core.
  *
@@ -33,15 +84,7 @@ public:
 
     // .... async functions ....//
 
-    /**
-     * Create a new extent file system instance and start serving.
-     */
-    void Create(const CHandler<int> & h /**< Callback */);
-
-    /**
-     * Open an exiting extent file system instance for serving.
-     */
-    void Open(const CHandler<int> & h /**< Callback */);
+    void Start(const bool newfs);
 
 private:
 
@@ -53,62 +96,42 @@ private:
 
     // .... Internal functions .... //
 
+    size_t nsuperblocks() const { return 2; }
+    diskoff_t p2b(const diskoff_t pageoff)
+    {
+        return pageoff * (pageSize_ / 512);
+    }
+
+    void InitSuperblock(SuperBlock & sb,
+                        const bool cleanShutdown = true) const;
+    void UpdateSuperblock(SuperBlock & sb,
+                          const bool cleanShutdown = false) const;
+
+    void CreateStore();
+    void OpenStore();
+
     __completion_handler__
-    void CreateDone(int status /**< Return status. -1 for error */);
+    void CreateStoreDone(int status);
 
     // .... Member variables .... //
 
+    SpinMutex lock_;
     LogPath log_;
     BlockDevice * dev_;
     const size_t pageSize_;
+    const disksize_t npages_;
+    LogAllocator logalloc_;
     SuperBlock sb_;
+
+    LogOff lastWrite_;
+    LogOff extentIndexOff_;
+    LogOff extentMapOff_;
+
+    // .... Helpers .... //
+
+    FormatHelper fmtHelper_;
 };
 
-/**
- * Help format the device for ExtentFs.
- *
- * Format the device with superblock and root node for the extent index.
- *
- */
-class FormatHelper
-{
-public:
-
-    FormatHelper(ExtentFs & fs /**< Extent file system reference */)
-        : fs_(fs)
-    {
-    }
-
-    /**
-     * Format the specified device and create extent fs footprint.
-     *
-     */
-    void Start(const bool isQuickFormat, CHandler<int> h);
-
-private:
-
-    ExtentFs & fs_;
-};
-
-/**
- * Help IO operations for superblock
- *
- * Encapsulates logical operations to superblock. Typically they include
- * reading, writing and manipulating content.
- */
-class SuperblockHelper
-{
-public:
-
-    SuperblockHelper(ExtentFs & fs)
-        : fs_(fs)
-    {
-    }
-
-private:
-
-    ExtentFs & fs_;
-};
 
 } // namespace extentfs
 

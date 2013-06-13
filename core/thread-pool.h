@@ -8,6 +8,8 @@ namespace dh_core {
 
 class NonBlockingThread;
 
+// .......................................................... ThreadRoutine ....
+
 /**
  *
  */
@@ -19,40 +21,45 @@ public:
     virtual ~ThreadRoutine() {}
 };
 
+// ........................................................ MemberFnPtr*<*> ....
+
 /**
  *
  */
-#define MEMBERFNPTR(n)                                                          \
-template<class _OBJ_, TDEF(T,n)>                                                \
-class MemberFnPtr##n : public ThreadRoutine                                     \
-{                                                                               \
-public:                                                                         \
-                                                                                \
-    MemberFnPtr##n(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), TPARAM(T,t,n))   \
-        : obj_(obj), fn_(fn), TASSIGN(t,n)                                      \
-    {                                                                           \
-    }                                                                           \
-                                                                                \
-    virtual void Run()                                                          \
-    {                                                                           \
-        (obj_->*fn_)(TARGEX(t,_,n));                                            \
-        delete this;                                                            \
-    }                                                                           \
-                                                                                \
-private:                                                                        \
-                                                                                \
-    _OBJ_ * obj_;                                                               \
-    void (_OBJ_::*fn_)(TENUM(T,n));                                             \
-    TMEMBERDEF(T,t,n);                                                          \
-};                                                                              \
+#define MEMBERFNPTR(n)                                                      \
+template<class _OBJ_, TDEF(T,n)>                                            \
+class MemberFnPtr##n : public ThreadRoutine                                 \
+{                                                                           \
+public:                                                                     \
+                                                                            \
+    MemberFnPtr##n(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)),              \
+                  TPARAM(T,t,n))                                            \
+        : obj_(obj), fn_(fn), TASSIGN(t,n)                                  \
+    {                                                                       \
+    }                                                                       \
+                                                                            \
+    virtual void Run()                                                      \
+    {                                                                       \
+        (obj_->*fn_)(TARGEX(t,_,n));                                        \
+        delete this;                                                        \
+    }                                                                       \
+                                                                            \
+private:                                                                    \
+                                                                            \
+    _OBJ_ * obj_;                                                           \
+    void (_OBJ_::*fn_)(TENUM(T,n));                                         \
+    TMEMBERDEF(T,t,n);                                                      \
+};                                                                          \
 
 MEMBERFNPTR(1)  // MemberFnPtr1<_OBJ_, T1>
 MEMBERFNPTR(2)  // MemberFnPtr2<_OBJ_, T1, T2>
 MEMBERFNPTR(3)  // MemberFnPtr3<_OBJ_, T1, T2, T3>
 MEMBERFNPTR(4)  // MemberFnPtr4<_OBJ_, T1, T2, T3, T4>
 
+// ....................................................... NonBlockingLogic ....
+
 /**
- *
+ * TODO: Throw this legacy stuff out pls
  */
 class NonBlockingLogic
 {
@@ -73,6 +80,8 @@ protected:
 
     const uint32_t thAffinity_;
 };
+
+// ...................................................... NonBlockingThread ....
 
 /**
  *
@@ -110,6 +119,8 @@ private:
 
     InQueue<ThreadRoutine> q_;
 };
+
+// .................................................. NonBlockingThreadPool ....
 
 /**
  *
@@ -177,14 +188,15 @@ public:
         condExit_.Wait(&lock_);
     }
 
-#define NBTP_SCHEDULE(n)                                                        \
-    template<class _OBJ_, TDEF(T,n)>                                            \
-    void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), TPARAM(T,t,n))    \
-    {                                                                           \
-        ThreadRoutine * r;                                                      \
-        r = new MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));          \
-        threads_[nextTh_++ % threads_.size()]->Push(r);                         \
-    }                                                                           \
+    #define NBTP_SCHEDULE(n)                                                \
+    template<class _OBJ_, TDEF(T,n)>                                        \
+    void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)),               \
+                  TPARAM(T,t,n))                                            \
+    {                                                                       \
+        ThreadRoutine * r;                                                  \
+        r = new MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));      \
+        threads_[nextTh_++ % threads_.size()]->Push(r);                     \
+    }                                                                       \
 
     NBTP_SCHEDULE(1) // void Schedule<T1>(...)
     NBTP_SCHEDULE(2) // void Schedule<T1,T2>(...)
@@ -230,6 +242,8 @@ private:
     uint32_t nextTh_;
 };
 
+// ............................................................. ThreadPool ....
+
 class ThreadPool
 {
 public:
@@ -249,13 +263,13 @@ public:
         NonBlockingThreadPool::Instance().Wait();
     }
 
-#define TP_SCHEDULE(n)                                                          \
-    template<class _OBJ_, TDEF(T,n)>                                            \
-    static void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)),            \
-                         TPARAM(T,t,n))                                         \
-    {                                                                           \
-        NonBlockingThreadPool::Instance().Schedule(obj, fn, TARG(t,n));         \
-    }                                                                           \
+    #define TP_SCHEDULE(n)                                                  \
+    template<class _OBJ_, TDEF(T,n)>                                        \
+    static void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)),        \
+                         TPARAM(T,t,n))                                     \
+    {                                                                       \
+        NonBlockingThreadPool::Instance().Schedule(obj, fn, TARG(t,n));     \
+    }                                                                       \
 
     TP_SCHEDULE(1) // void Schedule<T1>(...)
     TP_SCHEDULE(2) // void Schedule<T1,T2>(...)

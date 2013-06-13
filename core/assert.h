@@ -55,6 +55,8 @@
 #define ASSERT(x)
 #endif
 
+#define DEFENSIVE_CHECK(x) ASSERT(x)
+
 #define INVARIANT(x) {\
     if (! bool(x)) {\
         STD_ERROR << "Invariant condition violated. The system is halting"\
