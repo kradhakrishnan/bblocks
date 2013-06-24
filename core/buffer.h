@@ -2,6 +2,7 @@
 #define _DH_CORE_BUFFER_H_
 
 #include <malloc.h>
+#include <boost/shared_ptr.hpp>
 
 #include "core/assert.h"
 #include "core/atomic.h"
@@ -9,167 +10,6 @@
 namespace dh_core {
 
 class IOBuffer;
-
-//.................................................................. Ptr<T> ....
-
-#if 0
-/**
- *
- */
-template<class T>
-class Ptr
-{
-public:
-
-    friend class IOBuffer;
-
-    //.... pointer types that can be hosted ...//
-
-    struct Data
-    {
-        virtual ~Data() {}
-
-        virtual void Trash() = 0;
-        virtual void Dalloc() = 0;
-        virtual void Copy(const Data * rhs) = 0;
-    };
-
-    struct RawData : public Data
-    {
-        RawData(const size_t size)
-            : t_(NULL)
-        {
-            ASSERT(size);
-            t_ = new T[size];
-        }
-
-        ~RawData() {}
-
-        virtual void Trash()
-        {
-            ASSERT(t_);
-            delete[] t_;
-            t_ = NULL;
-        }
-
-        virtual void Dalloc()
-        {
-            t_ = NULL;
-        }
-
-        virtual void Copy(const Data * rhs)
-        {
-            t_ = static_cast<const RawData *>(rhs)->t_;
-        }
-
-        T * t_;
-    };
-
-    struct SmartData : public Data
-    {
-        SmartData(const size_t size)
-            : t_(NULL), count_(NULL)
-        {
-            ASSERT(!t_ && !count_);
-
-            t_ = new T[size];
-            count_ = new AtomicCounter(/*count=*/ 1);
-        }
-
-        virtual ~SmartData() { Dalloc(); }
-
-        virtual void Trash() { Dalloc(); }
-
-        virtual void Dalloc()
-        {
-            if (t_) {
-                if (count_->Add(-1)) {
-                    delete count_;
-                    delete[] t_;
-                }
-            }
-
-            t_ = NULL;
-            count_ = NULL;
-        }
-
-        void Copy(const Data * rhs)
-        {
-            if (t_) {
-                Dalloc();
-            }
-
-            count_->Add(/*count=*/ 1);
-
-            ASSERT(!t_ && !count_)
-            t_ = static_cast<SmartData *>(rhs)->t_;
-            count_ = static_cast<SmartData *>(rhs)->count_;
-        }
-
-        T * t_;
-        AtomicCounter * count_;
-    };
-
-
-    //.... static allocators ....//
-
-    static Ptr<T> AllocRawPtr(const size_t size)
-    {
-        return Ptr<T>(new RawData(size));
-    }
-
-    static Ptr<T> AllocSmartPtr(const size_t size)
-    {
-        return Ptr<T>(new SmartData(size));
-    }
-
-    //.... Create/destroy ....//
-
-    Ptr(const Ptr<T> & rhs)
-    {
-        data_->Copy(this, rhs);
-    }
-
-    Ptr<T> & operator=(const Ptr<T> & rhs)
-    {
-        data_->Copy(this, rhs);
-        return *this;
-    }
-
-    ~Ptr()
-    {
-        if (data_) {
-            data_->Dalloc(this);
-            data_ = NULL;
-        }
-    }
-
-    void Trash()
-    {
-        data_->Trash(this);
-        data_ = NULL;
-    }
-
-    //.... typical ptr operations ....//
-
-    T * operator->() const
-    {
-        ASSERT(data_);
-        return data_;
-    }
-
-    operator bool()
-    {
-        return data_;
-    }
-
-private:
-
-    Ptr(Data * data) : data_(data) {}
-
-    Data * data_;
-};
-#endif
 
 //................................................................. IOBuffer ...
 
@@ -180,16 +20,28 @@ class IOBuffer
 {
 public:
 
+    struct Dalloc
+    {
+        void operator()(uint8_t * data)
+        {
+            ::free(data);
+        }
+    };
+
     //.... static methods ....//
 
     static IOBuffer Alloc(const size_t size)
     {
-        return IOBuffer((uint8_t *) memalign(512, size), size);
+        void * ptr;
+        int status = posix_memalign(&ptr, 512, size);
+        INVARIANT(status != -1);
+        return IOBuffer(boost::shared_ptr<uint8_t>((uint8_t *) ptr, Dalloc()),
+                        size);
     }
 
     //.... create/destroy ....//
 
-    IOBuffer() : data_(NULL), size_(0), off_(0) {}
+    IOBuffer() : size_(0), off_(0) {}
 
     ~IOBuffer()
     {
@@ -199,31 +51,36 @@ public:
 
     uint8_t * operator->()
     {
-        return data_ + off_;
+        return data_.get() + off_;
     }
 
     operator bool() const
     {
-        return data_;
+        return data_.get();
     }
 
     //.... member fns ....//
 
-    uint8_t * Ptr() { ASSERT(data_); return data_; }
-    size_t Size() const { return size_; }
+    uint8_t * Ptr()
+    {
+        ASSERT(data_.get());
+        return data_.get();
+    }
+
+    size_t Size() const
+    {
+        return size_;
+    }
 
     void Reset()
     {
-        data_ = NULL;
+        data_.reset();
         size_ = off_ = 0;
     }
 
     void Trash()
     {
-        ASSERT(data_);
-        delete[] data_;
-
-        Reset();
+        data_.reset();
     }
 
     IOBuffer Cut(const size_t size)
@@ -239,37 +96,38 @@ public:
     void FillRandom()
     {
         for (uint32_t i = 0; i < size_; ++i) {
-            data_[off_ + i] = rand() % 255;
+            data_.get()[off_ + i] = rand() % 255;
         }
     }
 
     void Fill(const uint8_t ch = 0)
     {
-        memset(data_ + off_, ch, size_);
+        memset(data_.get() + off_, ch, size_);
     }
 
     void Copy(uint8_t * src, const size_t size)
     {
-        memcpy(data_, src, size);
+        memcpy(data_.get(), src, size);
     }
 
     template<class T>
     void Copy(const T & t)
     {
         INVARIANT(sizeof(t) <= size_);
-        memcpy(data_, (uint8_t *) &t, sizeof(T));
+        memcpy(data_.get(), (uint8_t *) &t, sizeof(T));
     }
 
 private:
 
-    IOBuffer(uint8_t * data, const size_t size, const size_t off = 0)
+    IOBuffer(const boost::shared_ptr<uint8_t> & data, const size_t size,
+             const size_t off = 0)
         : data_(data), size_(size), off_(off)
     {
     }
 
     //.... member variables ....//
 
-    uint8_t * data_;
+    boost::shared_ptr<uint8_t> data_;
     size_t size_;
     size_t off_;
 };

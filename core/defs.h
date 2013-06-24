@@ -15,6 +15,11 @@
 #endif
 
 //
+// Computation helpers
+//
+#define ROUNDUP(x,y) ((x / y) + (x % y ? 1 : 0)) * y
+
+//
 // Size notations
 //
 #define KiB(x) (x * 1024)
@@ -22,6 +27,9 @@
 #define GiB(x) (MiB(x) * 1024)
 #define TiB(x) (GiB(x) * 1024)
 
+//
+// Enumerable types T1, T2, ..., Tn
+//
 #define COMMA ,
 #define SEMICOLON ;
 #define OPENBRACKET (

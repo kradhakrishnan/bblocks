@@ -4,8 +4,6 @@
 
 #include "core/defs.h"
 #include "extentfs/extentfs.h"
-#include "extentfs/disklayout.h"
-#include "extentfs/btree.h"
 
 using namespace std;
 using namespace extentfs;
@@ -15,11 +13,17 @@ namespace po = boost::program_options;
 
 static const uint32_t DEFAULT_LAYOUT_VERSION = 0;
 
+// ............................................................ ExtentIndex ....
+
+ExtentIndex::ExtentIndex(ExtentFs & fs)
+    : fs_(fs)
+{
+}
+
 // ............................................................... ExtentFs ....
 
 ExtentFs::ExtentFs(BlockDevice * dev, const size_t pageSize)
-    :
-    log_("/extentFs")
+    : log_("/extentFs")
     , dev_(dev)
     , pageSize_(pageSize)
     , npages_(dev_->GetDeviceSize() / pageSize_)
@@ -108,7 +112,7 @@ ExtentFs::UpdateSuperblock(SuperBlock & sb, const bool cleanShutdown) const
     INVARIANT(sb.pageSize_ == pageSize_);
     INVARIANT(sb.npages_ == npages_);
 
-    sb.sbVersion_ += sb.sbVersion_;
+    sb.sbVersion_++;
     sb.ctime_ = Time::NowInMilliSec();
     sb.mtime_ = Time::NowInMilliSec();
     sb.cleanShutdown_ = cleanShutdown;
@@ -137,7 +141,7 @@ FormatHelper::LayoutSuperblock()
 {
     ASSERT(fs_.lock_.IsOwner());
 
-    fs_.InitSuperblock(fs_.sb_);
+    fs_.InitSuperblock(fs_.sb_, /*clean=*/ true);
 
     //
     // write superblock 0
@@ -160,7 +164,7 @@ FormatHelper::LayoutSuperblock()
     //
     // Write superblock n
     //
-    fs_.UpdateSuperblock(fs_.sb_);
+    fs_.UpdateSuperblock(fs_.sb_, /*clean=*/ true);
 
     buf.Fill(/*ch=*/ 0);
     buf.Copy(fs_.sb_);
@@ -180,3 +184,5 @@ FormatHelper::LayoutSuperblock()
 
     chandler_.Wakeup(1);
 }
+
+

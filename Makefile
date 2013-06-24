@@ -8,6 +8,7 @@ SUBDIR = core/          \
          core/test      \
          core/bmark     \
          extentfs       \
+         extentfs/test  \
 
 -include ${SUBDIR:%=%/Makefile}
 
@@ -164,6 +165,7 @@ build-setup:
 	mkdir -p $(OBJDIR)/core/test
 	mkdir -p $(OBJDIR)/core/bmark
 	mkdir -p $(OBJDIR)/extentfs
+	mkdir -p $(OBJDIR)/extentfs/test
 
 build-doc:
 	rm -f -r ../build/doc

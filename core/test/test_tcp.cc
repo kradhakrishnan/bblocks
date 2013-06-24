@@ -64,7 +64,7 @@ public:
         server_ch_ = ch;
         server_ch_->RegisterHandle(this);
 
-        if (server_ch_->Read(rbuf_, async_fn(&This::ReadDone))) {
+        if (server_ch_->Read(rbuf_, async_fn(this, &This::ReadDone))) {
             VerifyData(rbuf_);
         }
     }
@@ -78,7 +78,7 @@ public:
 
         client_ch_ = ch;
         client_ch_->RegisterHandle(this);
-        client_ch_->SetWriteDoneFn(this, async_fn(&This::WriteDone));
+        client_ch_->SetWriteDoneFn(async_fn(this, &This::WriteDone));
 
         SendData();
     }
@@ -90,7 +90,7 @@ public:
         ASSERT(buf == rbuf_);
 
         VerifyData(rbuf_);
-        while (ch->Read(rbuf_, async_fn(&This::ReadDone))) {
+        while (ch->Read(rbuf_, async_fn(this, &This::ReadDone))) {
             VerifyData(rbuf_);
         }
    }
@@ -185,8 +185,8 @@ private:
 
         int status = client_ch_->EnqueueWrite(wbuf_);
         if ((size_t) status == wbuf_.Size()) {
-            ThreadPool::Schedule(this, &BasicTCPTest::WriteDone,
-                                 client_ch_, status);
+            ThreadPool::Schedule(this, &BasicTCPTest::WriteDone, client_ch_,
+                                 status);
         } else {
             INVARIANT(status == 0);
         }

@@ -25,6 +25,13 @@ struct LogOff
         : wrap_(wrap), off_(off)
     {}
 
+    bool operator<(const LogOff & rhs) const
+    {
+        if (wrap_ < rhs.wrap_) return true;
+        else if (wrap_ == rhs.wrap_) return off_ < rhs.off_;
+        else return false;
+    }
+
     uint32_t wrap_;
     uint64_t off_;
 };

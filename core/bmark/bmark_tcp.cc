@@ -24,8 +24,11 @@ struct ChStats
 
 //...................................................... TCPServerBenchmark ....
 
-/**
- */
+///
+/// @class TCPServerBenchmark
+///
+/// Server implementation of TCP benchmark
+///
 class TCPServerBenchmark : public CompletionHandle
 {
 public:
@@ -63,7 +66,7 @@ public:
         }
 
         ch->RegisterHandle(this);
-        while (ch->Read(buf_, async_fn(&This::ReadDone))) {
+        while (ch->Read(buf_, async_fn(this, &This::ReadDone))) {
             UpdateStats(ch, buf_.Size());
         }
     }
@@ -74,7 +77,7 @@ public:
         ASSERT((size_t) status == buf_.Size());
         UpdateStats(ch, buf_.Size());
 
-        while (ch->Read(buf_, async_fn(&This::ReadDone))) {
+        while (ch->Read(buf_, async_fn(this, &This::ReadDone))) {
             UpdateStats(ch, buf_.Size());
         }
     }
@@ -119,8 +122,11 @@ private:
 
 //...................................................... TCPClientBenchmark ....
 
-/**
- */
+///
+/// @class TCPClientBenchmark
+///
+/// Client implementation of TCP benchmark
+///
 class TCPClientBenchmark : public CompletionHandle
 {
 public:
@@ -134,6 +140,7 @@ public:
         : epoll_("/client"), connector_(&epoll_), addr_(addr)
         , iosize_(iosize), nconn_(nconn), nsec_(nsec)
         , buf_(IOBuffer::Alloc(iosize))
+        , wcqueue_(this, &This::WriteDone)
     {
     }
 
@@ -187,7 +194,7 @@ public:
         }
 
         ch->RegisterHandle(this);
-        ch->SetWriteDoneFn(this, async_fn(&This::WriteDone));
+        ch->SetWriteDoneFn(cqueue_fn(&wcqueue_));
         SendData(ch);
     }
 
@@ -293,6 +300,7 @@ private:
     Timer timer_;
     AtomicCounter nactiveconn_;
     AtomicCounter pendingios_;
+    CQueue2<TCPChannel *, int> wcqueue_;
 };
 
 

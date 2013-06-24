@@ -4,8 +4,6 @@
 
 #include "core/defs.h"
 #include "extentfs/extentfs.h"
-#include "extentfs/disklayout.h"
-#include "extentfs/btree.h"
 
 using namespace std;
 using namespace extentfs;

@@ -25,11 +25,14 @@ class TCPChannel;
 class TCPServer;
 class TCPConnector;
 
-//................................................................. Helpers ....
+//........................................................... SocketOptions ....
 
-/**
- *
- */
+///
+/// @class SocketOptions
+///
+/// Abstraction to manipulate socket options.
+///
+///
 class SocketOptions
 {
 public:
@@ -54,9 +57,14 @@ public:
     }
 };
 
-/**
- *
- */
+// .......................................................... SocketAddress ....
+
+///
+/// @class SocketAddress
+///
+/// Socket address abstraction.
+///
+///
 class SocketAddress
 {
 
@@ -64,6 +72,9 @@ public:
 
     /*.... Static Function ....*/
 
+    ///
+    /// Convert hostname:port to sockaddr_in
+    ///
     static sockaddr_in GetAddr(const std::string & hostname, const short port)
     {
         sockaddr_in addr;
@@ -81,7 +92,6 @@ public:
         ASSERT(result);
         ASSERT(result->ai_addrlen == sizeof(sockaddr_in));
 
-        // sockaddr_in ret = *((sockaddr_in *)result->ai_addr);
         memset(&addr, 0, sizeof(sockaddr_in)); 
         addr.sin_family = AF_INET;
         addr.sin_port = htons(port);
@@ -92,6 +102,9 @@ public:
         return addr;
     }
 
+    ///
+    /// Convert IP:port to sockaddr_in
+    ///
     static sockaddr_in GetAddr(const in_addr_t & addr, const short port)
     {
         sockaddr_in sockaddr;
@@ -103,6 +116,9 @@ public:
         return sockaddr;
     }
 
+    ///
+    /// Convert hostname:port string to sockaddr_in
+    ///
     static sockaddr_in GetAddr(const std::string & saddr)
     {
         std::vector<std::string> tokens;
@@ -116,6 +132,10 @@ public:
         return GetAddr(host, port);
     }
 
+    ///
+    /// Construct a connection (local binding-remote binding) form laddr and
+    /// raddr strings of format host:port
+    ///
     static SocketAddress GetAddr(const std::string & laddr,
                                  const std::string & raddr)
     {
@@ -124,23 +144,24 @@ public:
 
     /*.... ctor/dtor ....*/
 
-    SocketAddress()
-    {
-    }
-
-    SocketAddress(const sockaddr_in & raddr)
+    explicit SocketAddress(const sockaddr_in & raddr)
         : laddr_(GetAddr(INADDR_ANY, /*port=*/ 0)), raddr_(raddr)
     {}
 
-    SocketAddress(const sockaddr_in & laddr, const sockaddr_in & raddr)
+    explicit SocketAddress(const sockaddr_in & laddr, const sockaddr_in & raddr)
         : laddr_(laddr), raddr_(raddr)
     {}
 
     /*.... get/set ....*/
 
-    /*! get local binding socket address */
+    ///
+    /// Get local binding socket address
+    ///
     const sockaddr_in & LocalAddr() const { return laddr_; }
-    /*! get remote socket address */
+
+    ///
+    /// Get remote socket address
+    ///
     const sockaddr_in & RemoteAddr() const { return raddr_; }
 
 private:
@@ -151,9 +172,9 @@ private:
 
 //.............................................................. TCPChannel ....
 
-/**
- *
- */
+///
+/// @class TCPChannel
+///
 class TCPChannel : public AsyncProcessor, public CompletionHandle
 {
 public:
@@ -162,94 +183,101 @@ public:
     friend class TCPServer;
     friend class Epoll;
 
-    //.... callback defintions ....//
+    /*.... Callback defintions ....*/
 
-    typedef void (CHandle::*ReadDoneFn)(TCPChannel *, int, IOBuffer);
-    typedef void (CHandle::*WriteDoneFn)(TCPChannel *, int);
+    typedef CHandler3<TCPChannel *, int, IOBuffer> ReadDoneHandler;
+    typedef CHandler2<TCPChannel *, int> WriteDoneHandler;
     typedef AsyncProcessor::UnregisterDoneFn UnregisterDoneFn;
 
-    //.... statics ....//
+    /* .... Create/Destroy .... */
 
-    static const uint32_t DEFAULT_WRITE_BACKLOG = 1.5 * IOV_MAX; 
+    explicit TCPChannel(const std::string & name, int fd, Epoll & epoll);
+    virtual ~TCPChannel();
 
-    //.... construction/destruction ....//
-
-    TCPChannel(const std::string & name, int fd, Epoll * epoll)
-        : log_(name)
-        , fd_(fd)
-        , epoll_(epoll)
-        , wbuf_(DEFAULT_WRITE_BACKLOG)
-    {
-        ASSERT(fd_ >= 0);
-        ASSERT(epoll_);
-    }
-
-    virtual ~TCPChannel()
-    {
-        INVARIANT(!client_.h_);
-        INVARIANT(!epoll_);
-    }
-
-    //.... CHandle override ....//
+    /* .... CHandle override .... */
 
     void RegisterHandle(CHandle * h);
     __async_operation__ void UnregisterHandle(CHandle * h, UnregisterDoneFn cb);
 
-    //.... async operations ....//
+    /* .... async operations .... */
 
-    /**
-     *
-     */
+    ///
+    ///
+    ///
     __async_operation__ int EnqueueWrite(const IOBuffer & data);
 
-    /*!
-     * \brief Invoke asynchronous read operation
-     *
-     * Will try to read data from the socket. If not readily available it will
-     * return asynchronous call when read otherwise will read and return
-     * immediately.
-     *
-     * \param   data    Data to be written to the socket
-     * \param   fn      Callback when read (if data not readily available)
-     * \return  true if data read is done else false
-     */
-    __async_operation__ bool Read(IOBuffer & data, const ReadDoneFn fn);
+    ///
+    /// Invoke asynchronous read operation
+    ///
+    /// Will try to read data from the socket. If not readily available it will
+    /// return asynchronous call when read otherwise will read and return
+    /// immediately.
+    ///
+    /// @param   data    Data to be written to the socket
+    /// @param   fn      Callback when read (if data not readily available)
+    /// @return  true if data read is done else false
+    ///
+    __async_operation__ bool Read(IOBuffer & data,
+                                  const ReadDoneHandler & chandler);
 
 
-    //.... sync operations ....//
+    /* .... sync operations .... */
 
-    /*! Close the channel communication paths */
+    ///
+    /// Close the channel communication paths
+    ///
     void Close();
 
-    /*! Set callback function for write done */
-    void SetWriteDoneFn(CHandle * h, const WriteDoneFn fn)
+    ///
+    /// Set callback function for write done
+    ///
+    void SetWriteDoneFn(const WriteDoneHandler & chandler)
     {
-        INVARIANT(fn);
-        INVARIANT(h && client_.h_ == h);
-
-        client_.writeDoneFn_ = fn;
+        INVARIANT(client_.h_ == chandler.GetHandle());
+        client_.writeDoneHandler_ = chandler;
     }
 
 private:
 
-    // Represent client and its callbacks
+    /* .... Inaccessible .... */
+
+    TCPChannel();
+
+    /*.... Constants ....*/
+
+    static const uint32_t DEFAULT_WRITE_BACKLOG = 1.5 * IOV_MAX; 
+
+    /* .... Data .... */
+
+    ///
+    /// Represent client and its callbacks
+    ///
     struct Client
     {
-        Client() : h_(NULL), writeDoneFn_(NULL), unregisterDoneFn_(NULL) {}
+        Client() : h_(NULL), unregisterDoneFn_(NULL) {}
+
         Client(CHandle * h)
-            : h_(h), writeDoneFn_(NULL), unregisterDoneFn_(NULL) {}
+            : h_(h)
+            , unregisterDoneFn_(NULL)
+        {}
 
         CHandle * h_;
-        WriteDoneFn writeDoneFn_;
+        WriteDoneHandler writeDoneHandler_;
         UnregisterDoneFn unregisterDoneFn_;
     };
 
-    // represent read operation context
+    ///
+    /// represent read operation context
+    ///
     struct ReadCtx
     {
         ReadCtx() : bytesRead_(0) {}
-        ReadCtx(const IOBuffer & buf, const ReadDoneFn fn)
-            : buf_(buf), bytesRead_(0), fn_(fn) {}
+
+        ReadCtx(const IOBuffer & buf, const ReadDoneHandler & chandler)
+            : buf_(buf)
+            , bytesRead_(0)
+            , chandler_(chandler)
+        {}
 
         void Reset()
         {
@@ -259,31 +287,37 @@ private:
 
         IOBuffer buf_;
         uint32_t bytesRead_;
-        ReadDoneFn fn_;
-
+        ReadDoneHandler chandler_;
     };
 
-    //.... inaccessible ....//
+    /* .... Private member methods .... */
 
-    TCPChannel();
+    ///
+    /// epoll interrupt for socket notification
+    ///
+    __interrupt__ void HandleFdEvent(int fd, uint32_t events);
 
-    //.... private member fns ....//
-
-    // epoll interrupt for socket notification
-    __interrupt__ void HandleFdEvent(Epoll * epoll, int fd, uint32_t events);
-    // Read data from the socket to internal buffer
+    ///
+    /// Read data from the socket to internal buffer
+    ///
     bool ReadDataFromSocket(const bool isasync);
-    // Write data from internal buffer to socket
+
+    ///
+    /// Write data from internal buffer to socket
+    ///
     size_t WriteDataToSocket(const bool isasync);
-    // Notification back from thread pool about drained events
+
+    ///
+    /// Notification back from thread pool about drained events
+    ///
     void BarrierDone(int);
 
-    //.... private member variables ....//
+    /* .... Private member variables .... */
 
     SpinMutex lock_;
     LogPath log_;
     int fd_;
-    Epoll * epoll_;
+    Epoll & epoll_;
     Client client_;
     BoundedQ<IOBuffer> wbuf_;
     ReadCtx rctx_;
@@ -346,7 +380,7 @@ private:
 
     //.... private member fns ....//
 
-    __interrupt__ void HandleFdEvent(Epoll *, int fd, uint32_t events);
+    __interrupt__ void HandleFdEvent(int fd, uint32_t events);
 
     const std::string GetLogPath() const
     { return "tcpserver/" + STR((uint64_t) this); }
@@ -422,7 +456,7 @@ private:
 
     //.... private member fns ....//
 
-    __interrupt__ void HandleFdEvent(Epoll *, int fd, uint32_t events);
+    __interrupt__ void HandleFdEvent(int fd, uint32_t events);
 
     const std::string TCPChannelLogPath(const int fd) const
     { return  log_.GetPath() + "ch/" + STR(fd) + "/"; }

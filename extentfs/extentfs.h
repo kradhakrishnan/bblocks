@@ -3,7 +3,7 @@
 
 #include "core/async.h"
 #include "core/fs/aio-linux.h"
-#include "extentfs/disklayout.h"
+#include "extentfs/extentfs-disklayout.h"
 #include "extentfs/btree.h"
 
 using namespace dh_core;
@@ -62,6 +62,24 @@ private:
     ExtentFs & fs_;
 };
 
+// ............................................................ ExtentIndex ....
+
+class ExtentIndex
+{
+public:
+
+    /* .... Create/destroy .... */
+
+    explicit ExtentIndex(ExtentFs & fs);
+    virtual ~ExtentIndex() {}
+
+private:
+
+    /* .... Member variables .... */
+
+    ExtentFs & fs_;
+};
+
 // ............................................................... ExtentFs ....
 
 /**
@@ -76,6 +94,7 @@ public:
 
     friend class FormatHelper;
     friend class SuperblockHelper;
+    friend class ExtentIndex;
 
     // .... create/destroy .... //
 
@@ -102,10 +121,8 @@ private:
         return pageoff * (pageSize_ / 512);
     }
 
-    void InitSuperblock(SuperBlock & sb,
-                        const bool cleanShutdown = true) const;
-    void UpdateSuperblock(SuperBlock & sb,
-                          const bool cleanShutdown = false) const;
+    void InitSuperblock(SuperBlock & sb, const bool cleanShutdown) const;
+    void UpdateSuperblock(SuperBlock & sb, const bool cleanShutdown) const;
 
     void CreateStore();
     void OpenStore();

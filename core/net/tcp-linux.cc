@@ -6,57 +6,72 @@ using namespace dh_core;
 
 //.............................................................. TCPChannel ....
 
+TCPChannel::TCPChannel(const std::string & name, int fd, Epoll & epoll)
+    : log_(name)
+    , fd_(fd)
+    , epoll_(epoll)
+    , wbuf_(DEFAULT_WRITE_BACKLOG)
+{
+    ASSERT(fd_ >= 0);
+}
+
+TCPChannel::~TCPChannel()
+{
+    INVARIANT(!client_.h_);
+}
+
 int
 TCPChannel::EnqueueWrite(const IOBuffer & data)
 {
-    {
-        AutoLock _(&lock_);
+    Guard _(&lock_);
 
-        if (wbuf_.Size() > DEFAULT_WRITE_BACKLOG) {
-            return -EBUSY;
-        }
-
-        if (wbuf_.IsEmpty()) {
-            wbuf_.Push(data);
-            return WriteDataToSocket(/*isasync=*/ false);
-        }
-
-        wbuf_.Push(data);
-        WriteDataToSocket(/*isasync=*/ true);
+    if (wbuf_.Size() > DEFAULT_WRITE_BACKLOG) {
+        // Reached backlog limits, need to reject the write
+        return -EBUSY;
     }
+
+    if (wbuf_.IsEmpty()) {
+        // No backlog. We should try to process the write synchronously
+        // first
+        wbuf_.Push(data);
+        return WriteDataToSocket(/*isasync=*/ false);
+    }
+
+    DEFENSIVE_CHECK(!wbuf_.IsEmpty() && wbuf_.Size() <= DEFAULT_WRITE_BACKLOG);
+
+    wbuf_.Push(data);
+    WriteDataToSocket(/*isasync=*/ true);
 
     return 0;
 }
 
 bool
-TCPChannel::Read(IOBuffer & data, const ReadDoneFn fn)
+TCPChannel::Read(IOBuffer & data, const ReadDoneHandler & chandler)
 {
-    {
-        AutoLock _(&lock_);
+    Guard _(&lock_);
 
-        // TODO: Add IOBuffer to the return so we know that read client is not
-        // misbehaving
-        ASSERT(!rctx_.buf_ && !rctx_.bytesRead_);
-        ASSERT(data);
-        rctx_ = ReadCtx(data, fn);
+    // TODO: Add IOBuffer to the return so we know that read client is not
+    // misbehaving
+    ASSERT(!rctx_.buf_ && !rctx_.bytesRead_);
+    ASSERT(data);
+    rctx_ = ReadCtx(data, chandler);
 
-        return ReadDataFromSocket(/*isasync=*/ false);
-    }
-
+    return ReadDataFromSocket(/*isasync=*/ false);
 }
 
 void
 TCPChannel::RegisterHandle(CHandle * h)
 {
     {
-        AutoLock _(&lock_);
+        Guard _(&lock_);
 
         INVARIANT(h && !client_.h_);
         client_.h_ = h;
     }
 
-    epoll_->Add(fd_, EPOLLIN|EPOLLOUT|EPOLLET, this,
-                async_fn(&TCPChannel::HandleFdEvent));
+    const bool ok= epoll_.Add(fd_, EPOLLIN | EPOLLOUT | EPOLLET,
+                              intr_fn(this, &TCPChannel::HandleFdEvent));
+    INVARIANT(ok);
 }
 
 void
@@ -66,13 +81,14 @@ TCPChannel::UnregisterHandle(CHandle * h, const UnregisterDoneFn cb)
     ASSERT(cb);
 
     {
-        AutoLock _(&lock_);
+        Guard _(&lock_);
         INVARIANT(client_.h_ == h);
         client_.unregisterDoneFn_ = cb;
     }
 
     // remove fd
-    epoll_->Remove(fd_);
+    const bool status = epoll_.Remove(fd_);
+    INVARIANT(status);
 
     ThreadPool::ScheduleBarrier(make_cb(this, &TCPChannel::BarrierDone));
 }
@@ -83,7 +99,7 @@ TCPChannel::BarrierDone(int)
     Client c = client_;
 
     {
-        AutoLock _(&lock_);
+        Guard _(&lock_);
 
         // at this point we should have no more code in TCPChannel
         // clear all buffer, reset client
@@ -99,18 +115,16 @@ TCPChannel::BarrierDone(int)
 void
 TCPChannel::Close()
 {
-    ASSERT(!client_.h_);
+    INVARIANT(!client_.h_);
 
     DEBUG(log_) << "Closing channel " << fd_;
 
     ::shutdown(fd_, SHUT_RDWR);
     ::close(fd_);
-
-    epoll_ = NULL;
 }
 
 void
-TCPChannel::HandleFdEvent(Epoll *, int fd, uint32_t events)
+TCPChannel::HandleFdEvent(int fd, uint32_t events)
 {
     ASSERT(fd == fd_);
     ASSERT(!(events & ~(EPOLLIN | EPOLLOUT)));
@@ -118,7 +132,7 @@ TCPChannel::HandleFdEvent(Epoll *, int fd, uint32_t events)
     DEBUG(log_) << "Epoll Notification: fd=" << fd_
                 << " events:" << events;
 
-    AutoLock _(&lock_);
+    Guard _(&lock_);
 
     if (events & EPOLLIN) {
         ReadDataFromSocket(/*isasync=*/ true);
@@ -156,8 +170,7 @@ TCPChannel::ReadDataFromSocket(const bool isasync)
             ERROR(log_) << "Error reading from socket.";
 
             // notify error and return
-            ThreadPool::Schedule(client_.h_, rctx_.fn_, this, /*status=*/ -1,
-                                 IOBuffer());
+            rctx_.chandler_.Wakeup(this, /*status=*/ -1, IOBuffer());
             return false;
         }
 
@@ -166,15 +179,17 @@ TCPChannel::ReadDataFromSocket(const bool isasync)
             break;
         }
 
-        ASSERT(status);
-        ASSERT(rctx_.bytesRead_ + status <= rctx_.buf_.Size());
+        DEFENSIVE_CHECK(status);
+        DEFENSIVE_CHECK(rctx_.bytesRead_ + status <= rctx_.buf_.Size());
+
         rctx_.bytesRead_ += status;
 
         if (rctx_.bytesRead_ == rctx_.buf_.Size()) {
             if (isasync) {
-                ThreadPool::Schedule(client_.h_, rctx_.fn_, this,
-                                     (int) rctx_.bytesRead_, rctx_.buf_);
+                // We need to respond since we are called in async context
+                rctx_.chandler_.Wakeup(this, (int) rctx_.bytesRead_, rctx_.buf_);
             }
+
             rctx_.Reset();
             return true;
         }
@@ -227,8 +242,7 @@ TCPChannel::WriteDataToSocket(const bool isasync)
 
             // notify error to client
             if (isasync) {
-                ThreadPool::Schedule(client_.h_, client_.writeDoneFn_,
-                                     this, /*status=*/ -1);
+                client_.writeDoneHandler_.Wakeup(this, /*status=*/ -1);
             }
             return -1;
         }
@@ -250,8 +264,7 @@ TCPChannel::WriteDataToSocket(const bool isasync)
                 bytes -= data.Size();
 
                 if (isasync) {
-                    ThreadPool::Schedule(client_.h_, client_.writeDoneFn_, this,
-                                         bytesWritten);
+                    client_.writeDoneHandler_.Wakeup(this, bytesWritten);
                 }
 
                 if (bytes == 0) {
@@ -301,14 +314,16 @@ TCPServer::Listen(CHandle * h, const sockaddr_in saddr, const ConnDoneFn cb)
     status = listen(sockfd_, MAXBACKLOG);
     INVARIANT(status == 0);
 
-    epoll_->Add(sockfd_, EPOLLIN, this,
-                async_fn(&TCPServer::HandleFdEvent));
+    const bool ok = epoll_->Add(sockfd_, EPOLLIN, intr_fn(this,
+                                                &TCPServer::HandleFdEvent));
+
+    INVARIANT(ok);
 
     INFO(log_) << "TCP Server started. ";
 }
 
 void
-TCPServer::HandleFdEvent(Epoll *, int fd, uint32_t events)
+TCPServer::HandleFdEvent(int fd, uint32_t events)
 {
     AutoLock _(&lock_);
 
@@ -332,7 +347,7 @@ TCPServer::HandleFdEvent(Epoll *, int fd, uint32_t events)
     ASSERT(clientfd != -1);
 
     TCPChannel * ch;
-    ch = new TCPChannel(TCPChannelLogPath(clientfd), clientfd, epoll_);
+    ch = new TCPChannel(TCPChannelLogPath(clientfd), clientfd, *epoll_);
 
     // notify the client
     ThreadPool::Schedule(client_.h_, client_.connDoneFn_, this,
@@ -345,7 +360,8 @@ void
 TCPServer::Shutdown()
 {
     // unregister from epoll so no new connections are delivered
-    epoll_->Remove(sockfd_);
+    const bool ok = epoll_->Remove(sockfd_);
+    INVARIANT(ok);
 
     AutoLock _(&lock_);
 
@@ -390,7 +406,9 @@ TCPConnector::Connect(const SocketAddress addr, CHandle * h, const ConnDoneFn cb
         INVARIANT(clients_.insert(make_pair(fd, Client(h, cb))).second);
     }
 
-    epoll_->Add(fd, EPOLLOUT, this, async_fn(&TCPConnector::HandleFdEvent));
+    const bool ok = epoll_->Add(fd, EPOLLOUT, intr_fn(this,
+                                            &TCPConnector::HandleFdEvent));
+    INVARIANT(ok);
 }
 
 void
@@ -404,7 +422,8 @@ TCPConnector::Shutdown()
         const int & fd = it->first;
         const Client & client =  it->second;
         // remove client from epoll
-        epoll_->Remove(it->first);
+        const bool ok = epoll_->Remove(it->first);
+        INVARIANT(ok);
         // send notification to client
         ThreadPool::Schedule(client.h_, client.connDoneFn_, this, -1,
                              static_cast<TCPChannel *>(NULL));
@@ -419,11 +438,12 @@ TCPConnector::Shutdown()
 }
 
 void
-TCPConnector::HandleFdEvent(Epoll *, int fd, uint32_t events)
+TCPConnector::HandleFdEvent(int fd, uint32_t events)
 {
     INFO(log_) << "connected: events=" << events << " fd=" << fd;
 
-    epoll_->Remove(fd);
+    const bool ok = epoll_->Remove(fd);
+    INVARIANT(ok);
 
     Client client;
 
@@ -438,7 +458,7 @@ TCPConnector::HandleFdEvent(Epoll *, int fd, uint32_t events)
     if (events == EPOLLOUT) {
         DEBUG(log_) << "TCP Client connected. fd=" << fd;
 
-        TCPChannel * ch = new TCPChannel(TCPChannelLogPath(fd), fd, epoll_);
+        TCPChannel * ch = new TCPChannel(TCPChannelLogPath(fd), fd, *epoll_);
         // callback and drop from tracking list
         ThreadPool::Schedule(client.h_, client.connDoneFn_, this, /*status=*/ 0,
                              ch); 
