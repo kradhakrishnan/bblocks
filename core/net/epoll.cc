@@ -1,15 +1,10 @@
+#include <list>
+
 #include "core/net/epoll.h"
 #include "core/thread-pool.h"
 
 using namespace std;
 using namespace dh_core;
-
-static void init_ee(epoll_event & ee, const int fd, const uint32_t events)
-{
-    memset(&ee, /*ch=*/ 0, sizeof(ee));
-    ee.data.fd = fd;
-    ee.events = events;
-}
 
 //................................................................ Epoll ....
 
@@ -59,31 +54,38 @@ Epoll::Add(const fd_t fd, const uint32_t events, const chandler_t & chandler)
 
     DEBUG(log_) << "Add. fd:" << fd << ", events:" << events;
 
+    FDRecord * fdrec = new FDRecord(fd, events, chandler);
+    INVARIANT(fdrec);
+
     //
     // Insert to fdmap
     //
     {
         Guard _(&lock_);
-
         INVARIANT(fdmap_.find(fd) == fdmap_.end());
-        fdmap_.insert(make_pair(fd, FDRecord(events, chandler)));
+        fdmap_.insert(make_pair(fd, fdrec));
     }
 
     //
     // Notify the kernel
     //
-    epoll_event ee;
-    init_ee(ee, fd, events);
+    epoll_event ee = fdrec->GetEpollEvent();
 
-    int status = epoll_ctl(fd_, EPOLL_CTL_ADD, ee.data.fd, &ee);
+    int status = epoll_ctl(fd_, EPOLL_CTL_ADD, fd, &ee);
 
     if (status == -1) {
         ERROR(log_) << "Error adding to epoll."
                     << " fd=" << fd << " events=" << events
                     << " errno: " << errno;
+
+        //
+        // It is safe to trash fdrec since the epoll add failed
+        //
+        delete fdrec;
+        return false;
     }
 
-    return (status != -1);
+    return true;
 }
 
 bool
@@ -93,6 +95,8 @@ Epoll::Remove(const fd_t fd)
 
     DEBUG(log_) << "Remove. fd:" << fd;
 
+    FDRecord * fdrec = NULL;
+
     //
     // Remove from fdmap
     //
@@ -100,24 +104,35 @@ Epoll::Remove(const fd_t fd)
         Guard _(&lock_);
 
         auto it = fdmap_.find(fd);
-        INVARIANT(it != fdmap_.end());
+        INVARIANT(it != fdmap_.end() && it->second);
+        fdrec = it->second;
         fdmap_.erase(it);
+
+        // mute callbacks
+        INVARIANT(!fdrec->mute_);
+        fdrec->mute_ = true;
     }
 
     //
     // Notify the kernel
     //
-    epoll_event ee;
-    init_ee(ee, fd, /*events=*/ 0);
-
-    int status = epoll_ctl(fd_, EPOLL_CTL_DEL, ee.data.fd, &ee);
+    int status = epoll_ctl(fd_, EPOLL_CTL_DEL, fd, /*ee=*/ NULL);
 
     if (status == -1) {
         ERROR(log_) << "Error removing." << " fd: " << fd
                     << " errno: " << errno;
+        return false;
     }
 
-    return (status != -1);
+    //
+    // Push into trash can
+    //
+    {
+        Guard _(&lock_);
+        trashcan_.push_back(fdrec);
+    }
+
+    return true;
 }
 
 bool
@@ -128,23 +143,23 @@ Epoll::AddEvent(const fd_t fd, const uint32_t events)
 
     DEBUG(log_) << "AddEvent. fd:" << fd << " events:" << events;
 
+    FDRecord * fdrec = NULL;
+
     //
     // Update fdmap
     //
     {
         Guard _(&lock_);
-
         auto it = fdmap_.find(fd);
-        INVARIANT(it != fdmap_.end());
-        FDRecord & fdrec = it->second;
-        fdrec.events_ |= events;
+        INVARIANT(it != fdmap_.end() && it->second);
+        fdrec = it->second;
+        fdrec->events_ |= events;
     }
 
     //
     // Notify the kernel
     //
-    epoll_event ee;
-    init_ee(ee, fd, events);
+    epoll_event ee = fdrec->GetEpollEvent();
 
     int status = epoll_ctl(fd_, EPOLL_CTL_MOD, fd, &ee);
 
@@ -165,23 +180,23 @@ Epoll::RemoveEvent(const fd_t fd, const uint32_t events)
 
     DEBUG(log_) << "RemoveEvent. fd=" << fd << " events=" << events;
 
+    FDRecord * fdrec = NULL;
+
     //
     // Update fdmap
     //
     {
         AutoLock _(&lock_);
-
         auto it = fdmap_.find(fd);
-        INVARIANT(it != fdmap_.end());
-        FDRecord & fdrec = it->second;
-        fdrec.events_ &= ~events;
+        INVARIANT(it != fdmap_.end() && it->second);
+        fdrec = it->second;
+        fdrec->events_ &= ~events;
     }
 
     //
     // Notify the kernel
     //
-    epoll_event ee;
-    init_ee(ee, fd, events);
+    epoll_event ee = fdrec->GetEpollEvent();
 
     int status = epoll_ctl(fd_, EPOLL_CTL_MOD, fd, &ee);
 
@@ -221,38 +236,45 @@ Epoll::ThreadMain()
             }
 
             // TODO: Handle more common error codes
+            // We assume this is fatal
+            DEADEND
         }
 
         DEFENSIVE_CHECK(nfds > 0);
 
+        //
+        // Wakeup completion handlers
+        //
         for (int i = 0; i < nfds; ++i) {
             uint32_t events_mask = events[i].events;
-            int fd = events[i].data.fd;
+            FDRecord * fdrec = (FDRecord *) events[i].data.ptr;
+            INVARIANT(fdrec);
 
-            DEBUG(log_) << "Active fd. fd=" << fd
-                        << " events=" << events_mask; 
-
-            chandler_t chandler;
-
+            //
+            // Ignore callback if muted
+            //
             {
                 Guard _(&lock_);
-
-                auto it = fdmap_.find(fd);
-                if (it == fdmap_.end()) {
-                    // This can happen because we first update the fd map and
-                    // then notify the kernel
-                    DEBUG(log_) << "Fd not found. fd=" << fd;
-                    continue;
-                }
-
-                FDRecord & fdrecord = it->second;
-                ASSERT(fdrecord.events_ && events_mask);
-
-                chandler = fdrecord.chandler_;
+                if (fdrec->mute_) continue;
             }
 
-            chandler.Wakeup(fd, events_mask);
+            DEBUG(log_) << "Active fd. fd=" << fdrec->fd_
+                        << " events=" << fdrec->events_; 
+
+            fdrec->chandler_.Wakeup(fdrec->fd_, events_mask);
         }
+
+        //
+        // Take out the trash
+        //
+        Guard _(&lock_);
+        for (auto fdrec : trashcan_)
+        {
+            INVARIANT(fdrec->mute_);
+            delete fdrec;
+        }
+
+        trashcan_.clear();
     } // while (true) {
 
     return NULL;

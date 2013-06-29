@@ -16,8 +16,8 @@
 #include "core/callback.hpp"
 #include "core/buffer.h"
 #include "core/async.h"
-
 #include "core/net/epoll.h"
+#include "core/perf-counter.h"
 
 namespace dh_core {
 
@@ -39,7 +39,7 @@ public:
 
     static bool SetTcpNoDelay(const int fd, const bool enable)
     {
-        int flag = enable;
+        const int flag = enable;
         int status = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag,
                                 sizeof(int));
         return status != -1;
@@ -47,11 +47,11 @@ public:
 
     static bool SetTcpWindow(const int fd, const int size)
     {
-        int status;
-
-        status = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
+        // Set out buffer size
+        int status = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
         if (status == -1) return false;
 
+        // Set in buffer size
         status = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
         return status != -1;
     }
@@ -202,9 +202,13 @@ public:
     /* .... async operations .... */
 
     ///
+    /// Enqueue buffer for writing
     ///
+    /// @param  data    input buffer
+    /// @return -EBUSY  if buffer cannot be queued
+    ///         0       on success
     ///
-    __async_operation__ int EnqueueWrite(const IOBuffer & data);
+    int EnqueueWrite(const IOBuffer & data);
 
     ///
     /// Invoke asynchronous read operation
@@ -217,9 +221,7 @@ public:
     /// @param   fn      Callback when read (if data not readily available)
     /// @return  true if data read is done else false
     ///
-    __async_operation__ bool Read(IOBuffer & data,
-                                  const ReadDoneHandler & chandler);
-
+    bool Read(IOBuffer & data, const ReadDoneHandler & chandler);
 
     /* .... sync operations .... */
 
@@ -245,7 +247,7 @@ private:
 
     /*.... Constants ....*/
 
-    static const uint32_t DEFAULT_WRITE_BACKLOG = 1.5 * IOV_MAX; 
+    static const uint32_t DEFAULT_WRITE_BACKLOG = 2 * IOV_MAX; 
 
     /* .... Data .... */
 
@@ -321,65 +323,69 @@ private:
     Client client_;
     BoundedQ<IOBuffer> wbuf_;
     ReadCtx rctx_;
+
+    PerfCounter statReadSize_;
+    PerfCounter statWriteSize_;
 };
 
 //............................................................... TCPServer ....
 
-/*!
- * \class TCPServer
- * \brief Asynchronous TCP server implementation
- *
- * Provides a TCP listener implementation. Helps accept connections
- * from clients asynchronously. Designed on the acceptor design pattern.
- */
+///
+/// @class TCPServer
+///
+/// Asynchronous TCP server implementation
+///
+/// Provides a TCP listener implementation. Helps accept connections
+/// from clients asynchronously. Designed on the acceptor design pattern.
+///
 class TCPServer : public CompletionHandle
 {
 public:
 
-    //.... callback definitions ....//
+    /* .... Callback definitions .... */
 
-    typedef void (CHandle::*ConnDoneFn)(TCPServer *, int, TCPChannel *);
+    typedef CHandler3<TCPServer *, int, TCPChannel *> ConnectHandler;
 
-    //.... create/destroy ....//
+    /* .... create/destroy .... */
 
-    TCPServer(Epoll * epoll)
-        : log_(GetLogPath())
-        , epoll_(epoll)
-    {
-        ASSERT(epoll_);
-        ASSERT(!client_.h_);
-    }
+    TCPServer(Epoll & epoll) : log_(GetLogPath()), epoll_(epoll)
+    {}
 
     virtual ~TCPServer()
-    {
-        INVARIANT(!client_.h_);
-        INVARIANT(!epoll_);
-    }
+    {}
 
-    //.... member fns ....//
+    /* .... member fns .... */
 
-    void Listen(CHandle * h, sockaddr_in saddr, const ConnDoneFn cb);
+    ///
+    /// Start listening on the specified address and callback on the specified
+    /// callback.
+    ///
+    /// @param  h           CompletionHandler to call on
+    /// @param  saddr       Socket address to listen at
+    /// @param  cb          Callback function
+    ///
+    bool Listen(sockaddr_in saddr, const ConnectHandler & chandler);
 
+    ///
+    /// Shutdown the server
+    ///
     void Shutdown();
 
 private:
 
-    static const size_t MAXBACKLOG = 100;
+    /* .... Constants .... */
 
-    struct Client
-    {
-        Client(CHandle * h = NULL, const ConnDoneFn connDoneFn = NULL)
-            : h_(h), connDoneFn_(connDoneFn)
-        {}
+    static const size_t MAXBACKLOG = 1024;
 
-        CHandle * h_;
-        ConnDoneFn connDoneFn_;
-    };
+    /* .... Data .... */
 
     typedef int socket_t;
 
-    //.... private member fns ....//
+    /* .... Private member fns .... */
 
+    ///
+    /// Epoll event handler
+    ///
     __interrupt__ void HandleFdEvent(int fd, uint32_t events);
 
     const std::string GetLogPath() const
@@ -388,85 +394,80 @@ private:
     const std::string TCPChannelLogPath(int fd)
     { return "tcpserver/" + STR(sockfd_) + "/ch/" + STR(fd) + "/"; }
 
-    //.... private member variables ....//
+    /* .... Private member variables .... */
 
     SpinMutex lock_;
     LogPath log_;
-    Epoll * epoll_;
+    Epoll & epoll_;
     socket_t sockfd_;
-    Client client_;
+    ConnectHandler client_;
 };
 
 //............................................................ TCPConnector ....
 
-/*!
- * \class TCPConnector
- * \brief Asynchronous TCP connection provider
- *
- * Helps establish TCP connections asynchronously. This follows the connector
- * design pattern.
- *
- */
+///
+/// @class TCPConnector
+///
+/// Asynchronous TCP connection provider
+///
+/// Helps establish TCP connections asynchronously. This follows the connector
+/// design pattern.
+///
 class TCPConnector : public CompletionHandle
 {
 public:
 
-    //.... callback definition ....//
+    /* .... Callback definition .... */
 
     typedef AsyncProcessor::UnregisterDoneFn UnregisterDoneFn;
-    typedef void (CHandle::*ConnDoneFn)(TCPConnector *, int, TCPChannel *);
+    typedef CHandler3<TCPConnector *, int, TCPChannel *> ConnectHandler;
 
-    //.... create/destroy ....//
+    /* .... create/destroy .... */
 
-    TCPConnector(Epoll * epoll, const std::string & name = "tcpclient/")
-        : log_(name)
-        , epoll_(epoll)
-    {
-        ASSERT(epoll_);
-    }
+    TCPConnector(Epoll & epoll) : log_("/connector"), epoll_(epoll)
+    {}
 
     virtual ~TCPConnector()
     {
-        ASSERT(clients_.empty());
-        epoll_ = NULL;
+        INVARIANT(clients_.empty());
     }
 
-    //.... async operations ....//
+    /* .... Async operations .... */
 
-    __async_operation__ void Connect(const SocketAddress addr,
-                                     CHandle * h, const ConnDoneFn cb);
-
+    ///
+    /// Connect to a given address
+    ///
+    void Connect(const SocketAddress addr, const ConnectHandler & chandler);
 
     //.... sync functions ....//
 
+    ///
+    /// Shutdown client
+    ///
     void Shutdown();
 
 private:
 
-    struct Client
-    {
-        Client(CHandle * h = NULL, const ConnDoneFn connDoneFn = NULL)
-            : h_(h), connDoneFn_(connDoneFn) {}
+    /* .... Data .... */
 
-        CHandle * h_;
-        ConnDoneFn connDoneFn_;
-    };
+    typedef std::map<fd_t, ConnectHandler> clients_map_t;
 
-    typedef std::map<fd_t, Client> clients_map_t;
+    /* .... Private member fns .... */
 
-    //.... private member fns ....//
-
+    ///
+    /// Epoll handler
+    ///
     __interrupt__ void HandleFdEvent(int fd, uint32_t events);
 
     const std::string TCPChannelLogPath(const int fd) const
     { return  log_.GetPath() + "ch/" + STR(fd) + "/"; }
 
-    //.... private member variables ....//
+    /* .... Private member variables .... */
 
-    SpinMutex lock_;
-    LogPath log_;
-    Epoll * epoll_;
-    clients_map_t clients_;
+    SpinMutex lock_;        // Default lock
+    LogPath log_;           // Log path
+    Epoll & epoll_;         // Socket poll helper
+    clients_map_t clients_; // Clients connecting
 };
 
 } // namespace kware {

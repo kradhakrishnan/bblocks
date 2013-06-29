@@ -11,6 +11,9 @@ TCPChannel::TCPChannel(const std::string & name, int fd, Epoll & epoll)
     , fd_(fd)
     , epoll_(epoll)
     , wbuf_(DEFAULT_WRITE_BACKLOG)
+    /* Perf Counters */
+    , statReadSize_("stat/read-io", "bytes")
+    , statWriteSize_("stat/write-io", "bytes")
 {
     ASSERT(fd_ >= 0);
 }
@@ -18,6 +21,9 @@ TCPChannel::TCPChannel(const std::string & name, int fd, Epoll & epoll)
 TCPChannel::~TCPChannel()
 {
     INVARIANT(!client_.h_);
+
+    INFO(log_) << statReadSize_;
+    INFO(log_) << statWriteSize_;
 }
 
 int
@@ -174,6 +180,10 @@ TCPChannel::ReadDataFromSocket(const bool isasync)
             return false;
         }
 
+        DEFENSIVE_CHECK(lock_.IsOwner());
+
+        statReadSize_.Update(status);
+
         if (status == 0) {
             // no bytes were read
             break;
@@ -185,12 +195,16 @@ TCPChannel::ReadDataFromSocket(const bool isasync)
         rctx_.bytesRead_ += status;
 
         if (rctx_.bytesRead_ == rctx_.buf_.Size()) {
+            auto rctx = rctx_;
+            rctx_.Reset();
             if (isasync) {
                 // We need to respond since we are called in async context
-                rctx_.chandler_.Wakeup(this, (int) rctx_.bytesRead_, rctx_.buf_);
+                rctx.chandler_.Wakeup(this, (int) rctx.bytesRead_, rctx.buf_);
             }
 
-            rctx_.Reset();
+            //
+            // Watch out, we don't own the lock here
+            //
             return true;
         }
     }
@@ -234,8 +248,8 @@ TCPChannel::WriteDataToSocket(const bool isasync)
 
         if (status == -1) {
             if (errno == EAGAIN) {
-                // transient failure
-                break;
+                // transient failure, try again
+                continue;
             }
 
             ERROR(log_) << "Error writing. " << strerror(errno);
@@ -246,6 +260,10 @@ TCPChannel::WriteDataToSocket(const bool isasync)
             }
             return -1;
         }
+
+        DEFENSIVE_CHECK(lock_.IsOwner());
+
+        statWriteSize_.Update(status);
 
         if (status == 0) {
             // no bytes written
@@ -263,10 +281,6 @@ TCPChannel::WriteDataToSocket(const bool isasync)
                 IOBuffer data = wbuf_.Pop();
                 bytes -= data.Size();
 
-                if (isasync) {
-                    client_.writeDoneHandler_.Wakeup(this, bytesWritten);
-                }
-
                 if (bytes == 0) {
                     break;
                 }
@@ -278,33 +292,43 @@ TCPChannel::WriteDataToSocket(const bool isasync)
         }
     }
 
+    if (isasync && bytesWritten) {
+        client_.writeDoneHandler_.Wakeup(this, bytesWritten);
+    }
+
     return bytesWritten;
 }
 
 
 //............................................................... TCPServer ....
 
-void
-TCPServer::Listen(CHandle * h, const sockaddr_in saddr, const ConnDoneFn cb)
+bool
+TCPServer::Listen(const sockaddr_in saddr, const ConnectHandler & chandler)
 {
-    ASSERT(h);
-    ASSERT(cb);
+    Guard _(&lock_);
 
-    AutoLock _(&lock_);
-
-    INVARIANT(!client_.h_);
-
-    client_.h_ = h;
-    client_.connDoneFn_ = cb;
+    client_ = chandler;
 
     sockfd_ = socket(AF_INET, SOCK_STREAM, 0);
-    ASSERT(sockfd_ >= 0);
+
+    if (sockfd_ < 0) {
+        ERROR(log_) << "Socket error." << strerror(errno);
+        return false;
+    }
 
     int status = fcntl(sockfd_, F_SETFL, O_NONBLOCK);
-    INVARIANT(status == 0);
+
+    if (status != 0) {
+        ERROR(log_) << "Socket error." << strerror(errno);
+        return false;
+    }
 
     status = ::bind(sockfd_, (struct sockaddr *) &saddr, sizeof(sockaddr_in));
-    ASSERT(status == 0);
+
+    if (status != 0) {
+        ERROR(log_) << "Error binding socket. " << strerror(errno);
+        return false;
+    }
 
 #if 0
     SocketOptions::SetTcpNoDelay(sockfd_, /*enable=*/ true);
@@ -312,46 +336,57 @@ TCPServer::Listen(CHandle * h, const sockaddr_in saddr, const ConnDoneFn cb)
 #endif
 
     status = listen(sockfd_, MAXBACKLOG);
-    INVARIANT(status == 0);
 
-    const bool ok = epoll_->Add(sockfd_, EPOLLIN, intr_fn(this,
-                                                &TCPServer::HandleFdEvent));
+    if (status != 0) {
+        ERROR(log_) << "Error listening. " << strerror(errno);
+        return false;
+    }
 
-    INVARIANT(ok);
+    const bool ok = epoll_.Add(sockfd_, EPOLLIN,
+                               intr_fn(this, &TCPServer::HandleFdEvent));
+
+    if (!ok) {
+        ERROR(log_) << "Error registering socket with epoll.";
+        return false;
+    }
 
     INFO(log_) << "TCP Server started. ";
+
+    return true;
 }
 
 void
 TCPServer::HandleFdEvent(int fd, uint32_t events)
 {
-    AutoLock _(&lock_);
+    Guard _(&lock_);
 
-    ASSERT(events == EPOLLIN);
-    ASSERT(fd == sockfd_);
+    INVARIANT(events == EPOLLIN);
+    INVARIANT(fd == sockfd_);
 
     sockaddr_in addr;
     socklen_t len = sizeof(sockaddr_in);
     memset(&addr, 0, len);
-    int clientfd = accept4(sockfd_, (sockaddr *) &addr, &len, SOCK_NONBLOCK);
 
+    int clientfd = accept4(sockfd_, (sockaddr *) &addr, &len, SOCK_NONBLOCK);
     if (clientfd == -1) {
-        // error accepting connection
+        //
+        // error accepting connection, return error to client
+        //
         ERROR(log_) << "Error accepting client connection. " << strerror(errno);
-        // notify the client of the failure
-        ThreadPool::Schedule(client_.h_, client_.connDoneFn_, this,
-                             /*status=*/ -1, static_cast<TCPChannel *>(NULL));
+        client_.Wakeup(this, /*status=*/ -1, static_cast<TCPChannel *>(NULL));
         return;
     }
 
-    ASSERT(clientfd != -1);
+    DEFENSIVE_CHECK(clientfd != -1);
 
-    TCPChannel * ch;
-    ch = new TCPChannel(TCPChannelLogPath(clientfd), clientfd, *epoll_);
+    //
+    // Accepted. Create a channel object and return to client
+    //
+    TCPChannel * ch = new TCPChannel(TCPChannelLogPath(clientfd),
+                                     clientfd, epoll_);
+    INVARIANT(ch);
 
-    // notify the client
-    ThreadPool::Schedule(client_.h_, client_.connDoneFn_, this,
-                         /*status=*/ 0, ch);
+    client_.Wakeup(this, /*status=*/ 0, ch);
 
     DEBUG(log_) << "Accepted. clientfd=" << clientfd;
 }
@@ -359,28 +394,28 @@ TCPServer::HandleFdEvent(int fd, uint32_t events)
 void
 TCPServer::Shutdown()
 {
+    //
     // unregister from epoll so no new connections are delivered
-    const bool ok = epoll_->Remove(sockfd_);
+    //
+    const bool ok = epoll_.Remove(sockfd_);
     INVARIANT(ok);
 
-    AutoLock _(&lock_);
-
-    // reset the client
-    client_ = Client();
+    //
+    // Tear down the socket safely
+    //
+    Guard _(&lock_);
 
     ::shutdown(sockfd_, SHUT_RDWR);
     ::close(sockfd_);
-
-    epoll_ = NULL;
 }
 
 //............................................................ TCPConnector ....
 
-__async_operation__ void
-TCPConnector::Connect(const SocketAddress addr, CHandle * h, const ConnDoneFn cb)
+void
+TCPConnector::Connect(const SocketAddress addr, const ConnectHandler & chandler)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
-    assert(fd >= 0);
+    INVARIANT(fd >= 0);
 
     const int enable = 1;
     int status = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enable,
@@ -388,53 +423,59 @@ TCPConnector::Connect(const SocketAddress addr, CHandle * h, const ConnDoneFn cb
     INVARIANT(status == 0);
 
     status = fcntl(fd, F_SETFL, O_NONBLOCK);
-    ASSERT(status == 0);
+    INVARIANT(status == 0);
 
     status = SocketOptions::SetTcpNoDelay(fd, /*enable=*/ false);
-    ASSERT(status);
+    INVARIANT(status);
+
     status = SocketOptions::SetTcpWindow(fd, /*size=*/ 640 * 1024);
-    ASSERT(status);
+    INVARIANT(status);
 
     status = ::bind(fd, (sockaddr *) &addr.LocalAddr(), sizeof(sockaddr_in));
-    ASSERT(status == 0);
+    INVARIANT(status == 0);
 
     status = connect(fd, (sockaddr *) &addr.RemoteAddr(), sizeof(sockaddr_in));
-    ASSERT(status == -1 && errno == EINPROGRESS);
+    INVARIANT(status == -1 && errno == EINPROGRESS);
 
     {
-        AutoLock _(&lock_);
-        INVARIANT(clients_.insert(make_pair(fd, Client(h, cb))).second);
+        Guard _(&lock_);
+        INVARIANT(clients_.insert(make_pair(fd, chandler)).second);
     }
 
-    const bool ok = epoll_->Add(fd, EPOLLOUT, intr_fn(this,
-                                            &TCPConnector::HandleFdEvent));
+    const bool ok = epoll_.Add(fd, EPOLLOUT,
+                               intr_fn(this, &TCPConnector::HandleFdEvent));
     INVARIANT(ok);
 }
 
 void
 TCPConnector::Shutdown()
 {
-    AutoLock _(&lock_);
+    Guard _(&lock_);
 
     INFO(log_) << "Closing TCP client. ";
 
-    for (auto it = clients_.begin(); it != clients_.end(); ++it) {
-        const int & fd = it->first;
-        const Client & client =  it->second;
+    for (auto client : clients_) {
+        const int & fd = client.first;
+        ConnectHandler & chandler =  client.second;
+        //
         // remove client from epoll
-        const bool ok = epoll_->Remove(it->first);
+        //
+        const bool ok = epoll_.Remove(fd);
         INVARIANT(ok);
-        // send notification to client
-        ThreadPool::Schedule(client.h_, client.connDoneFn_, this, -1,
-                             static_cast<TCPChannel *>(NULL));
 
+        //
+        // Close client socket
+        //
         ::close(fd);
         ::shutdown(fd, SHUT_RDWR);
+
+        //
+        // Notify error to client
+        //
+        chandler.Wakeup(this, /*status=*/ -1, static_cast<TCPChannel *>(NULL));
     }
 
     clients_.clear();
-
-    epoll_ = NULL;
 }
 
 void
@@ -442,34 +483,46 @@ TCPConnector::HandleFdEvent(int fd, uint32_t events)
 {
     INFO(log_) << "connected: events=" << events << " fd=" << fd;
 
-    const bool ok = epoll_->Remove(fd);
+    //
+    // Remove the connector from polling list
+    //
+    const bool ok = epoll_.Remove(fd);
     INVARIANT(ok);
 
-    Client client;
+    //
+    // Drop client from the clients list
+    //
+    ConnectHandler client;
 
     {
-        AutoLock _(&lock_);
+        Guard _(&lock_);
+
         auto it = clients_.find(fd);
         INVARIANT(it != clients_.end());
         client = it->second;
         clients_.erase(it);
     }
 
+    //
+    // Notify client
+    // 
     if (events == EPOLLOUT) {
+        //
+        // Channel was established
+        //
         DEBUG(log_) << "TCP Client connected. fd=" << fd;
 
-        TCPChannel * ch = new TCPChannel(TCPChannelLogPath(fd), fd, *epoll_);
-        // callback and drop from tracking list
-        ThreadPool::Schedule(client.h_, client.connDoneFn_, this, /*status=*/ 0,
-                             ch); 
+        TCPChannel * ch = new TCPChannel(TCPChannelLogPath(fd), fd, epoll_);
+        client.Wakeup(this, /*status=*/ 0, ch); 
         return;
     }
 
+    //
     // failed to connect to the specified server
-    ASSERT(events & EPOLLERR);
+    //
+    INVARIANT(events & EPOLLERR);
 
     ERROR(log_) << "Failed to connect. fd=" << fd << " errno=" << errno;
 
-    ThreadPool::Schedule(client.h_, client.connDoneFn_, this, /*status=*/ -1,
-                         static_cast<TCPChannel *>(NULL));
+    client.Wakeup(this, /*status=*/ -1, static_cast<TCPChannel *>(NULL));
 }

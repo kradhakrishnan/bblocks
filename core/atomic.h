@@ -28,12 +28,17 @@ class AtomicCounter
 
     const uint64_t Count() const
     {
-        return __exchange_and_add(&count_, 0);
+        return __exchange_and_add(&count_, /*val=*/ 0);
     }
 
-    void Set(const int val)
+    void Set(const uint64_t val)
     {
         while (!__sync_bool_compare_and_swap(&count_, Count(), val));
+    }
+
+    bool CompareAndSwap(const uint64_t val, const uint64_t prevVal)
+    {
+        return __sync_bool_compare_and_swap(&count_, prevVal, val);
     }
 
     private:

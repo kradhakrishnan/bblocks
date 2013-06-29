@@ -10,6 +10,9 @@ using namespace dh_core;
 
 namespace po = boost::program_options;
 
+// log path
+static LogPath _log("/bmark_tcp");
+
 struct ChStats
 {
     ChStats()
@@ -37,55 +40,76 @@ public:
 
     static const uint32_t RBUFFERSIZE = 4 * 1024; // 1MB
 
-    //.... create/destroy ....//
+    /* .... create/destroy .... */
 
     TCPServerBenchmark(const size_t iosize)
         : epoll_("/server")
-        , server_(&epoll_)
+        , server_(epoll_)
         , buf_(IOBuffer::Alloc(iosize))
-    {}
-
-    virtual ~TCPServerBenchmark() {}
-
-    void Start(sockaddr_in addr)
+        , rcqueue_(this, &This::ReadDone)
     {
-        // Start listening
-        server_.Listen(this, addr, async_fn(&This::HandleServerConn));
     }
 
-    //.... handlers ....//
+    virtual ~TCPServerBenchmark() {
+    }
 
+    //
+    // Start listening
+    //
+    void Start(sockaddr_in addr)
+    {
+        INFO(_log) << "Starting to listen";
+        const bool ok = server_.Listen(addr, async_fn(this,
+                                                &This::HandleServerConn));
+        INVARIANT(ok);
+    }
+
+    /* .... Completion handlers .... */
+
+    //
+    // Connection established callback
+    //
     __completion_handler__
     virtual void HandleServerConn(TCPServer *, int status, TCPChannel * ch)
     {
-        cout << "Got ch " << ch << endl;
+        INFO(_log) << "Got ch " << ch;
 
+        //
+        // Create channel stat node
+        //
         {
             AutoLock _(&lock_);
             chstats_.insert(make_pair(ch, ChStats()));
         }
 
         ch->RegisterHandle(this);
-        while (ch->Read(buf_, async_fn(this, &This::ReadDone))) {
+        ThreadPool::Schedule(this, &This::ReadUntilBlocked, ch);
+    }
+
+    //
+    // Read data until blocked
+    //
+    void
+    ReadUntilBlocked(TCPChannel * ch)
+    {
+        while (ch->Read(buf_, cqueue_fn(&rcqueue_))) {
             UpdateStats(ch, buf_.Size());
         }
     }
 
+    //
+    // Read completion callback
+    //
     __completion_handler__
     virtual void ReadDone(TCPChannel * ch, int status, IOBuffer)
     {
+        //
+        // Update stats
+        //
         ASSERT((size_t) status == buf_.Size());
         UpdateStats(ch, buf_.Size());
 
-        while (ch->Read(buf_, async_fn(this, &This::ReadDone))) {
-            UpdateStats(ch, buf_.Size());
-        }
-    }
-
-    __interrupt__
-    virtual void HandleUnregistered(TCPChannel *)
-    {
-        DEADEND
+        ReadUntilBlocked(ch);
     }
 
 private:
@@ -99,12 +123,12 @@ private:
         it->second.bytes_read_ += size;
 
         uint64_t elapsed_s = MS2SEC(Timer::Elapsed(it->second.start_ms_));
+        double MBps = ((it->second.bytes_read_ / (1024 * 1024)) 
+                                                  / (double) elapsed_s);
         if (elapsed_s >= 5) {
-            cout << "ch " << it->first << endl
-                 << " bytes " << it->second.bytes_read_ << endl
-                 << " MBps "
-                 << ((it->second.bytes_read_ / (1024 * 1024)) 
-                                                / (double) elapsed_s) << endl;
+            INFO(_log) << "ch " << (uint64_t) it->first
+                       << " bytes " << it->second.bytes_read_
+                       << " MBps " << MBps;
 
             it->second.bytes_read_ = 0;
             it->second.start_ms_ = NowInMilliSec();
@@ -118,6 +142,7 @@ private:
     TCPServer server_;
     chstats_map_t chstats_;
     IOBuffer buf_;
+    CQueue3<TCPChannel *, int, IOBuffer> rcqueue_;
 };
 
 //...................................................... TCPClientBenchmark ....
@@ -137,8 +162,12 @@ public:
 
     TCPClientBenchmark(const SocketAddress & addr, const size_t iosize,
                        const size_t nconn, const size_t nsec)
-        : epoll_("/client"), connector_(&epoll_), addr_(addr)
-        , iosize_(iosize), nconn_(nconn), nsec_(nsec)
+        : epoll_("/client")
+        , connector_(epoll_)
+        , addr_(addr)
+        , iosize_(iosize)
+        , nconn_(nconn)
+        , nsec_(nsec)
         , buf_(IOBuffer::Alloc(iosize))
         , wcqueue_(this, &This::WriteDone)
     {
@@ -161,13 +190,15 @@ public:
 
     void Start(int)
     {
+        Guard _(&lock_);
+
         for (size_t i = 0; i < nconn_; ++i) {
-            nactiveconn_.Add(/*count=*/ 1);
-            connector_.Connect(addr_, this, async_fn(&This::Connected));
+            pendingConns_.Add(/*count=*/ 1);
+            connector_.Connect(addr_, async_fn(this, &This::Connected));
         }
     }
 
-    /*.... handler functions ....*/
+    /* .... handler functions .... */
 
     __completion_handler__
     virtual void WriteDone(TCPChannel * ch, int status)
@@ -180,7 +211,7 @@ public:
         SendData(ch);
     }
 
-    /*.... callbacks ....*/
+    /* .... callbacks .... */
 
     __completion_handler__
     void Connected(TCPConnector *, int status, TCPChannel * ch)
@@ -193,22 +224,34 @@ public:
             chstats_.insert(make_pair(ch, ChStats()));
         }
 
+        INVARIANT(pendingConns_.Count());
+        pendingConns_.Add(/*val=*/ -1);
+        nactiveconn_.Add(/*val=*/ 1);
+
         ch->RegisterHandle(this);
         ch->SetWriteDoneFn(cqueue_fn(&wcqueue_));
-        SendData(ch);
+
+        if (!pendingConns_.Count()) {
+            INFO(_log) << "All connections established.";
+            for (auto it = chstats_.begin(); it != chstats_.end(); ++it)
+            {
+                TCPChannel * ch = it->first;
+                ThreadPool::Schedule(this, &This::SendData, ch);
+            }
+        }
     }
 
     void Stop()
     {
         ASSERT(timer_.Elapsed() > SEC2MS(nsec_));
-        if (!pendingios_.Count()) {
-            cout << "Stopping channels." << endl;
+        if (!pendingios_.Count() && !pendingConns_.Count()) {
+            INFO(_log) << "Stopping channels.";
 
             AutoLock _(&lock_);
             for (auto it = chstats_.begin(); it != chstats_.end(); ++it) {
                 TCPChannel * ch = it->first;
                 ch->UnregisterHandle((CHandle *) this,
-                            async_fn(&TCPClientBenchmark::Unregistered));
+                                     async_fn(&This::Unregistered));
             }
         }
     }
@@ -217,11 +260,11 @@ public:
     __interrupt__
     void Unregistered(int status)
     {
-        cout << "Unregistered." << endl;
+        INFO(_log) << "Unregistered.";
 
         if (nactiveconn_.Add(/*val=*/ -1) == 1) {
             // all clients disconnected
-            ThreadPool::Schedule(this, &TCPClientBenchmark::Halt, /*val=*/ 0);
+            ThreadPool::Schedule(this, &This::Halt, /*val=*/ 0);
         }
     }
 
@@ -236,12 +279,12 @@ public:
         AutoLock _(&lock_);
 
         for (auto it = chstats_.begin(); it != chstats_.end(); ++it) {
-            cout << "Channel " << it->first << " : " << endl;
-            cout << "w-bytes " << it->second.bytes_written_ << " bytes" << endl;
-            cout << "time : " << MS2SEC(timer_.Elapsed()) << " s" << endl;
-            cout << "write throughput : "
-                 << (B2MB(it->second.bytes_written_) / MS2SEC(timer_.Elapsed()))
-                 << " MBps" << endl;
+            INFO(_log) << "Channel " << it->first << " :"
+                       << " w-bytes " << it->second.bytes_written_ << " bytes"
+                       << " time : " << MS2SEC(timer_.Elapsed()) << " s"
+                       << " write throughput : "
+                       << (B2MB(it->second.bytes_written_) /
+                                            MS2SEC(timer_.Elapsed())) << " MBps";
         }
     }
 
@@ -300,6 +343,7 @@ private:
     Timer timer_;
     AtomicCounter nactiveconn_;
     AtomicCounter pendingios_;
+    AtomicCounter pendingConns_;
     CQueue2<TCPChannel *, int> wcqueue_;
 };
 
@@ -356,12 +400,12 @@ main(int argc, char ** argv)
     ThreadPool::Start(ncpu);
 
     if (isClientBenchmark) {
-        cout << "Running benchmark for"
-            << " address " << laddr << "->" << raddr
-            << " iosize " << iosize << " bytes"
-            << " nconn " << nconn
-            << " ncpu " << ncpu
-            << " seconds " << seconds << " s" << endl;
+        INFO(_log) << "Running benchmark for"
+                   << " address " << laddr << "->" << raddr
+                   << " iosize " << iosize << " bytes"
+                   << " nconn " << nconn
+                   << " ncpu " << ncpu
+                   << " seconds " << seconds << " s";
 
         ASSERT(!raddr.empty());
         SocketAddress addr = SocketAddress::GetAddr(laddr, raddr);
@@ -369,8 +413,8 @@ main(int argc, char ** argv)
         ThreadPool::Schedule(&c, &TCPClientBenchmark::Start, /*status=*/ 0);
         ThreadPool::Wait();
     } else {
-        cout << "Running server at " << laddr
-             << " ncpu " << ncpu << endl;
+        INFO(_log) << "Running server at " << laddr
+                   << " ncpu " << ncpu;
 
         ASSERT(!laddr.empty());
         TCPServerBenchmark s(iosize);

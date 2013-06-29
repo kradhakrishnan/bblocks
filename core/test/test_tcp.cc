@@ -26,6 +26,9 @@ public:
 
     BasicTCPTest()
         : log_("testtcp/")
+        , epoll_("/epoll")
+        , tcpServer_(epoll_)
+        , tcpClient_(epoll_)
         , addr_(SocketAddress::GetAddr("127.0.0.1", 9999 + (rand() % 100)))
         , server_ch_(NULL)
         , client_ch_(NULL)
@@ -42,14 +45,11 @@ public:
 
     void Start(int nonce)
     {
-        epoll_ = new Epoll("serverEpoll/");
+        bool ok = tcpServer_.Listen(addr_.RemoteAddr(),
+                                    async_fn(this, &This::HandleServerConn));
+        INVARIANT(ok);
 
-        tcpServer_ = new TCPServer(epoll_);
-        tcpServer_->Listen(this, addr_.RemoteAddr(),
-                           async_fn(&This::HandleServerConn));
-
-        tcpClient_ = new TCPConnector(epoll_);
-        tcpClient_->Connect(addr_, this, async_fn(&This::HandleClientConn));
+        tcpClient_.Connect(addr_, async_fn(this, &This::HandleClientConn));
     }
 
     //.... handlers ....//
@@ -128,16 +128,8 @@ public:
         delete server_ch_;
         server_ch_ = NULL;
 
-        tcpServer_->Shutdown();
-        delete tcpServer_;
-        tcpServer_ = NULL;
-
-        tcpClient_->Shutdown();
-        delete tcpClient_;
-        tcpClient_ = NULL;
-
-        delete epoll_;
-        epoll_ = NULL;
+        tcpServer_.Shutdown();
+        tcpClient_.Shutdown();
 
         ThreadPool::Shutdown();
     }
@@ -195,10 +187,10 @@ private:
     }
 
     LogPath log_;
+    Epoll epoll_;
+    TCPServer tcpServer_;
+    TCPConnector tcpClient_;
     SocketAddress addr_;
-    Epoll * epoll_;
-    TCPServer * tcpServer_;
-    TCPConnector * tcpClient_;
     TCPChannel * server_ch_;
     TCPChannel * client_ch_;
     list<uint32_t> cksum_;

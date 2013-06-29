@@ -79,15 +79,28 @@ private:
     ///
     struct FDRecord
     {
-        FDRecord(const uint32_t events, const chandler_t & chandler)
-            : events_(events), chandler_(chandler)
+        FDRecord(const fd_t fd, const uint32_t events,
+                 const chandler_t & chandler)
+            : fd_(fd), events_(events), chandler_(chandler), mute_(false)
         {}
 
+        epoll_event GetEpollEvent()
+        {
+            epoll_event ee;
+            memset(&ee, /*ch=*/ 0, sizeof(ee));
+            ee.data.ptr = this;
+            ee.events = events_;
+            return ee;
+        }
+
+        fd_t fd_;               // Registered file descriptor
         uint32_t events_;       // Registered events
         chandler_t chandler_;   // Completion handler
+        bool mute_;             // Don't invoke handler
     };
 
-    typedef std::tr1::unordered_map<fd_t, FDRecord> fd_map_t;
+    typedef std::tr1::unordered_map<fd_t, FDRecord *> fd_map_t;
+    typedef std::list<FDRecord *> fdrec_list_t;
 
     /* .... Private methods ..... */
 
@@ -98,10 +111,11 @@ private:
 
     /* .... Private member variables .... */
 
-    LogPath log_;       // Log file
-    SpinMutex lock_;    // Default lock
-    fd_t fd_;           // Epoll fd
-    fd_map_t fdmap_;    // fd <-> FDRecord map
+    LogPath log_;           // Log file
+    SpinMutex lock_;        // Default lock
+    fd_t fd_;               // Epoll fd
+    fd_map_t fdmap_;        // fd <-> FDRecord map
+    fdrec_list_t trashcan_; // FDRecords to be trashed
 };
 
 } // namespace kware {

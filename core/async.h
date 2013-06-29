@@ -132,32 +132,32 @@ public:                                                                     \
                                                                             \
     void ProcessEvents(int)                                                 \
     {                                                                       \
-        std::list<CompletionEvent> q;                                       \
+        while (true) {                                                      \
+            std::list<CompletionEvent> q;                                   \
                                                                             \
-        /* we are like epoll, we take all the events that have matured and  \
-           process them                                                     \
-         */                                                                 \
+            /* we are like epoll, we take all the events that have          \
+               matured and process them                                     \
+             */                                                             \
                                                                             \
-        {                                                                   \
-            Guard _(&lock_);                                                \
-            processorRunning_ = true;                                       \
-            q = q_;                                                         \
-            q_.clear();                                                     \
+            {                                                               \
+                Guard _(&lock_);                                            \
+                INVARIANT(processorRunning_);                               \
+                q = q_;                                                     \
+                q_.clear();                                                 \
                                                                             \
-            if (q.empty()) {                                                \
-                processorRunning_ = false;                                  \
-                return;                                                     \
+                if (q.empty()) {                                            \
+                    processorRunning_ = false;                              \
+                    return;                                                 \
+                }                                                           \
+            }                                                               \
+                                                                            \
+            ASSERT(!q.empty());                                             \
+                                                                            \
+            for (auto it = q.begin(); it != q.end(); ++it) {                \
+                CompletionEvent & e = *it;                                  \
+                (h_->*fn_)(TARGEX(e.t,_,n));                                \
             }                                                               \
         }                                                                   \
-                                                                            \
-        ASSERT(!q.empty());                                                 \
-                                                                            \
-        for (auto it = q.begin(); it != q.end(); ++it) {                    \
-            CompletionEvent & e = *it;                                      \
-            (h_->*fn_)(TARGEX(e.t,_,n));                                    \
-        }                                                                   \
-                                                                            \
-        ThreadPool::Schedule(this, &This::ProcessEvents, /*nonce=*/ 0);     \
     }                                                                       \
                                                                             \
     struct CompletionEvent                                                  \
