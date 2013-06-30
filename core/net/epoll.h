@@ -109,6 +109,11 @@ private:
     ///
     virtual void * ThreadMain();
 
+    ///
+    /// Clear the fds that are marked for deletion
+    ///
+    void EmptyTrashcan();
+
     /* .... Private member variables .... */
 
     LogPath log_;           // Log file

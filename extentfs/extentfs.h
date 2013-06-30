@@ -132,8 +132,8 @@ private:
 
     // .... Member variables .... //
 
-    SpinMutex lock_;
     LogPath log_;
+    SpinMutex lock_;
     BlockDevice * dev_;
     const size_t pageSize_;
     const disksize_t npages_;

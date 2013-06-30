@@ -24,6 +24,7 @@ ExtentIndex::ExtentIndex(ExtentFs & fs)
 
 ExtentFs::ExtentFs(BlockDevice * dev, const size_t pageSize)
     : log_("/extentFs")
+    , lock_("/extentFs")
     , dev_(dev)
     , pageSize_(pageSize)
     , npages_(dev_->GetDeviceSize() / pageSize_)

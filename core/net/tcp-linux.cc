@@ -8,12 +8,13 @@ using namespace dh_core;
 
 TCPChannel::TCPChannel(const std::string & name, int fd, Epoll & epoll)
     : log_(name)
+    , lock_(name)
     , fd_(fd)
     , epoll_(epoll)
     , wbuf_(DEFAULT_WRITE_BACKLOG)
     /* Perf Counters */
-    , statReadSize_("stat/read-io", "bytes")
-    , statWriteSize_("stat/write-io", "bytes")
+    , statReadSize_("stat/read-io", "bytes", PerfCounter::BYTES)
+    , statWriteSize_("stat/write-io", "bytes", PerfCounter::BYTES)
 {
     ASSERT(fd_ >= 0);
 }

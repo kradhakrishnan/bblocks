@@ -52,6 +52,7 @@ public:
                  const size_t iosize, const IOType iotype,
                  const IOPattern iopattern, const size_t qdepth)
         : log_("/aiobmark")
+        , lock_("/aiobmark")
         , devname_(devname)
         , devsize_(devsize)
         , iosize_(iosize)

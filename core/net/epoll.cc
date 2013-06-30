@@ -12,8 +12,9 @@ using namespace dh_core;
 // Create/destroy
 //
 Epoll::Epoll(const string & logPath)
-    : Thread("Epoll/" + STR(this))
-    , log_(logPath + "Epoll/")
+    : Thread("/epoll/" + STR(this))
+    , log_(logPath + "/epoll")
+    , lock_("/epoll" + logPath)
 {
     fd_ = epoll_create(/*size=*/ MAX_EPOLL_EVENT);
 
@@ -41,6 +42,9 @@ Epoll::~Epoll()
     {
         Guard _(&lock_);
         INVARIANT(fdmap_.empty());
+
+        // Clear the fds that are marked for deletion
+        EmptyTrashcan();
     }
 }
 
@@ -125,7 +129,9 @@ Epoll::Remove(const fd_t fd)
     }
 
     //
-    // Push into trash can
+    // Push into trash can. We don't delete the fd record here because we have
+    // tagged them as completion token with the epoll. We safely remove after
+    // being woken up by the epoll.
     //
     {
         Guard _(&lock_);
@@ -209,6 +215,18 @@ Epoll::RemoveEvent(const fd_t fd, const uint32_t events)
     return (status != -1);
 }
 
+void Epoll::EmptyTrashcan()
+{
+    INVARIANT(lock_.IsOwner());
+
+    for (auto fdrec : trashcan_) {
+        INVARIANT(fdrec->mute_);
+        delete fdrec;
+    }
+
+    trashcan_.clear();
+}
+
 //
 // Main loop
 //
@@ -268,13 +286,7 @@ Epoll::ThreadMain()
         // Take out the trash
         //
         Guard _(&lock_);
-        for (auto fdrec : trashcan_)
-        {
-            INVARIANT(fdrec->mute_);
-            delete fdrec;
-        }
-
-        trashcan_.clear();
+        EmptyTrashcan();
     } // while (true) {
 
     return NULL;

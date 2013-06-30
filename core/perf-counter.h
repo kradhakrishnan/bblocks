@@ -4,6 +4,8 @@
 #include <string>
 #include <ostream>
 #include <atomic>
+#include <iomanip>
+#include <map>
 
 namespace dh_core {
 
@@ -14,11 +16,20 @@ class PerfCounter
 {
 public:
 
+    enum Type
+    {
+        COUNTER = 0,
+        BYTES,
+        TIME,
+    };
+
     /* ... ctor/dtor .... */
 
-    PerfCounter(const std::string & name, const std::string & units)
+    PerfCounter(const std::string & name, const std::string & units,
+                const Type & type)
         : name_(name)
         , units_(units)
+        , type_(type)
         , val_(0)
         , count_(0)
         , min_(UINT32_MAX)
@@ -56,32 +67,65 @@ public:
     {
         os << "Perfcoutner: " << pc.name_ << std::endl;
 
+        if (!pc.count_) return os;
+
+        kvs_t kv;
+
+        kv["Aggregate-value"] = STR(pc.val_.load());
+        kv["Count"] = STR(pc.count_.load());
+        kv["Time"] = STR(pc.ElapsedSec()) + " s";
+        kv["Max"] = STR(pc.max_.load()) + " " + pc.units_;
+        kv["Min"] = STR(pc.min_.load()) + " " + pc.units_;
+        kv["Avg"] = STR(to_h(pc.Avg())) + " " + pc.units_;
+
+        if (pc.type_ == BYTES) {
+            kv[pc.units_ + "-per-sec"] =
+                    STR(to_h(pc.val_.load() / pc.ElapsedSec()));
+            kv["ops-per-sec"] =
+                    STR(to_h((pc.count_.load() / pc.ElapsedSec())));
+        }
+
+        Print(os, kv);
+
+        kv.clear();
         if (pc.count_.load()) {
             for (int i = 0; i < 32; ++i) {
                 if (pc.bucket_[i].load()) {
-                    os << " " << (i ? pow(2, i) : 0) << " - " << pow(2, i + 1)
-                       << " : "
-                       << pc.bucket_[i].load()
-                       << std::endl;
+                    auto k = to_h(i ? pow(2, i) : 0) + "-" + to_h(pow(2, i + 1));
+                    kv[k] = to_h(pc.bucket_[i].load());
                 }
             }
-
-            os << " Aggregate-value: " << pc.val_.load()
-               << " Count: " << pc.count_.load()
-               << " Time: " << pc.ElapsedSec() << " sec "
-               << " Maximum: " << pc.max_.load() << " " << pc.units_
-               << " Minimum: " << pc.min_.load() << " " << pc.units_
-               << " Average: " << pc.Avg() << " " << pc.units_
-               << " " << pc.units_ << "-per-sec : "
-               << std::fixed << (pc.val_.load() / pc.ElapsedSec())
-               << " " << "ops-per-sec : "
-               << (pc.count_.load() / pc.ElapsedSec());
         }
+
+        Print(os, kv);
 
         return os;
     }
 
 protected:
+
+    typedef std::map<std::string, std::string> kvs_t;
+
+    static void DrawLine(std::ostream & os)
+    {
+        os << "+" << std::setfill('-') << std::setw(30) << "-"
+           << "+" << std::setfill('-') << std::setw(30) << "-"
+           << "+" << std::endl << std::setfill(' ');
+    }
+
+    static void Print(std::ostream & os, const kvs_t & kvs)
+    {
+        DrawLine(os);
+
+        for (auto kv : kvs)
+        {
+            os << "|" << std::setw(30) << std::left << kv.first << "|"
+               << std::setw(30) << std::left << kv.second << "|"
+               << std::endl;
+        }
+
+        DrawLine(os);
+    }
 
     /* .... Protected member functions .... */
 
@@ -121,10 +165,23 @@ protected:
         bucket_[count].fetch_add(/*val=*/ 1);
     }
 
+    template<class T>
+    static const std::string to_h(const T & val)
+    {
+        if (val >= 1000 * 1000) {
+            return STR(int(val / (1000 * 1000))) + "M";
+        } else if (val >= 1000) {
+            return STR(int(val / 1000)) + "K";
+        } else {
+            return STR(val);
+        }
+    }
+
     /* .... Private member variables .... */
 
     const std::string name_;
     const std::string units_;
+    const Type type_;
     std::atomic<uint64_t> val_;
     std::atomic<uint64_t> count_;
     std::atomic<uint64_t> min_;
@@ -133,6 +190,60 @@ protected:
     uint64_t startms_;
 };
 
+// ......................................................... TimeCounter<T> ....
+
+///
+/// Time counter
+///
+template<class T>
+class TimeCounter
+{
+public:
+
+    TimeCounter(const std::string & name)
+        : name_(name)
+        , startms_(Time::NowInMilliSec())
+        , refms_(Time::NowInMilliSec())
+    {
+        for (int i = 0; i < sizeof(timer_); ++i) {
+            timer_[i].store(/*val=*/ 0);
+        }
+    }
+
+    void ClockIn(const T & t)
+    {
+        INVARIANT(t < 32);
+        timer_[t] += Time::NowInMilliSec() - refms_;
+        refms_ = Time::NowInMilliSec();
+    }
+
+    friend std::ostream & operator<<(std::ostream & os,
+                                     const TimeCounter<T> & v)
+    {
+        const uint64_t elapsed_ms = Time::NowInMilliSec() - v.startms_;
+
+        os << "TimeCounter : " << v.name_ << std::endl
+           << " Elapsed: " << elapsed_ms << " ms" << std::endl;
+
+        for (int i = 0; i < 32; ++i) {
+            if (v.timer_[i]) {
+                os << T(i) << " "
+                   << v.timer_[i] << " ms ( "
+                   << (v.timer_[i] * 100 / elapsed_ms) << "% )"
+                   << std::endl;
+            }
+        }
+
+        return os;
+    }
+
+private:
+
+    const std::string name_;
+    const uint64_t startms_;
+    uint64_t refms_;
+    std::atomic<uint32_t> timer_[32];
+};
 
 } // namespace dh_core {
 

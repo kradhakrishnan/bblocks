@@ -185,6 +185,7 @@ public:
 
     /*.... Callback defintions ....*/
 
+    typedef TCPChannel This;
     typedef CHandler3<TCPChannel *, int, IOBuffer> ReadDoneHandler;
     typedef CHandler2<TCPChannel *, int> WriteDoneHandler;
     typedef AsyncProcessor::UnregisterDoneFn UnregisterDoneFn;
@@ -316,8 +317,8 @@ private:
 
     /* .... Private member variables .... */
 
-    SpinMutex lock_;
     LogPath log_;
+    SpinMutex lock_;
     int fd_;
     Epoll & epoll_;
     Client client_;
@@ -348,7 +349,10 @@ public:
 
     /* .... create/destroy .... */
 
-    TCPServer(Epoll & epoll) : log_(GetLogPath()), epoll_(epoll)
+    TCPServer(Epoll & epoll)
+        : log_(GetLogPath())
+        , lock_(GetLogPath())
+        , epoll_(epoll)
     {}
 
     virtual ~TCPServer()
@@ -396,8 +400,8 @@ private:
 
     /* .... Private member variables .... */
 
-    SpinMutex lock_;
     LogPath log_;
+    SpinMutex lock_;
     Epoll & epoll_;
     socket_t sockfd_;
     ConnectHandler client_;
@@ -424,7 +428,10 @@ public:
 
     /* .... create/destroy .... */
 
-    TCPConnector(Epoll & epoll) : log_("/connector"), epoll_(epoll)
+    TCPConnector(Epoll & epoll)
+        : log_("/connector")
+        , lock_("/connector")
+        , epoll_(epoll)
     {}
 
     virtual ~TCPConnector()
@@ -460,12 +467,12 @@ private:
     __interrupt__ void HandleFdEvent(int fd, uint32_t events);
 
     const std::string TCPChannelLogPath(const int fd) const
-    { return  log_.GetPath() + "ch/" + STR(fd) + "/"; }
+    { return  log_.GetPath() + "/ch/" + STR(fd) + "/"; }
 
     /* .... Private member variables .... */
 
-    SpinMutex lock_;        // Default lock
     LogPath log_;           // Log path
+    SpinMutex lock_;        // Default lock
     Epoll & epoll_;         // Socket poll helper
     clients_map_t clients_; // Clients connecting
 };

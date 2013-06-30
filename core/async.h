@@ -100,7 +100,7 @@ public:                                                                     \
     template<class _OBJ_>                                                   \
     CompletionQueue##TSUFFIX(_OBJ_ * obj,                                   \
                              void (_OBJ_::*fn)(TENUM(T,n)))                 \
-        : h_((CHandle *) obj)                                               \
+        : lock_("/cq"), h_((CHandle *) obj)                                 \
         , fn_((void (CHandle::*)(TENUM(T,n))) fn)                           \
         , processorRunning_(false)                                          \
     {                                                                       \
@@ -108,7 +108,7 @@ public:                                                                     \
                                                                             \
     CompletionQueue##TSUFFIX(CHandle * h,                                   \
                              void (CHandle::*fn)(TENUM(T,n)))               \
-        : h_(h), fn_(fn), processorRunning_(false)                          \
+        : lock_("/cq"), h_(h), fn_(fn), processorRunning_(false)            \
     {}                                                                      \
                                                                             \
     ~CompletionQueue##TSUFFIX()                                             \

@@ -13,12 +13,16 @@ namespace po = boost::program_options;
 // log path
 static LogPath _log("/bmark_tcp");
 
+//
+// Channel stat abstraction
+//
 struct ChStats
 {
     ChStats()
-        : start_ms_(NowInMilliSec()), bytes_read_(0), bytes_written_(0)
-    {
-    }
+        : start_ms_(NowInMilliSec())
+        , bytes_read_(0)
+        , bytes_written_(0)
+    {}
 
     uint64_t start_ms_;
     uint64_t bytes_read_;
@@ -38,20 +42,17 @@ public:
 
     typedef TCPServerBenchmark This;
 
-    static const uint32_t RBUFFERSIZE = 4 * 1024; // 1MB
-
     /* .... create/destroy .... */
 
     TCPServerBenchmark(const size_t iosize)
-        : epoll_("/server")
+        : lock_("/server")
+        , epoll_("/server")
         , server_(epoll_)
         , buf_(IOBuffer::Alloc(iosize))
         , rcqueue_(this, &This::ReadDone)
-    {
-    }
+    {}
 
-    virtual ~TCPServerBenchmark() {
-    }
+    virtual ~TCPServerBenchmark() {}
 
     //
     // Start listening
@@ -59,8 +60,8 @@ public:
     void Start(sockaddr_in addr)
     {
         INFO(_log) << "Starting to listen";
-        const bool ok = server_.Listen(addr, async_fn(this,
-                                                &This::HandleServerConn));
+        auto fn = async_fn(this, &This::HandleServerConn);
+        const bool ok = server_.Listen(addr, fn);
         INVARIANT(ok);
     }
 
@@ -78,7 +79,7 @@ public:
         // Create channel stat node
         //
         {
-            AutoLock _(&lock_);
+            Guard _(&lock_);
             chstats_.insert(make_pair(ch, ChStats()));
         }
 
@@ -116,7 +117,7 @@ private:
 
     void UpdateStats(TCPChannel * ch, const uint32_t size)
     {
-        AutoLock _(&lock_);
+        Guard _(&lock_);
 
         auto it = chstats_.find(ch);
         ASSERT(it != chstats_.end());
@@ -162,7 +163,8 @@ public:
 
     TCPClientBenchmark(const SocketAddress & addr, const size_t iosize,
                        const size_t nconn, const size_t nsec)
-        : epoll_("/client")
+        : lock_("/client")
+        , epoll_("/client")
         , connector_(epoll_)
         , addr_(addr)
         , iosize_(iosize)
@@ -170,17 +172,16 @@ public:
         , nsec_(nsec)
         , buf_(IOBuffer::Alloc(iosize))
         , wcqueue_(this, &This::WriteDone)
-    {
-    }
+    {}
 
     virtual ~TCPClientBenchmark()
     {
-        AutoLock _(&lock_);
+        Guard _(&lock_);
 
         buf_.Trash();
 
-        for (auto it = chstats_.begin(); it != chstats_.end(); ++it) {
-            TCPChannel * ch = it->first;
+        for (auto chstat : chstats_) {
+            TCPChannel * ch = chstat.first;
             ch->Close();
             delete ch;
         }
@@ -220,42 +221,20 @@ public:
         ASSERT(buf_.Size() == iosize_);
 
         {
-            AutoLock _(&lock_);
+            Guard _(&lock_);
             chstats_.insert(make_pair(ch, ChStats()));
         }
 
         INVARIANT(pendingConns_.Count());
-        pendingConns_.Add(/*val=*/ -1);
-        nactiveconn_.Add(/*val=*/ 1);
 
         ch->RegisterHandle(this);
         ch->SetWriteDoneFn(cqueue_fn(&wcqueue_));
 
-        if (!pendingConns_.Count()) {
-            INFO(_log) << "All connections established.";
-            for (auto it = chstats_.begin(); it != chstats_.end(); ++it)
-            {
-                TCPChannel * ch = it->first;
-                ThreadPool::Schedule(this, &This::SendData, ch);
-            }
-        }
+        pendingConns_.Add(/*val=*/ -1);
+        nactiveconn_.Add(/*val=*/ 1);
+
+        SendData(ch);
     }
-
-    void Stop()
-    {
-        ASSERT(timer_.Elapsed() > SEC2MS(nsec_));
-        if (!pendingios_.Count() && !pendingConns_.Count()) {
-            INFO(_log) << "Stopping channels.";
-
-            AutoLock _(&lock_);
-            for (auto it = chstats_.begin(); it != chstats_.end(); ++it) {
-                TCPChannel * ch = it->first;
-                ch->UnregisterHandle((CHandle *) this,
-                                     async_fn(&This::Unregistered));
-            }
-        }
-    }
-
 
     __interrupt__
     void Unregistered(int status)
@@ -268,31 +247,33 @@ public:
         }
     }
 
+private:
+
+    void Stop()
+    {
+        ASSERT(timer_.Elapsed() > SEC2MS(nsec_));
+
+        if (!pendingios_.Count() && !pendingConns_.Count()) {
+            INFO(_log) << "Stopping channels.";
+
+            Guard _(&lock_);
+            for (auto chstat : chstats_) {
+                TCPChannel * ch = chstat.first;
+                ch->UnregisterHandle(static_cast<CHandle *>(this),
+                                     async_fn(&This::Unregistered));
+            }
+        }
+    }
+
     void Halt(int)
     {
         PrintStats();
         ThreadPool::Shutdown();
     }
 
-    void PrintStats()
-    {
-        AutoLock _(&lock_);
-
-        for (auto it = chstats_.begin(); it != chstats_.end(); ++it) {
-            INFO(_log) << "Channel " << it->first << " :"
-                       << " w-bytes " << it->second.bytes_written_ << " bytes"
-                       << " time : " << MS2SEC(timer_.Elapsed()) << " s"
-                       << " write throughput : "
-                       << (B2MB(it->second.bytes_written_) /
-                                            MS2SEC(timer_.Elapsed())) << " MBps";
-        }
-    }
-
-private:
-
     void UpdateStats(TCPChannel * ch, const int bytes_written)
     {
-        AutoLock _(&lock_);
+        Guard _(&lock_);
 
         auto it = chstats_.find(ch);
         ASSERT(it != chstats_.end());
@@ -326,6 +307,20 @@ private:
                 // TODO: Provide a config param
                 break;
             }
+        }
+    }
+
+    void PrintStats()
+    {
+        Guard _(&lock_);
+
+        for (auto stat : chstats_) {
+            auto MBps = B2MB(stat.second.bytes_written_) /
+                                                MS2SEC(timer_.Elapsed());
+            INFO(_log) << "Channel " << stat.first << " :"
+                       << " w-bytes " << stat.second.bytes_written_ << " bytes"
+                       << " time : " << MS2SEC(timer_.Elapsed()) << " s"
+                       << " write throughput : " << MBps << " MBps";
         }
     }
 

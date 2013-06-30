@@ -37,6 +37,7 @@ io_getevents(aio_context_t ctx, long min_nr, long nr,
 
 LinuxAioProcessor::LinuxAioProcessor(const size_t nrthreads, const size_t nreqs)
     : log_("/linuxaioprocessor")
+    , lock_("/linuxaioprocessor")
 {
     AutoLock _(&lock_);
 

@@ -4,6 +4,8 @@
 #include <boost/shared_ptr.hpp>
 #include <inttypes.h>
 
+#include "core/perf-counter.h"
+
 namespace dh_core {
 
 #define ENTER_CRITICAL_SECTION(x) { AutoLock _(&x);
@@ -199,16 +201,17 @@ public:
         CLOSED = 0x11
     };
 
-    SpinMutex()
-        : mutex_(OPEN)
-        , stat_spin_ms_(0)
+    explicit SpinMutex(const std::string & name)
+        : name_("/spinmutex" + name)
+        , mutex_(OPEN)
+        , statSpinTime_(name_ + "/spin-time", "microsec", PerfCounter::TIME)
     {
         ASSERT(Is(OPEN));
     }
 
     ~SpinMutex()
     {
-        INFO(LogPath("/SpinMutex")) << stat_spin_ms_;
+        INFO(LogPath("/SpinMutex")) << statSpinTime_;
     }
 
     virtual void Lock()
@@ -231,7 +234,7 @@ public:
             pthread_yield();
         }
 
-        stat_spin_ms_ += Time::NowInMilliSec() - start_ms;
+        statSpinTime_.Update((Time::NowInMilliSec() - start_ms) * 1000);
     }
 
     virtual void Unlock()
@@ -255,10 +258,11 @@ public:
 
 protected:
 
+    const std::string name_;
     pthread_t owner_;
     volatile _Atomic_word mutex_;
 
-    uint64_t stat_spin_ms_;
+    PerfCounter statSpinTime_;
 };
 
 #define READ_LOCK(x) AutoReadLock _(x);
