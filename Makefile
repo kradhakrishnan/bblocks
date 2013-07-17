@@ -7,6 +7,7 @@ STDCPP = /usr/include/c++/4.6.3/
 SUBDIR = core/          \
          core/test      \
          core/bmark     \
+	 core/kmod	\
          extentfs       \
          extentfs/test  \
 
@@ -137,19 +138,28 @@ endif
 -include $(DEPS)
 -include $(TDEPS)
 
-all: lib exe
+all: lib exe modules
 lib: ${OBJS} $(LIBRARY)
 exe: $(TOBJ) $(TEXE)
 
+modules:
+	@echo '** Building modules **'
+	@make -C /lib/modules/$(shell uname -r)/build M=$(PWD)/core/kmod modules
+	@make INSTALL_MOD_PATH=$(OBJDIR) -C /lib/modules/$(shell uname -r)/build M=$(PWD)/core/kmod modules_install
+	@make -C /lib/modules/$(shell uname -r)/build M=$(PWD)/core/kmod clean
+
 ${TEXE}: ${STATIC} ${TOBJS}
-	${CC} ${LDFLAGS} $@.o ${STATIC} -o $@ ${LIBS} 
+	@echo LD $@
+	@${CC} ${LDFLAGS} $@.o ${STATIC} -o $@ ${LIBS} 
 
 ${LIBRARY}: ${OBJS}
-	$(AR) rcs ${OBJDIR}/$@/library.a ${OBJDIR}/$@/*.o 
+	@echo AR ${OBJDIR}/$@/library.a
+	@$(AR) rcs ${OBJDIR}/$@/library.a ${OBJDIR}/$@/*.o 
 
 $(OBJDIR)/%.o: %.cc
-	${CC} ${INCLUDE} ${CCFLAGS} -o $@ -c $< 
-	${CC} ${INCLUDE} ${CCFLAGS} -MT '$@' -MM $< > ${OBJDIR}/$*.dep
+	@echo CC $@
+	@${CC} ${INCLUDE} ${CCFLAGS} -o $@ -c $< 
+	@${CC} ${INCLUDE} ${CCFLAGS} -MT '$@' -MM $< > ${OBJDIR}/$*.dep
 
 %.obj: %.cc
 	${CC} ${INCLUDE} ${CCFLAGS} /Fo${OBJDIR}/$@ $< 
@@ -158,19 +168,21 @@ $(OBJDIR)/%.o: %.cc
 clean: build-teardown build-setup
 
 build-setup:
-	mkdir -p $(OBJDIR)
-	mkdir -p $(OBJDIR)/core
-	mkdir -p $(OBJDIR)/core/net
-	mkdir -p $(OBJDIR)/core/fs
-	mkdir -p $(OBJDIR)/core/test
-	mkdir -p $(OBJDIR)/core/bmark
-	mkdir -p $(OBJDIR)/extentfs
-	mkdir -p $(OBJDIR)/extentfs/test
+	@echo SETUP $(OBJDIR)
+	@mkdir -p $(OBJDIR)
+	@mkdir -p $(OBJDIR)/core
+	@mkdir -p $(OBJDIR)/core/net
+	@mkdir -p $(OBJDIR)/core/fs
+	@mkdir -p $(OBJDIR)/core/test
+	@mkdir -p $(OBJDIR)/core/bmark
+	@mkdir -p $(OBJDIR)/extentfs
+	@mkdir -p $(OBJDIR)/extentfs/test
 
 build-doc:
-	rm -f -r ../build/doc
-	mkdir $(OBJDIR)/doc
-	doxygen doc/doxygen/Doxyfile
+	@echo SETUP $(OBJDIR)/doc
+	@rm -f -r ../build/doc
+	@mkdir $(OBJDIR)/doc
+	@doxygen doc/doxygen/Doxyfile
 
 ubuntu-setup:
 	apt-get install build-essential libaio-dev libaio1 libaio1-dbg \
@@ -182,4 +194,5 @@ ubuntu-setup:
 	ln /usr/lib/libtcmalloc_minimal.so.4 /usr/lib/libtcmalloc_minimal.so
 
 build-teardown:
-	rm -r -f $(OBJDIR)
+	@echo CLEAN $(OBJDIR)
+	@rm -r -f $(OBJDIR)
