@@ -178,12 +178,21 @@ public:
         return t;
     }
 
+    inline bool IsEmpty() const
+    {
+        lock_.Lock();
+        const bool ret = q_.IsEmpty();
+        lock_.Unlock();
+
+        return ret;
+    }
+
 private:
 
     InQueue();
 
     LogPath log_;
-    PThreadMutex lock_;
+    mutable PThreadMutex lock_;
     WaitCondition conditionEmpty_;
     InList<T> q_;
     unsigned int maxSpin_;

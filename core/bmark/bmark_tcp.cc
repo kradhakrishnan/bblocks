@@ -95,6 +95,11 @@ public:
     {
         while (ch->Read(buf_, cqueue_fn(&rcqueue_))) {
             UpdateStats(ch, buf_.Size());
+
+            if (ThreadPool::ShouldYield()) {
+                ThreadPool::Schedule(this, &This::ReadUntilBlocked, ch);
+                return;
+            }
         }
     }
 
@@ -305,6 +310,11 @@ private:
                 // operate in serial mode, ideally suited for most applications
                 // unless the IO is too small
                 // TODO: Provide a config param
+                break;
+            }
+
+            if (ThreadPool::ShouldYield()) {
+                ThreadPool::Schedule(this, &This::SendData, ch);
                 break;
             }
         }

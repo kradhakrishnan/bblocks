@@ -90,34 +90,29 @@ class NonBlockingThread : public Thread
 {
 public:
 
-    NonBlockingThread(const std::string & path)
+    NonBlockingThread(const std::string & path, const uint32_t tid)
         : Thread(path)
         , q_(path)
+        , tid_(tid)
     {
     }
 
-    virtual void * ThreadMain()
-    {
-        while (!exitMain_)
-        {
-            EnableThreadCancellation();
-            ThreadRoutine * r = q_.Pop();
-            DisableThreadCancellation();
-
-            r->Run();
-        }
-
-        return NULL;
-    }
+    virtual void * ThreadMain();
 
     void Push(ThreadRoutine * r)
     {
         q_.Push(r);
     }
 
+    bool IsEmpty() const
+    {
+        return q_.IsEmpty();
+    }
+
 private:
 
     InQueue<ThreadRoutine> q_;
+    const uint32_t tid_;
 };
 
 // .................................................. NonBlockingThreadPool ....
@@ -128,6 +123,8 @@ private:
 class NonBlockingThreadPool : public Singleton<NonBlockingThreadPool>
 {
 public:
+
+    friend class NonBlockingThread;
 
     class BarrierRoutine
     {
@@ -169,7 +166,7 @@ public:
         AutoLock _(&lock_);
 
         for (size_t i = 0; i < maxCores; ++i) {
-            NonBlockingThread * th = new NonBlockingThread("/th/" + STR(i));
+            NonBlockingThread * th = new NonBlockingThread("/th/" + STR(i), i);
             threads_.push_back(th);
             th->StartNonBlockingThread();
         }
@@ -208,6 +205,8 @@ public:
         threads_[nextTh_++ % threads_.size()]->Push(r);
     }
 
+    bool ShouldYield();
+
     void ScheduleBarrier(ThreadRoutine * r)
     {
         BarrierRoutine * br = new BarrierRoutine(r, threads_.size());
@@ -235,6 +234,7 @@ private:
 
         threads_.clear();
     }
+
 
     PThreadMutex lock_;
     threads_t threads_;
@@ -284,6 +284,11 @@ public:
     static void ScheduleBarrier(ThreadRoutine * r)
     {
         NonBlockingThreadPool::Instance().ScheduleBarrier(r);
+    }
+
+    static bool ShouldYield()
+    {
+        return NonBlockingThreadPool::Instance().ShouldYield();
     }
 };
 

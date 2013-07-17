@@ -1,8 +1,9 @@
 #
 # Libraries to build
 #
-LIBRARY += core/net \
-           core/fs
+LIBRARY += core                 \
+           core/net             \
+           core/fs              \
 
 #
 # .cc that define main
@@ -12,6 +13,7 @@ TARGET +=
 #
 # .cc
 #
-SRCS += core/net/epoll.cc       \
+SRCS += core/thread-pool.cc     \
+        core/net/epoll.cc       \
         core/net/tcp-linux.cc   \
         core/fs/aio-linux.cc    \
