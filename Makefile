@@ -4,20 +4,14 @@ INCLUDE =
 
 STDCPP = /usr/include/c++/4.6.3/
 
-SUBDIR = core/          \
-         core/test      \
-         core/bmark     \
-	 core/kmod	\
-         extentfs       \
-         extentfs/test  \
+SUBDIR += core/          \
+          core/test      \
+          core/bmark     \
+	  core/kmod	 \
+          extentfs       \
+          extentfs/test  \
 
 -include ${SUBDIR:%=%/Makefile}
-
-ifeq ($(shell uname), Linux)
-#
-# Linux OS
-#
-
 
 #
 # LCOV=enable
@@ -108,8 +102,10 @@ LDFLAGS += -L$(OBJDIR)  -L/usr/lib
 INCLUDE += -I$(PWD) -Ipublic -I/usr/include/boost -I$(STDCPP)
 LIBS    += -lrt -lpthread  -lz -lboost_program_options
 
-PWD 	:= $(shell pwd)
+ifndef OBJDIR
 OBJDIR	:= $(PWD)/../build
+endif
+
 OBJS    := ${SRCS:%.cc=$(OBJDIR)/%.o}
 DEPS    := ${OBJS:%.o=%.dep}
 TOBJS	:= ${TARGET:%.cc=$(OBJDIR)/%.o}
@@ -119,32 +115,6 @@ STATIC	:= ${LIBRARY:%=${OBJDIR}/%/library.a}
 
 all: lib exe
 	@echo $(UNAME)
-
-else
-
-#
-# Windows OS
-#
-CC = $(VS)\bin\cl.exe
-AR = $(shell ar)
-
-CCFLAGS +=  /Zi /EHsc -DKWARE_WINDOWS
-LDFLAGS += /L$(OBJDIR) /L$(VS)/lib
-INCLUDE += /I$(BOOST) /I$(WINSDK)/Include /I$(VS)\include /I. /Ipublic /I/usr/include/boost
-LIBS    += -lrt -lpthread
-
-PWD 	:= $(shell echo %CD%)
-OBJDIR	:= $(PWD)/../build
-OBJS    := ${SRCS:.cc=.obj} 
-DEPS    := ${SRCS:.cc=.dep} 
-TOBJS	:= ${TARGET:%.cc=%.obj}
-TDEPS	:= ${TARGET:%.cc=%.dep}
-TEXE	:= ${TARGET:%.cc=%}
-STATIC	:= ${LIBRARY:%=${OBJDIR}/%/library.a}
-
-all: lib exe
-
-endif
 
 -include $(DEPS)
 -include $(TDEPS)
@@ -171,10 +141,6 @@ $(OBJDIR)/%.o: %.cc
 	@echo [CC] $@
 	@${CC} ${INCLUDE} ${CCFLAGS} -o $@ -c $< 
 	@${CC} ${INCLUDE} ${CCFLAGS} -MT '$@' -MM $< > ${OBJDIR}/$*.dep
-
-%.obj: %.cc
-	${CC} ${INCLUDE} ${CCFLAGS} /Fo${OBJDIR}/$@ $< 
-	${CC} ${INCLUDE} ${CCFLAGS} -MM $< > ${OBJDIR}/$*.dep
 
 clean: build-teardown build-setup
 
