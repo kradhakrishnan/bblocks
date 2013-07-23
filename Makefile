@@ -18,19 +18,30 @@ ifeq ($(shell uname), Linux)
 # Linux OS
 #
 
+
+#
+# LCOV=enable
+#
+ifdef LCOV
+    ifeq ($(shell echo $(LCOV)), enable)
+        BUILD_CCFLAGS += --coverage
+        LDFLAGS += --coverage
+    endif
+endif
+
 #
 # OPT=enable
 #
 ifdef OPT
     ifeq ($(shell echo $(OPT)), enable)
         # optimized build
-        BUILD_CCFLAGS = -O2
+        BUILD_CCFLAGS += -O2
     else
         $(error Unknown value for OPT)
     endif
 else
     # debug build
-    BUILD_CCFLAGS = -g3  -DDEBUG_BUILD
+    BUILD_CCFLAGS += -g3  -DDEBUG_BUILD
 endif
 
 #
@@ -149,15 +160,15 @@ modules:
 	@make -C /lib/modules/$(shell uname -r)/build M=$(PWD)/core/kmod clean
 
 ${TEXE}: ${STATIC} ${TOBJS}
-	@echo LD $@
+	@echo [LD] $@
 	@${CC} ${LDFLAGS} $@.o ${STATIC} -o $@ ${LIBS} 
 
 ${LIBRARY}: ${OBJS}
-	@echo AR ${OBJDIR}/$@/library.a
+	@echo [AR] ${OBJDIR}/$@/library.a
 	@$(AR) rcs ${OBJDIR}/$@/library.a ${OBJDIR}/$@/*.o 
 
 $(OBJDIR)/%.o: %.cc
-	@echo CC $@
+	@echo [CC] $@
 	@${CC} ${INCLUDE} ${CCFLAGS} -o $@ -c $< 
 	@${CC} ${INCLUDE} ${CCFLAGS} -MT '$@' -MM $< > ${OBJDIR}/$*.dep
 
