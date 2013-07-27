@@ -11,117 +11,11 @@ SUBDIR += core/          \
           extentfs       \
           extentfs/test  \
 
--include ${SUBDIR:%=%/Makefile}
+OBJDIR = $(PWD)/../build/libCore
 
-#
-# LCOV=enable
-#
-ifdef LCOV
-    ifeq ($(shell echo $(LCOV)), enable)
-        BUILD_CCFLAGS += --coverage
-        LDFLAGS += --coverage
-    endif
-endif
+clean: build-teardown build-setup
 
-#
-# OPT=enable
-#
-ifdef OPT
-    ifeq ($(shell echo $(OPT)), enable)
-        # optimized build
-        BUILD_CCFLAGS += -O2
-    else
-        $(error Unknown value for OPT)
-    endif
-else
-    # debug build
-    BUILD_CCFLAGS += -g3  -DDEBUG_BUILD
-endif
-
-#
-# PROFILE=enable
-#
-ifdef PROFILE
-    ifeq ($(shell echo $(PROFILE)), enable)
-        # optimized build
-        BUILD_CCFLAGS += -pg
-        LDFLAGS = -pg
-    else
-        $(error Unknown value for PROFILE)
-    endif
-endif
-
-#
-# VERBOSE=disable
-#
-ifdef VERBOSE
-    ifeq ($(shell echo $(VERBOSE)), disable)
-        # optimized build
-        BUILD_CCFLAGS += -DDISABLE_VERBOSE
-    else
-        $(error Unknown value for VERBOSE)
-    endif
-endif
-
-#
-# VALGRIND=enable
-#
-ifdef VALGRIND
-    ifeq ($(shell echo $(VALGRIND)), enable)
-        CCFLAGS += -DVALGRIND_BUILD
-    else
-        $(error Unknown value for VALGRIND)
-    endif
-endif
-
-#
-# ERRCHECK=enable
-#
-ifdef ERRCHK
-    ifeq ($(ERRCHK), enable)
-        CCFLAGS += -DERROR_CHECK
-    else
-        $(error Unknown value for ERRCHK)
-    endif
-endif
-
-#
-# TCMALLOC
-#
-ifdef TCMALLOC
-    ifeq ($(shell echo $(TCMALLOC)), enable)
-        LIBS += -ltcmalloc_minimal
-    endif
-endif
-
-CC = g++
-AR = $(shell which ar)
-
-CCFLAGS += -Wall -std=c++11 -Werror -D__STDC_LIMIT_MACROS $(BUILD_CCFLAGS)
-LDFLAGS += -L$(OBJDIR)  -L/usr/lib
-INCLUDE += -I$(PWD) -Ipublic -I/usr/include/boost -I$(STDCPP)
-LIBS    += -lrt -lpthread  -lz -lboost_program_options
-
-ifndef OBJDIR
-OBJDIR	:= $(PWD)/../build
-endif
-
-OBJS    := ${SRCS:%.cc=$(OBJDIR)/%.o}
-DEPS    := ${OBJS:%.o=%.dep}
-TOBJS	:= ${TARGET:%.cc=$(OBJDIR)/%.o}
-TDEPS	:= ${TOBJS:%.o=%.dep}
-TEXE	:= ${TARGET:%.cc=$(OBJDIR)/%}
-STATIC	:= ${LIBRARY:%=${OBJDIR}/%/library.a}
-
-all: lib exe
-	@echo $(UNAME)
-
--include $(DEPS)
--include $(TDEPS)
-
-all: lib exe modules
-lib: ${OBJS} $(LIBRARY)
-exe: $(TOBJ) $(TEXE)
+libcore: all modules
 
 modules:
 	@echo '** Building modules **'
@@ -129,24 +23,8 @@ modules:
 	@make INSTALL_MOD_PATH=$(OBJDIR) -C /lib/modules/$(shell uname -r)/build M=$(PWD)/core/kmod modules_install
 	@make -C /lib/modules/$(shell uname -r)/build M=$(PWD)/core/kmod clean
 
-${TEXE}: ${STATIC} ${TOBJS}
-	@echo [LD] $@
-	@${CC} ${LDFLAGS} $@.o ${STATIC} -o $@ ${LIBS} 
-
-${LIBRARY}: ${OBJS}
-	@echo [AR] ${OBJDIR}/$@/library.a
-	@$(AR) rcs ${OBJDIR}/$@/library.a ${OBJDIR}/$@/*.o 
-
-$(OBJDIR)/%.o: %.cc
-	@echo [CC] $@
-	@${CC} ${INCLUDE} ${CCFLAGS} -o $@ -c $< 
-	@${CC} ${INCLUDE} ${CCFLAGS} -MT '$@' -MM $< > ${OBJDIR}/$*.dep
-
-clean: build-teardown build-setup
-
 build-setup:
 	@echo SETUP $(OBJDIR)
-	@mkdir -p $(OBJDIR)
 	@mkdir -p $(OBJDIR)/core
 	@mkdir -p $(OBJDIR)/core/net
 	@mkdir -p $(OBJDIR)/core/fs
@@ -173,3 +51,6 @@ ubuntu-setup:
 build-teardown:
 	@echo CLEAN $(OBJDIR)
 	@rm -r -f $(OBJDIR)
+
+
+include MakefileRules
