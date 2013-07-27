@@ -11,7 +11,9 @@ SUBDIR += core/          \
           extentfs       \
           extentfs/test  \
 
-OBJDIR = $(PWD)/../build/libCore
+ifndef OBJDIR
+OBJDIR = $(PWD)/../build
+endif
 
 clean: build-teardown build-setup
 
@@ -19,9 +21,9 @@ libcore: all modules
 
 modules:
 	@echo '** Building modules **'
-	@make -C /lib/modules/$(shell uname -r)/build M=$(PWD)/core/kmod modules
+	@make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd)/core/kmod modules
 	@make INSTALL_MOD_PATH=$(OBJDIR) -C /lib/modules/$(shell uname -r)/build M=$(PWD)/core/kmod modules_install
-	@make -C /lib/modules/$(shell uname -r)/build M=$(PWD)/core/kmod clean
+	@make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd)/core/kmod clean
 
 build-setup:
 	@echo SETUP $(OBJDIR)
@@ -52,5 +54,6 @@ build-teardown:
 	@echo CLEAN $(OBJDIR)
 	@rm -r -f $(OBJDIR)
 
+.DEFAULT_GOAL := libcore
 
 include MakefileRules

@@ -88,7 +88,7 @@ AR = $(shell which ar)
 
 CCFLAGS += -Wall -std=c++11 -Werror -D__STDC_LIMIT_MACROS $(BUILD_CCFLAGS)
 LDFLAGS += -L$(OBJDIR)  -L/usr/lib
-INCLUDE += -I$(PWD) -Ipublic -I/usr/include/boost -I$(STDCPP)
+INCLUDE += -I. -Ipublic -I/usr/include/boost -I$(STDCPP)
 LIBS    += -lrt -lpthread  -lz -lboost_program_options
 
 ifndef OBJDIR
