@@ -1,6 +1,6 @@
-STDCPP = /usr/include/c++/4.6.3/
-
 include ${SUBDIR:%=%/Makefile}
+
+STDCPP = /usr/include/c++/4.6.3/
 
 #
 # LCOV=enable
@@ -113,15 +113,23 @@ lib: ${OBJS} $(LIBRARY)
 exe: $(TOBJ) $(TEXE)
 
 ${TEXE}: ${STATIC} ${TOBJS}
-	@echo [LD] $@
+	@echo '<LD>' $@ $(ARDIR)
+ifdef ARDIR
+	@${CC} ${LDFLAGS} $@.o ${STATIC} `find $(ARDIR)/*.a` -o $@ ${LIBS}
+else
 	@${CC} ${LDFLAGS} $@.o ${STATIC} -o $@ ${LIBS} 
+endif
 
 ${LIBRARY}: ${OBJS}
-	@echo [AR] ${OBJDIR}/$@/library.a
-	@$(AR) rcs ${OBJDIR}/$@/library.a ${OBJDIR}/$@/*.o 
+	@echo '<AR>' ${OBJDIR}/$@/library.a
+	@$(AR) rcs ${OBJDIR}/$@/library.a ${OBJDIR}/$@/*.o
+ifdef ARDIR
+	@echo '<CP> $(OBJDIR)/$@/library.a => $(ARDIR)/$(notdir $@.a)'
+	@cp $(OBJDIR)/$@/library.a $(ARDIR)/$(notdir $@).a
+endif
 
 $(OBJDIR)/%.o: %.cc
-	@echo [CC] $@
+	@echo '<CC>' $@
 	@${CC} ${INCLUDE} ${CCFLAGS} -o $@ -c $< 
 	@${CC} ${INCLUDE} ${CCFLAGS} -MT '$@' -MM $< > ${OBJDIR}/$*.dep
 
