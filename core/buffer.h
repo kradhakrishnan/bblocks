@@ -41,11 +41,11 @@ public:
 				size);
 	}
 
-	IOBuffer() : size_(0), off_(0)	    {}
-	virtual ~IOBuffer()		    {}
+	IOBuffer() : size_(0), off_(0) {}
+	virtual ~IOBuffer() {}
 
-	uint8_t * operator->()	    { return data_.get() + off_;    }
-	operator bool() const	    { return data_.get();	    }
+	uint8_t * operator->() { return data_.get() + off_; }
+	operator bool() const { return data_.get(); }
 
 	uint8_t * Ptr()
 	{
@@ -103,49 +103,24 @@ public:
 		memcpy(data_.get(), (uint8_t *) &t, sizeof(T));
 	}
 
-protected:
-
-	IOBuffer(const boost::shared_ptr<uint8_t> & data, const size_t size,
-	         const size_t off = 0)
-		: data_(data), size_(size), off_(off)
-	{
-	}
-
-	boost::shared_ptr<uint8_t> data_;
-	size_t size_;
-	size_t off_;
-};
-
-// .............................................................. NetBuffer ....
-
-/**
- * @class NetBuffer
- */
-class NetBuffer : public IOBuffer
-{
-public:
-
-	virtual ~NetBuffer() {}
-
-	static NetBuffer Alloc(const size_t size)
-	{
-		void * ptr;
-		int status = posix_memalign(&ptr, 512, size);
-		INVARIANT(status != -1);
-		return NetBuffer(boost::shared_ptr<uint8_t>((uint8_t *) ptr,
-							    IOBuffer::Dalloc()),
-				 size);
-	}
-
 	template<class T>
-	void Update(const T & t, const size_t pos)
+	void Update(const T & t, size_t & pos)
 	{
 		INVARIANT(sizeof(T) <= (size_ - pos));
 		memcpy(data_.get() + off_ + pos, (uint8_t *) &t, sizeof(T));
+
+		pos += sizeof(T);
 	}
 
 	template<class T>
-	void UpdateInt(const T & t, size_t pos)
+	void Update(const T & t, const size_t & pos)
+	{
+		size_t tmp = pos;
+		Update(t, tmp);
+	}
+
+	template<class T>
+	void UpdateInt(const T & t, size_t & pos)
 	{
 		INVARIANT(sizeof(T) % 2 == 0);
 		INVARIANT(sizeof(T) <= (size_ - pos));
@@ -160,37 +135,30 @@ public:
 	}
 
 	template<class T>
-	void Append(const T & t)
+	void UpdateInt(const T & t, const size_t & pos)
 	{
-		Update(t, wpos_);
-		wpos_ += sizeof(T);
+		size_t tmp = pos;
+		UpdateInt(t, tmp);
 	}
 
 	template<class T>
-	void AppendInt(const T & t)
+	void Read(T & t, size_t & pos) const
 	{
-		UpdateInt(t, wpos_);
-		wpos_ += sizeof(T);
+		INVARIANT(pos + sizeof(T) <= size_);
+
+		memcpy(&t, data_.get() + off_ + pos, sizeof(T));
+		pos += sizeof(T);
 	}
 
 	template<class T>
-	void Read(T & t) const
+	void Read(T & t, const size_t & pos) const
 	{
-		INVARIANT(rpos_ + sizeof(T) <= size_);
-
-		memcpy(&t, data_.get() + off_ + rpos_, sizeof(T));
-		rpos_ += sizeof(T);
+		size_t tmp = pos;
+		Read(t, tmp);
 	}
 
 	template<class T>
-	void ReadInt(T & t)
-	{
-		ReadInt(t, rpos_);
-		rpos_ += sizeof(T);
-	}
-
-	template<class T>
-	void ReadInt(T & t, size_t pos)
+	void ReadInt(T & t, size_t & pos)
 	{
 		INVARIANT(sizeof(t) % 2 == 0);
 
@@ -202,26 +170,24 @@ public:
 		}
 	}
 
-	void reset_pos()
+	template<class T>
+	void ReadInt(T & t, const size_t & pos)
 	{
-		wpos_ = 0;
-		rpos_ = 0;
+		size_t tmp = pos;
+		ReadInt(t, tmp);
 	}
 
 protected:
 
-	NetBuffer(const boost::shared_ptr<uint8_t> & data, const size_t size,
-		  const size_t off = 0)
-		: IOBuffer(data, size, off), wpos_(0), rpos_(0)
+	IOBuffer(const boost::shared_ptr<uint8_t> & data, const size_t size,
+	         const size_t off = 0)
+		: data_(data), size_(size), off_(off)
 	{
 	}
 
-private:
-
-	NetBuffer();
-
-	size_t wpos_;
-	mutable size_t rpos_;
+	boost::shared_ptr<uint8_t> data_;
+	size_t size_;
+	size_t off_;
 };
 
 }

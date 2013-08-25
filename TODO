@@ -6,8 +6,11 @@
 
 /core/net
 
-- Move TCP implementations to use CHandler
 - Implement UDP and ICMP processors
+- RPC
+    - Implement TCP transport
+    - Implement multipath for TCP Transport
+    - Implement RPC Server and client
 
 /core/fs
 
@@ -21,6 +24,3 @@
 - Framework for logevity test
 - Framework for sustained performance
 
-/core/fs/logfs
-
-- Start laying the disklayout 

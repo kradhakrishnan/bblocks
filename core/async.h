@@ -314,7 +314,9 @@ public:                                                                     \
                                                                             \
 template<TDEF(T,n)>                                                         \
 using CHandler##TSUFFIX = CompletionHandler##TSUFFIX<TENUM(T,n)>;           \
-                                                                            \
+template<TDEF(T,n)>                                                         \
+using Fn##TSUFFIX = CompletionHandler##TSUFFIX<TENUM(T,n)>;		    \
+									    \
 template<class _OBJ_, TDEF(T,n)>                                            \
 CompletionHandler##TSUFFIX<TENUM(T,n)>                                      \
 intr_fn(_OBJ_ * h, void (_OBJ_::*fn)(TENUM(T,n)))                           \

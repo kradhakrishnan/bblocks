@@ -1,7 +1,7 @@
 #include <iostream>
 
 #include "core/test/unit-test.h"
-#include "core/net/rpc.h"
+#include "core/net/rpc-data.h"
 
 using namespace std;
 using namespace dh_core;
@@ -18,21 +18,25 @@ struct TestPacket : RPCPacket
 		: RPCPacket(OPCODE), data_(data)
 	{}
 
-	virtual void Encode(NetBuffer & buf)
+	virtual void Encode(IOBuffer & buf)
 	{
 		INVARIANT(buf.Size() >= Size());
 
-		RPCPacket::Encode(buf);
-		data_.Encode(buf);
+		size_t pos = 0;
+
+		RPCPacket::Encode(buf, pos);
+		data_.Encode(buf, pos);
 		EncodePacketHash(buf);
 	}
 
-	virtual void Decode(NetBuffer & buf)
+	virtual void Decode(IOBuffer & buf)
 	{
 		INVARIANT(buf.Size() >= Size());
 
-		RPCPacket::Decode(buf);
-		data_.Decode(buf);
+		size_t pos = 0;
+
+		RPCPacket::Decode(buf, pos);
+		data_.Decode(buf, pos);
 		INVARIANT(IsPacketValid(buf));
 	}
 
@@ -50,11 +54,9 @@ test_rpcpacket()
 {
 	TestPacket data(9);
 
-	NetBuffer && buf = NetBuffer::Alloc(data.Size());
+	IOBuffer && buf = IOBuffer::Alloc(data.Size());
 
 	data.Encode(buf);
-
-	buf.reset_pos();
 
 	INFO(_log) << "opcode : " << (int) data.opcode_.Get()
 		   << " opver : " << (int) data.opver_.Get()
@@ -68,28 +70,28 @@ test_rpcpacket()
 
 struct Data : RPCData
 {
-	virtual void Encode(NetBuffer & buf)
+	virtual void Encode(IOBuffer & buf, size_t & pos)
 	{
-		i16_.Encode(buf);
-		i32_.Encode(buf);
-		i64_.Encode(buf);
-		str_.Encode(buf);
-		lu32_.Encode(buf);
-		lu64_.Encode(buf);
-		lstr_.Encode(buf);
-		raw_.Encode(buf);
+		i16_.Encode(buf, pos);
+		i32_.Encode(buf, pos);
+		i64_.Encode(buf, pos);
+		str_.Encode(buf, pos);
+		lu32_.Encode(buf, pos);
+		lu64_.Encode(buf, pos);
+		lstr_.Encode(buf, pos);
+		raw_.Encode(buf, pos);
 	}
 
-	virtual void Decode(NetBuffer & buf)
+	virtual void Decode(IOBuffer & buf, size_t & pos)
 	{
-		i16_.Decode(buf);
-		i32_.Decode(buf);
-		i64_.Decode(buf);
-		str_.Decode(buf);
-		lu32_.Decode(buf);
-		lu64_.Decode(buf);
-		lstr_.Decode(buf);
-		raw_.Decode(buf);
+		i16_.Decode(buf, pos);
+		i32_.Decode(buf, pos);
+		i64_.Decode(buf, pos);
+		str_.Decode(buf, pos);
+		lu32_.Decode(buf, pos);
+		lu64_.Decode(buf, pos);
+		lstr_.Decode(buf, pos);
+		raw_.Decode(buf, pos);
 	}
 
 	virtual size_t Size() const
@@ -114,10 +116,11 @@ struct Data : RPCData
 	Raw<10> raw_;
 };
 
-bool
+static void
 test_datatypes()
 {
 	Data data;
+	size_t pos;
 
 	List<UInt32> lu32({ UInt32(2), UInt32(4), UInt32(16) });
 	List<UInt64> lu64({ UInt64(32), UInt64(64), UInt64(128) });
@@ -136,13 +139,15 @@ test_datatypes()
 
 	INFO(_log) << "Encoding. size=" << data.Size();
 
-	NetBuffer buf = NetBuffer::Alloc(data.Size());
-	data.Encode(buf);
+	IOBuffer buf = IOBuffer::Alloc(data.Size());
+	pos = 0;
+	data.Encode(buf, pos);
 
 	INFO(_log) << "Decoding";
 
 	Data data2;
-	data2.Decode(buf);
+	pos = 0;
+	data2.Decode(buf, pos);
 
 	INFO(_log) << "Checking data";
 
@@ -154,8 +159,6 @@ test_datatypes()
 	INVARIANT(data.lu64_ == lu64);
 	INVARIANT(data.lstr_ == lstr);
 	INVARIANT(data.raw_ == rawdata);
-
-	return true;
 }
 
 //.................................................................... main ....

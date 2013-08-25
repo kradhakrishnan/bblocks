@@ -14,8 +14,8 @@ namespace dh_core
  */
 struct RPCData
 {
-	virtual void Encode(NetBuffer & buf) = 0;
-	virtual void Decode(NetBuffer & buf) = 0;
+	virtual void Encode(IOBuffer & buf, size_t & pos) = 0;
+	virtual void Decode(IOBuffer & buf, size_t & pos) = 0;
 	virtual size_t Size() const = 0;
 };
 
@@ -29,14 +29,14 @@ struct Int : RPCData
 {
 	explicit Int(const T v = 0) : v_(v) {}
 
-	virtual void Encode(NetBuffer & buf)
+	virtual void Encode(IOBuffer & buf, size_t & pos)
 	{
-		buf.AppendInt(v_);
+		buf.UpdateInt(v_, pos);
 	}
 
-	virtual void Decode(NetBuffer & buf)
+	virtual void Decode(IOBuffer & buf, size_t & pos)
 	{
-		buf.ReadInt(v_);
+		buf.ReadInt(v_, pos);
 	}
 
 	bool operator==(const Int<T> & rhs) const { return v_ == rhs.v_; }
@@ -53,14 +53,14 @@ struct Int<uint8_t> : RPCData
 {
 	explicit Int<uint8_t>(const uint8_t v = 0) : v_(v) {}
 
-	virtual void Encode(NetBuffer & buf)
+	virtual void Encode(IOBuffer & buf, size_t & pos)
 	{
-		buf.Append(v_);
+		buf.Update(v_, pos);
 	}
 
-	virtual void Decode(NetBuffer & buf)
+	virtual void Decode(IOBuffer & buf, size_t & pos)
 	{
-		buf.Read(v_);
+		buf.Read(v_, pos);
 	}
 
 	bool operator==(const Int<uint8_t> & rhs) const { return v_ == rhs.v_; }
@@ -89,14 +89,14 @@ struct Raw : RPCData
 			memset(v_, /*ch=*/ 0, SIZE);
 	}
 
-	virtual void Encode(NetBuffer & buf)
+	virtual void Encode(IOBuffer & buf, size_t & pos)
 	{
-		buf.Append(v_);
+		buf.Update(v_, pos);
 	}
 
-	virtual void Decode(NetBuffer & buf)
+	virtual void Decode(IOBuffer & buf, size_t & pos)
 	{
-		buf.Read(v_);
+		buf.Read(v_, pos);
 	}
 
 	virtual size_t Size() const { return sizeof(v_); }
@@ -120,8 +120,8 @@ struct String : RPCData
 {
 	explicit String(const std::string & v = std::string()) : v_(v) {}
 
-	virtual void Encode(NetBuffer & buf);
-	virtual void Decode(NetBuffer & buf);
+	virtual void Encode(IOBuffer & buf, size_t & pos);
+	virtual void Decode(IOBuffer & buf, size_t & pos);
 
 	virtual size_t Size() const 
 	{
@@ -147,24 +147,24 @@ struct List : RPCData
 	List(const std::vector<T> & v = std::vector<T>()) : v_(v) {}
 
 	void
-	Encode(NetBuffer & buf)
+	Encode(IOBuffer & buf, size_t & pos)
 	{
-		buf.AppendInt<uint32_t>(v_.size());
+		buf.UpdateInt<uint32_t>(v_.size(), pos);
 		for (size_t i = 0; i < v_.size(); ++i) {
-			v_[i].Encode(buf);
+			v_[i].Encode(buf, pos);
 		}
 	}
 
 	void
-	Decode(NetBuffer & buf)
+	Decode(IOBuffer & buf, size_t & pos)
 	{
 		uint32_t size;
-		buf.ReadInt(size);
+		buf.ReadInt(size, pos);
 
 		v_.resize(size);
 
 		for (size_t i = 0; i < size; ++i) {
-			v_[i].Decode(buf);
+			v_[i].Decode(buf, pos);
 		}
 	}
 
@@ -197,25 +197,29 @@ struct RPCPacket : RPCData
 		: opcode_(opcode), opver_(opver), size_(Size()), cksum_(0)
 	{}
 
-	virtual void Encode(NetBuffer & buf)
+	virtual void Encode(IOBuffer & buf, size_t & pos)
 	{
 		INVARIANT(buf.Size() >= Size());
 
-		opcode_.Encode(buf);
-		opver_.Encode(buf);
-		size_.Encode(buf);
-		cksum_.Encode(buf);
+		opcode_.Encode(buf, pos);
+		opver_.Encode(buf, pos);
+		size_.Encode(buf, pos);
+		cksum_.Encode(buf, pos);
 	}
 
-	virtual void Decode(NetBuffer & buf)
+	virtual void Encode(IOBuffer & buf) = 0;
+
+	virtual void Decode(IOBuffer & buf, size_t & pos)
 	{
 		INVARIANT(buf.Size() >= Size());
 
-		opcode_.Decode(buf);
-		opver_.Decode(buf);
-		size_.Decode(buf);
-		cksum_.Decode(buf);
+		opcode_.Decode(buf, pos);
+		opver_.Decode(buf, pos);
+		size_.Decode(buf, pos);
+		cksum_.Decode(buf, pos);
 	}
+
+	virtual void Decode(IOBuffer & buf) = 0;
 
 	virtual size_t Size() const
 	{
@@ -225,23 +229,21 @@ struct RPCPacket : RPCData
 			+ cksum_.Size();
 	}
 
-	void EncodePacketHash(NetBuffer & buf)
+	void EncodePacketHash(IOBuffer & buf)
 	{
 		INVARIANT(cksum_.Get() == 0);
 
-		const size_t off = opcode_.Size() + opver_.Size()
-				   + size_.Size();
+		const size_t off = opcode_.Size() + opver_.Size() + size_.Size();
 
 		cksum_.Set(Adler32::Calc(buf.Ptr(), Size()));
 		buf.UpdateInt(cksum_.Get(), off);
 	}
 
-	bool IsPacketValid(NetBuffer & buf)
+	bool IsPacketValid(IOBuffer & buf)
 	{
 		INVARIANT(buf.Size() >= Size());
 
-		const size_t off = opcode_.Size() + opver_.Size() 
-				   + size_.Size();
+		const size_t off = opcode_.Size() + opver_.Size() + size_.Size();
 
 		/* 
 		 * Fetch checksum from buffer
