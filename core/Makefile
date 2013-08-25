@@ -15,5 +15,6 @@ TARGET +=
 #
 SRCS += core/thread-pool.cc     \
         core/net/epoll.cc       \
+	core/net/rpc.cc		\
         core/net/tcp-linux.cc   \
         core/fs/aio-linux.cc    \

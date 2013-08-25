@@ -22,33 +22,34 @@ typedef int status_t;
 
 enum
 {
-    OK = 0,
-    FAIL = -1
+	OK = 0,
+	FAIL = -1
 };
-
-template<class T> using SharedPtr = std::tr1::shared_ptr<T>;
 
 #if defined(__i386__)
 static inline unsigned long long rdtsc(void)
 {
-  unsigned long long int x;
-     __asm__ volatile (".byte 0x0f, 0x31" : "=A" (x));
-     return x;
+	unsigned long long int x;
+	__asm__ volatile (".byte 0x0f, 0x31" : "=A" (x));
+	return x;
 }
 #elif defined(__x86_64__)
 static inline unsigned long long rdtsc(void)
 {
-  unsigned hi, lo;
-  __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
-  return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
+	unsigned hi, lo;
+	__asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+	return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
 }
 #endif
+
+
+template<class T> using SharedPtr = std::tr1::shared_ptr<T>;
 
 template<class T>
 SharedPtr<T>
 MakeSharedPtr(T * t)
 {
-    return SharedPtr<T>(t);
+	return SharedPtr<T>(t);
 }
 
 // ................................................................... Time ....
@@ -58,14 +59,14 @@ class Time
 {
 public:
 
-    static uint64_t NowInMilliSec()
-    {
-        timeval tv;
-        int status = gettimeofday(&tv, /*tz=*/ NULL);
-        (void) status;
-        ASSERT(!status);
-        return tv.tv_sec * 1000 + (tv.tv_usec / 1000);
-    }
+	static uint64_t NowInMilliSec()
+	{
+		timeval tv;
+		int status = gettimeofday(&tv, /*tz=*/ NULL);
+		(void) status;
+		ASSERT(!status);
+		return tv.tv_sec * 1000 + (tv.tv_usec / 1000);
+	}
 };
 
 // ................................................................ Adler32 ....
@@ -77,34 +78,30 @@ class Adler32
 {
 public:
 
-    Adler32()
-        : cksum_(0)
-    {
-    }
+	static uint32_t Calc(uint8_t * data, const uint32_t size)
+	{
+		return adler32(/*cksum=*/ 0, data, size);
+	}
 
-    void Update(uint8_t * data, const uint32_t size)
-    {
-        cksum_ = adler32(cksum_, data, size);
-    }
+	Adler32() : cksum_(0) {}
 
-    static uint32_t Calc(uint8_t * data, const uint32_t size)
-    {
-        return adler32(/*cksum=*/ 0, data, size);
-    }
+	void Update(uint8_t * data, const uint32_t size)
+	{
+		cksum_ = adler32(cksum_, data, size);
+	}
 
-    uint32_t Hash() const
-    {
-        return cksum_;
-    }
+	template<class T>
+	void Update(const T & t)
+	{
+		cksum_ = adler32(cksum_, (uint8_t *) &t, sizeof(T));
+	}
 
-    void Reset()
-    {
-        cksum_ = 0;
-    }
+	uint32_t Hash() const	{ return cksum_;    }
+	void Reset()		{ cksum_ = 0;	    }
 
 private:
 
-    uint32_t cksum_;
+	uint32_t cksum_;
 };
 
 // ........................................................ StateMachine<T> ....
@@ -117,54 +114,51 @@ private:
 template<class T>
 class StateMachine
 {
-    public:
+public:
 
-    StateMachine(const T & state)
-        : state_(state)
-    {
-    }
+	StateMachine(const T & state) : state_(state) {}
 
-    bool MoveTo(const T & to, const unsigned int & from)
-    {
-        ASSERT(from);
+	bool MoveTo(const T & to, const unsigned int & from)
+	{
+		ASSERT(from);
 
-        if (state_ & from) {
-            state_ = to;
-            return true;
-        }
+		if (state_ & from) {
+			state_ = to;
+			return true;
+		}
 
-        return false;
-    }
+		return false;
+	}
 
-    T MoveTo(const T & to)
-    {
-        ASSERT(!state_);
-        ASSERT(to);
+	T MoveTo(const T & to)
+	{
+		ASSERT(!state_);
+		ASSERT(to);
 
-        T old = state_;
-        state_ = to;
-        return old;
-    }
+		T old = state_;
+		state_ = to;
+		return old;
+	}
 
-    bool Is(const unsigned & states) const
-    {
-        ASSERT(states);
-        return state_ & states;
-    }
+	bool Is(const unsigned & states) const
+	{
+		ASSERT(states);
+		return state_ & states;
+	}
 
-    bool operator==(const T & rhs)
-    {
-        return state_ == rhs;
-    }
+	bool operator==(const T & rhs)
+	{
+		return state_ == rhs;
+	}
 
-    const T & state() const
-    {
-        return state_;
-    }
+	const T & state() const
+	{
+		return state_;
+	}
 
-    private:
+private:
 
-    T state_;
+	T state_;
 };
 
 // ........................................................... Singleton<T> ....
@@ -180,30 +174,30 @@ class StateMachine
 template<class T>
 class Singleton
 {
-    public:
+public:
 
-    static void Init()
-    {
-        ASSERT(!Singleton<T>::instance_);
-        Singleton<T>::instance_ = new T();
-    }
+	static void Init()
+	{
+		ASSERT(!Singleton<T>::instance_);
+		Singleton<T>::instance_ = new T();
+	}
 
-    static T & Instance()
-    {
-        ASSERT(Singleton<T>::instance_);
-        return *instance_;
-    }
+	static T & Instance()
+	{
+		ASSERT(Singleton<T>::instance_);
+		return *instance_;
+	}
 
-    static void Destroy()
-    {
-        ASSERT(Singleton<T>::instance_);
-        delete Singleton<T>::instance_;
-        Singleton<T>::instance_ = NULL;
-    }
+	static void Destroy()
+	{
+		ASSERT(Singleton<T>::instance_);
+		delete Singleton<T>::instance_;
+		Singleton<T>::instance_ = NULL;
+	}
 
-    private:
+private:
 
-    static T * instance_;
+	static T * instance_;
 };
 
 template<class T>
@@ -216,57 +210,57 @@ class BoundedQ
 {
 public:
 
-    BoundedQ(const size_t capacity)
-    {
-        q_.reserve(capacity);
-    }
+	BoundedQ(const size_t capacity)
+	{
+		q_.reserve(capacity);
+	}
 
-    void Push(const T & t)
-    {
-        q_.push_back(t);
-    }
+	void Push(const T & t)
+	{
+		q_.push_back(t);
+	}
 
-    bool IsEmpty() const
-    {
-        return q_.empty();
-    }
+	bool IsEmpty() const
+	{
+		return q_.empty();
+	}
 
-    size_t Size() const
-    {
-        return q_.size();
-    }
+	size_t Size() const
+	{
+		return q_.size();
+	}
 
-    T Pop()
-    {
-        T t = q_.front();
-        // pop front
-        q_.erase(q_.begin());
-        return t;
-    }
+	T Pop()
+	{
+		T t = q_.front();
+		// pop front
+		q_.erase(q_.begin());
+		return t;
+	}
 
-    T & Front()
-    {
-        return q_.front();
-    }
+	T & Front()
+	{
+		return q_.front();
+	}
 
-    typename std::vector<T>::iterator Begin()
-    {
-        return q_.begin();
-    }
+	typename std::vector<T>::iterator Begin()
+	{
+		return q_.begin();
+	}
 
-    typename std::vector<T>::iterator End()
-    {
-        return q_.end();
-    }
+	typename std::vector<T>::iterator End()
+	{
+		return q_.end();
+	}
 
-    void Clear()
-    {
-        q_.clear();
-    }
+	void Clear()
+	{
+		q_.clear();
+	}
 
 private:
 
-    std::vector<T> q_;
+	std::vector<T> q_;
 };
 
 };

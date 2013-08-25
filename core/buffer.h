@@ -3,133 +3,225 @@
 
 #include <malloc.h>
 #include <boost/shared_ptr.hpp>
+#include <arpa/inet.h>
 
 #include "core/assert.h"
 #include "core/atomic.h"
 
 namespace dh_core {
 
-class IOBuffer;
-
 //................................................................. IOBuffer ...
 
 /**
- *
+ * @class IOBuffer
  */
 class IOBuffer
 {
 public:
 
-    struct Dalloc
-    {
-        void operator()(uint8_t * data)
-        {
-            ::free(data);
-        }
-    };
+	struct Dalloc
+	{
+		void operator()(uint8_t * data)
+		{
+			::free(data);
+		}
+	};
 
-    //.... static methods ....//
+	/*
+	 * static methods
+	 */
 
-    static IOBuffer Alloc(const size_t size)
-    {
-        void * ptr;
-        int status = posix_memalign(&ptr, 512, size);
-        INVARIANT(status != -1);
-        return IOBuffer(boost::shared_ptr<uint8_t>((uint8_t *) ptr, Dalloc()),
-                        size);
-    }
+	static IOBuffer Alloc(const size_t size)
+	{
+		void * ptr;
+		int status = posix_memalign(&ptr, 512, size);
+		INVARIANT(status != -1);
+		return IOBuffer(boost::shared_ptr<uint8_t>((uint8_t *) ptr,
+							   Dalloc()),
+				size);
+	}
 
-    //.... create/destroy ....//
+	IOBuffer() : size_(0), off_(0)	    {}
+	virtual ~IOBuffer()		    {}
 
-    IOBuffer() : size_(0), off_(0) {}
+	uint8_t * operator->()	    { return data_.get() + off_;    }
+	operator bool() const	    { return data_.get();	    }
 
-    ~IOBuffer()
-    {
-    }
+	uint8_t * Ptr()
+	{
+		ASSERT(data_.get());
+		return data_.get();
+	}
 
-    //.... operators ....//
+	size_t Size() const
+	{
+		return size_;
+	}
 
-    uint8_t * operator->()
-    {
-        return data_.get() + off_;
-    }
+	void Reset()
+	{
+		data_.reset();
+		size_ = off_ = 0;
+	}
 
-    operator bool() const
-    {
-        return data_.get();
-    }
+	void Trash()
+	{
+		data_.reset();
+	}
 
-    //.... member fns ....//
+	IOBuffer Cut(const size_t size)
+	{
+		ASSERT(size < size_);
 
-    uint8_t * Ptr()
-    {
-        ASSERT(data_.get());
-        return data_.get();
-    }
+		off_ += size;
+		size_ -= size;
 
-    size_t Size() const
-    {
-        return size_;
-    }
+		return IOBuffer(data_, size, off_);
+	}
 
-    void Reset()
-    {
-        data_.reset();
-        size_ = off_ = 0;
-    }
+	void FillRandom()
+	{
+		for (uint32_t i = 0; i < size_; ++i) {
+			data_.get()[off_ + i] = rand() % 255;
+		}
+	}
 
-    void Trash()
-    {
-        data_.reset();
-    }
+	void Fill(const uint8_t ch = 0)
+	{
+		memset(data_.get() + off_, ch, size_);
+	}
 
-    IOBuffer Cut(const size_t size)
-    {
-        ASSERT(size < size_);
+	void Copy(uint8_t * src, const size_t size)
+	{
+		memcpy(data_.get(), src, size);
+	}
 
-        off_ += size;
-        size_ -= size;
+	template<class T>
+	void Copy(const T & t)
+	{
+		INVARIANT(sizeof(t) <= size_);
+		memcpy(data_.get(), (uint8_t *) &t, sizeof(T));
+	}
 
-        return IOBuffer(data_, size, off_);
-    }
+protected:
 
-    void FillRandom()
-    {
-        for (uint32_t i = 0; i < size_; ++i) {
-            data_.get()[off_ + i] = rand() % 255;
-        }
-    }
+	IOBuffer(const boost::shared_ptr<uint8_t> & data, const size_t size,
+	         const size_t off = 0)
+		: data_(data), size_(size), off_(off)
+	{
+	}
 
-    void Fill(const uint8_t ch = 0)
-    {
-        memset(data_.get() + off_, ch, size_);
-    }
+	boost::shared_ptr<uint8_t> data_;
+	size_t size_;
+	size_t off_;
+};
 
-    void Copy(uint8_t * src, const size_t size)
-    {
-        memcpy(data_.get(), src, size);
-    }
+// .............................................................. NetBuffer ....
 
-    template<class T>
-    void Copy(const T & t)
-    {
-        INVARIANT(sizeof(t) <= size_);
-        memcpy(data_.get(), (uint8_t *) &t, sizeof(T));
-    }
+/**
+ * @class NetBuffer
+ */
+class NetBuffer : public IOBuffer
+{
+public:
+
+	virtual ~NetBuffer() {}
+
+	static NetBuffer Alloc(const size_t size)
+	{
+		void * ptr;
+		int status = posix_memalign(&ptr, 512, size);
+		INVARIANT(status != -1);
+		return NetBuffer(boost::shared_ptr<uint8_t>((uint8_t *) ptr,
+							    IOBuffer::Dalloc()),
+				 size);
+	}
+
+	template<class T>
+	void Update(const T & t, const size_t pos)
+	{
+		INVARIANT(sizeof(T) <= (size_ - pos));
+		memcpy(data_.get() + off_ + pos, (uint8_t *) &t, sizeof(T));
+	}
+
+	template<class T>
+	void UpdateInt(const T & t, size_t pos)
+	{
+		INVARIANT(sizeof(T) % 2 == 0);
+		INVARIANT(sizeof(T) <= (size_ - pos));
+
+		T v = t;
+		for (uint32_t i = 0; i < (sizeof(T) / 2); ++i) {
+			uint16_t * p = (uint16_t *)(data_.get() + off_ + pos);
+			*p = htons((uint16_t) v);
+			v = v >> 16;
+			pos += 2;
+		}
+	}
+
+	template<class T>
+	void Append(const T & t)
+	{
+		Update(t, wpos_);
+		wpos_ += sizeof(T);
+	}
+
+	template<class T>
+	void AppendInt(const T & t)
+	{
+		UpdateInt(t, wpos_);
+		wpos_ += sizeof(T);
+	}
+
+	template<class T>
+	void Read(T & t) const
+	{
+		INVARIANT(rpos_ + sizeof(T) <= size_);
+
+		memcpy(&t, data_.get() + off_ + rpos_, sizeof(T));
+		rpos_ += sizeof(T);
+	}
+
+	template<class T>
+	void ReadInt(T & t)
+	{
+		ReadInt(t, rpos_);
+		rpos_ += sizeof(T);
+	}
+
+	template<class T>
+	void ReadInt(T & t, size_t pos)
+	{
+		INVARIANT(sizeof(t) % 2 == 0);
+
+		t = 0;
+		for (size_t i = 0; i < (sizeof(T) / 2); ++i) {
+			uint16_t * p = (uint16_t *)(data_.get() + off_ + pos);
+			t += ntohs(*p) << (i * 16);
+			pos += 2;
+		}
+	}
+
+	void reset_pos()
+	{
+		wpos_ = 0;
+		rpos_ = 0;
+	}
+
+protected:
+
+	NetBuffer(const boost::shared_ptr<uint8_t> & data, const size_t size,
+		  const size_t off = 0)
+		: IOBuffer(data, size, off), wpos_(0), rpos_(0)
+	{
+	}
 
 private:
 
-    IOBuffer(const boost::shared_ptr<uint8_t> & data, const size_t size,
-             const size_t off = 0)
-        : data_(data), size_(size), off_(off)
-    {
-    }
+	NetBuffer();
 
-    //.... member variables ....//
-
-    boost::shared_ptr<uint8_t> data_;
-    size_t size_;
-    size_t off_;
+	size_t wpos_;
+	mutable size_t rpos_;
 };
 
 }

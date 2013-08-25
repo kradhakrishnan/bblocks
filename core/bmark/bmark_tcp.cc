@@ -18,15 +18,13 @@ static LogPath _log("/bmark_tcp");
 //
 struct ChStats
 {
-    ChStats()
-        : start_ms_(NowInMilliSec())
-        , bytes_read_(0)
-        , bytes_written_(0)
-    {}
+	ChStats()
+		: start_ms_(NowInMilliSec()), bytes_read_(0), bytes_written_(0)
+	{}
 
-    uint64_t start_ms_;
-    uint64_t bytes_read_;
-    uint64_t bytes_written_;
+	uint64_t start_ms_;
+	uint64_t bytes_read_;
+	uint64_t bytes_written_;
 };
 
 //...................................................... TCPServerBenchmark ....
@@ -40,115 +38,122 @@ class TCPServerBenchmark : public CompletionHandle
 {
 public:
 
-    typedef TCPServerBenchmark This;
+	typedef TCPServerBenchmark This;
 
-    /* .... create/destroy .... */
+	/*
+	 * create/destroy
+	 */
+	TCPServerBenchmark(const size_t iosize)
+		: lock_("/server")
+		, epoll_("/server")
+		, server_(epoll_)
+		, buf_(IOBuffer::Alloc(iosize))
+		, rcqueue_(this, &This::ReadDone)
+	{}
 
-    TCPServerBenchmark(const size_t iosize)
-        : lock_("/server")
-        , epoll_("/server")
-        , server_(epoll_)
-        , buf_(IOBuffer::Alloc(iosize))
-        , rcqueue_(this, &This::ReadDone)
-    {}
+	virtual ~TCPServerBenchmark() {}
 
-    virtual ~TCPServerBenchmark() {}
+	//
+	// Start listening
+	//
+	void Start(sockaddr_in addr)
+	{
+		INFO(_log) << "Starting to listen";
 
-    //
-    // Start listening
-    //
-    void Start(sockaddr_in addr)
-    {
-        INFO(_log) << "Starting to listen";
-        auto fn = async_fn(this, &This::HandleServerConn);
-        const bool ok = server_.Listen(addr, fn);
-        INVARIANT(ok);
-    }
+		auto fn = async_fn(this, &This::HandleServerConn);
+		const bool ok = server_.Listen(addr, fn);
+		INVARIANT(ok);
+	}
 
-    /* .... Completion handlers .... */
+	/*
+	 * Completion handlers
+	 */
 
-    //
-    // Connection established callback
-    //
-    __completion_handler__
-    virtual void HandleServerConn(TCPServer *, int status, TCPChannel * ch)
-    {
-        INFO(_log) << "Got ch " << ch;
+	//
+	// Connection established callback
+	//
+	__completion_handler__
+	virtual void HandleServerConn(TCPServer *, int status, TCPChannel * ch)
+	{
+		INFO(_log) << "Got ch " << ch;
 
-        //
-        // Create channel stat node
-        //
-        {
-            Guard _(&lock_);
-            chstats_.insert(make_pair(ch, ChStats()));
-        }
+		/*
+		 * Create channel stat node
+		 */
+		{
+		    Guard _(&lock_);
+		    chstats_.insert(make_pair(ch, ChStats()));
+		}
 
-        ch->RegisterHandle(this);
-        ThreadPool::Schedule(this, &This::ReadUntilBlocked, ch);
-    }
+		ch->RegisterHandle(this);
+		ThreadPool::Schedule(this, &This::ReadUntilBlocked, ch);
+	}
 
-    //
-    // Read data until blocked
-    //
-    void
-    ReadUntilBlocked(TCPChannel * ch)
-    {
-        while (ch->Read(buf_, cqueue_fn(&rcqueue_))) {
-            UpdateStats(ch, buf_.Size());
+	//
+	// Read data until blocked
+	//
+	void ReadUntilBlocked(TCPChannel * ch)
+	{
+		while (ch->Read(buf_, cqueue_fn(&rcqueue_))) {
+			UpdateStats(ch, buf_.Size());
 
-            if (ThreadPool::ShouldYield()) {
-                ThreadPool::Schedule(this, &This::ReadUntilBlocked, ch);
-                return;
-            }
-        }
-    }
+			if (ThreadPool::ShouldYield()) {
+				ThreadPool::Schedule(this,
+					    &This::ReadUntilBlocked, ch);
+				return;
+			}
+		}
+	}
 
-    //
-    // Read completion callback
-    //
-    __completion_handler__
-    virtual void ReadDone(TCPChannel * ch, int status, IOBuffer)
-    {
-        //
-        // Update stats
-        //
-        ASSERT((size_t) status == buf_.Size());
-        UpdateStats(ch, buf_.Size());
+	//
+	// Read completion callback
+	//
+	__completion_handler__
+	virtual void ReadDone(TCPChannel * ch, int status, IOBuffer)
+	{
+		/*
+		 * Update stats
+		 */
+		ASSERT((size_t) status == buf_.Size());
+		UpdateStats(ch, buf_.Size());
 
-        ReadUntilBlocked(ch);
-    }
+		ReadUntilBlocked(ch);
+	}
 
 private:
 
-    void UpdateStats(TCPChannel * ch, const uint32_t size)
-    {
-        Guard _(&lock_);
+	void UpdateStats(TCPChannel * ch, const uint32_t size)
+	{
+		Guard _(&lock_);
 
-        auto it = chstats_.find(ch);
-        ASSERT(it != chstats_.end());
-        it->second.bytes_read_ += size;
+		auto it = chstats_.find(ch);
+		ASSERT(it != chstats_.end());
 
-        uint64_t elapsed_s = MS2SEC(Timer::Elapsed(it->second.start_ms_));
-        double MBps = ((it->second.bytes_read_ / (1024 * 1024)) 
-                                                  / (double) elapsed_s);
-        if (elapsed_s >= 5) {
-            INFO(_log) << "ch " << (uint64_t) it->first
-                       << " bytes " << it->second.bytes_read_
-                       << " MBps " << MBps;
+		it->second.bytes_read_ += size;
 
-            it->second.bytes_read_ = 0;
-            it->second.start_ms_ = NowInMilliSec();
-        }
-    }
+		uint64_t elapsed_s = MS2SEC(Timer::Elapsed(it->second.start_ms_));
+		if (elapsed_s >= 5) {
+			/* Print results on screen */
+			double MB = it->second.bytes_read_ / double(1024 * 1024);
+			double MBps = MB / (double) elapsed_s;
+				INFO(_log) << "ch " << (uint64_t) it->first
+					   << " bytes " << it->second.bytes_read_
+					   << " MBps " << MBps;
 
-    typedef map<TCPChannel *, ChStats> chstats_map_t;
+			/* Reset print timer */
+			it->second.bytes_read_ = 0;
+			it->second.start_ms_ = NowInMilliSec();
+		}
+	}
 
-    SpinMutex lock_;
-    Epoll epoll_;
-    TCPServer server_;
-    chstats_map_t chstats_;
-    IOBuffer buf_;
-    CQueue3<TCPChannel *, int, IOBuffer> rcqueue_;
+	typedef map<TCPChannel *, ChStats> chstats_map_t;
+
+	SpinMutex lock_;
+	Epoll epoll_;
+	TCPServer server_;
+	chstats_map_t chstats_;
+	IOBuffer buf_;
+	CQueue3<TCPChannel *, int, IOBuffer> rcqueue_;
 };
 
 //...................................................... TCPClientBenchmark ....
@@ -358,75 +363,81 @@ private:
 int
 main(int argc, char ** argv)
 {
-    string laddr = "0.0.0.0:0";
-    string raddr;
-    int iosize = 4 * 1024;
-    int nconn = 1;
-    int seconds = 60;
-    int ncpu = 8;
+	string laddr = "0.0.0.0:0";
+	string raddr;
+	int iosize = 4 * 1024;
+	int nconn = 1;
+	int seconds = 60;
+	int ncpu = 8;
 
-    po::options_description desc("Options:");
-    desc.add_options()
-        ("help", "Print usage")
-        ("server", "Start server component")
-        ("client", "Start client component")
-        ("laddr", po::value<string>(&laddr),
-         "Local address (Default INADDR_ANY:0)")
-        ("raddr", po::value<string>(&raddr), "Remote address")
-        ("iosize", po::value<int>(&iosize), "IO size in bytes")
-        ("conn", po::value<int>(&nconn), "Client connections (Default 1)")
-        ("s", po::value(&seconds), "Time in sec (only with -c)")
-        ("ncpu", po::value<int>(&ncpu), "CPUs to use");
+	po::options_description desc("Options:");
+	desc.add_options()
+		("help",    "Print usage")
+		("server",  "Start server component")
+		("client",  "Start client component")
+		("laddr",   po::value<string>(&laddr),
+			    "Local address (Default INADDR_ANY:0)")
+		("raddr",   po::value<string>(&raddr),
+			    "Remote address")
+		("iosize",  po::value<int>(&iosize),
+			    "IO size in bytes")
+		("conn",    po::value<int>(&nconn),
+			    "Client connections (Default 1)")
+		("s",	    po::value(&seconds),
+			    "Time in sec (only with -c)")
+		("ncpu",    po::value<int>(&ncpu),
+			    "CPUs to use");
 
+	po::variables_map parg;
 
-    po::variables_map parg;
+	try {
+		po::store(po::parse_command_line(argc, argv, desc), parg);
+		po::notify(parg);
+	} catch (...) {
+		cerr << "Error parsing command arguments." << endl;
+		cout << desc << endl;
+		return -1;
+	}
 
-    try {
-        po::store(po::parse_command_line(argc, argv, desc), parg);
-        po::notify(parg);
-    } catch (...) {
-        cerr << "Error parsing command arguments." << endl;
-        cout << desc << endl;
-        return -1;
-    }
+	const bool showusage = parg.count("help")
+			    || (parg.count("server") && parg.count("client"))
+			    || (!parg.count("server") && !parg.count("client"));
 
-    const bool showusage = parg.count("help")
-                           || (parg.count("server") && parg.count("client"))
-                           || (!parg.count("server") && !parg.count("client"));
+	if (showusage) {
+		cout << desc << endl;
+		return -1;
+	}
 
-    if (showusage) {
-        cout << desc << endl;
-        return -1;
-    }
+	const bool isClientBenchmark = parg.count("client");
 
-    bool isClientBenchmark = parg.count("client");
+	InitTestSetup();
+	ThreadPool::Start(ncpu);
 
-    InitTestSetup();
-    ThreadPool::Start(ncpu);
+	if (isClientBenchmark) {
+		INFO(_log) << "Running benchmark for"
+			   << " address " << laddr << "->" << raddr
+			   << " iosize " << iosize << " bytes"
+			   << " nconn " << nconn
+			   << " ncpu " << ncpu
+			   << " seconds " << seconds << " s";
 
-    if (isClientBenchmark) {
-        INFO(_log) << "Running benchmark for"
-                   << " address " << laddr << "->" << raddr
-                   << " iosize " << iosize << " bytes"
-                   << " nconn " << nconn
-                   << " ncpu " << ncpu
-                   << " seconds " << seconds << " s";
+		ASSERT(!raddr.empty());
+		SocketAddress addr = SocketAddress::GetAddr(laddr, raddr);
+		TCPClientBenchmark c(addr, iosize, nconn, seconds);
+		ThreadPool::Schedule(&c, &TCPClientBenchmark::Start,
+				    /*status=*/ 0);
+		ThreadPool::Wait();
+	} else {
+		INFO(_log) << "Running server at " << laddr
+			   << " ncpu " << ncpu;
 
-        ASSERT(!raddr.empty());
-        SocketAddress addr = SocketAddress::GetAddr(laddr, raddr);
-        TCPClientBenchmark c(addr, iosize, nconn, seconds);
-        ThreadPool::Schedule(&c, &TCPClientBenchmark::Start, /*status=*/ 0);
-        ThreadPool::Wait();
-    } else {
-        INFO(_log) << "Running server at " << laddr
-                   << " ncpu " << ncpu;
+		ASSERT(!laddr.empty());
+		TCPServerBenchmark s(iosize);
+		ThreadPool::Schedule(&s, &TCPServerBenchmark::Start,
+			             SocketAddress::GetAddr(laddr));
+		ThreadPool::Wait();
+	}
 
-        ASSERT(!laddr.empty());
-        TCPServerBenchmark s(iosize);
-        ThreadPool::Schedule(&s, &TCPServerBenchmark::Start,
-                             SocketAddress::GetAddr(laddr));
-        ThreadPool::Wait();
-    }
-
-    TeardownTestSetup();
+	TeardownTestSetup();
+	return 0;
 }
