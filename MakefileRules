@@ -88,7 +88,7 @@ AR = $(shell which ar)
 
 CCFLAGS += -Wall -std=c++11 -Werror -D__STDC_LIMIT_MACROS $(BUILD_CCFLAGS)
 LDFLAGS += -L$(OBJDIR)  -L/usr/lib
-INCLUDE += -I. -Ipublic -I/usr/include/boost -I$(STDCPP)
+INCLUDE += -I. -I./src -Ipublic -I/usr/include/boost -I$(STDCPP)
 LIBS    += -lrt -lpthread  -lz -lboost_program_options
 
 ifndef OBJDIR
@@ -113,7 +113,7 @@ lib: ${OBJS} $(LIBRARY)
 exe: $(TOBJ) $(TEXE)
 
 ${TEXE}: ${STATIC} ${TOBJS}
-	@echo '<LD>' $@ $(ARDIR)
+	@echo ' LD	' $@ $(ARDIR)
 ifdef ARDIR
 	@${CC} ${LDFLAGS} $@.o ${STATIC} `find $(ARDIR)/*.a` -o $@ ${LIBS}
 else
@@ -121,15 +121,15 @@ else
 endif
 
 ${LIBRARY}: ${OBJS}
-	@echo '<AR>' ${OBJDIR}/$@/library.a
+	@echo ' AR	' ${OBJDIR}/$@/library.a
 	@$(AR) rcs ${OBJDIR}/$@/library.a ${OBJDIR}/$@/*.o
 ifdef ARDIR
-	@echo '<CP> $(OBJDIR)/$@/library.a => $(ARDIR)/$(notdir $@.a)'
+	@echo ' CP	$(OBJDIR)/$@/library.a => $(ARDIR)/$(notdir $@.a)'
 	@cp $(OBJDIR)/$@/library.a $(ARDIR)/$(notdir $@).a
 endif
 
 $(OBJDIR)/%.o: %.cc
-	@echo '<CC>' $@
+	@echo ' CC	' $@
 	@${CC} ${INCLUDE} ${CCFLAGS} -o $@ -c $< 
 	@${CC} ${INCLUDE} ${CCFLAGS} -MT '$@' -MM $< > ${OBJDIR}/$*.dep
 
