@@ -1,7 +1,7 @@
 #
 # Libraries to build
 #
-LIBRARY +=  src		    \
+LIBRARY +=  src			    \
 	    src/net		    \
 	    src/fs		    \
 
@@ -13,9 +13,9 @@ TARGET +=
 #
 # .cc
 #
-SRCS += src/thread-pool.cc	    \
+SRCS += src/schd/thread-pool.cc	    \
 	src/net/epoll.cc	    \
 	src/net/rpc-data.cc	    \
-	src/net/rpc-transport.cc   \
+	src/net/rpc-transport.cc    \
 	src/net/tcp-linux.cc	    \
 	src/fs/aio-linux.cc	    \

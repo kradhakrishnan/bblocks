@@ -122,7 +122,7 @@ endif
 
 ${LIBRARY}: ${OBJS}
 	@echo ' AR	' ${OBJDIR}/$@/library.a
-	@$(AR) rcs ${OBJDIR}/$@/library.a ${OBJDIR}/$@/*.o
+	@$(AR) rcs ${OBJDIR}/$@/library.a $(shell find ${OBJDIR}/$@ | egrep "\.o$$")
 ifdef ARDIR
 	@echo ' CP	$(OBJDIR)/$@/library.a => $(ARDIR)/$(notdir $@.a)'
 	@cp $(OBJDIR)/$@/library.a $(ARDIR)/$(notdir $@).a

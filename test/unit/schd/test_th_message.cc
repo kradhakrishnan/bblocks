@@ -54,12 +54,6 @@ public:
         ThreadPool::Schedule(h_, &ICallee::Handle, val);
     }
 
-    void StartCallback(int val, Callback<int> * cb)
-    {
-        ASSERT(cb && !h_);
-        cb->ScheduleCallback(val);
-    }
-
     ICallee *h_;
 };
 
@@ -78,30 +72,12 @@ test_handler()
     ThreadPool::Wait();
 }
 
-
-void
-test_callback()
-{
-    ThreadPool::Start(/*maxCores=*/ 4);
-
-    Callee callee;
-    Caller caller;
-    for (unsigned int i = 0; i < 100; ++i) {
-        ThreadPool::Schedule(&caller, &Caller::StartCallback,
-                            /*val=*/ (int) 0xfeaf,
-                            make_cb(&callee, &Callee::Callback));
-    }
-
-    ThreadPool::Wait();
-}
-
 int
 main(int argc, char ** argv)
 {
     InitTestSetup();
 
     TEST(test_handler);
-    TEST(test_callback);
 
     TeardownTestSetup();
 

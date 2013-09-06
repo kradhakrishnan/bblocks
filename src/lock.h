@@ -4,7 +4,8 @@
 #include <boost/shared_ptr.hpp>
 #include <inttypes.h>
 
-#include "perf-counter.h"
+#include "perf/perf-counter.h"
+#include "logger.h"
 
 namespace dh_core {
 

@@ -7,9 +7,9 @@
 #include <tr1/unordered_map>
 
 #include "util.hpp"
-#include "thread.h"
 #include "lock.h"
 #include "async.h"
+#include "schd/thread.h"
 
 namespace dh_core {
 

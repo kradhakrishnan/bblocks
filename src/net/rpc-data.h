@@ -1,8 +1,8 @@
 #ifndef _CORE_NET_RPC_H_
 #define _CORE_NET_RPC_H_
 
-#include "buffer.h"
 #include "util.hpp"
+#include "buf/buffer.h"
 
 namespace dh_core
 {

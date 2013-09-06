@@ -2,7 +2,7 @@
 #define _DH_CORE_THREADPOOL_H_
 
 #include "defs.h"
-#include "thread.h"
+#include "schd/thread.h"
 
 namespace dh_core {
 
@@ -207,15 +207,29 @@ public:
 
     bool ShouldYield();
 
-    void ScheduleBarrier(ThreadRoutine * r)
-    {
-        BarrierRoutine * br = new BarrierRoutine(r, threads_.size());
-        for (size_t i = 0; i < threads_.size(); ++i) {
-            ThreadRoutine * r = new MemberFnPtr1<BarrierRoutine, int>
-                                      (br, &BarrierRoutine::Run, /*status=*/ 0);
-            threads_[i]->Push(r);
-        }
-    }
+	#define NBTP_SCHEDULE_BARRIER(n)							\
+	template<class _OBJ_, TDEF(T,n)>							\
+	void ScheduleBarrier(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), TPARAM(T,t,n))		\
+	{											\
+		ThreadRoutine * r;								\
+		r = new MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));			\
+		threads_[nextTh_++ % threads_.size()]->Push(r);					\
+	}											\
+
+	NBTP_SCHEDULE_BARRIER(1) // void ScheduleBarrier<T1>(...)
+	NBTP_SCHEDULE_BARRIER(2) // void ScheduleBarrier<T1,T2>(...)
+	NBTP_SCHEDULE_BARRIER(3) // void ScheduleBarrier<T1,T2,T3>(...)
+	NBTP_SCHEDULE_BARRIER(4) // void ScheduleBarrier<T1,T2,T3,T4>(...)
+
+	void ScheduleBarrier(ThreadRoutine * r)
+	{
+		BarrierRoutine * br = new BarrierRoutine(r, threads_.size());
+		for (size_t i = 0; i < threads_.size(); ++i) {
+			ThreadRoutine * r = new MemberFnPtr1<BarrierRoutine, int>
+						    (br, &BarrierRoutine::Run, /*status=*/ 0);
+			threads_[i]->Push(r);
+		}
+	}
 
 private:
 
@@ -280,6 +294,18 @@ public:
     {
         NonBlockingThreadPool::Instance().Schedule(r);
     }
+
+	#define TP_SCHEDULE_BARRIER(n)								\
+	template<class _OBJ_, TDEF(T,n)>							\
+	static void ScheduleBarrier(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), TPARAM(T,t,n))	\
+	{											\
+		NonBlockingThreadPool::Instance().ScheduleBarrier(obj, fn, TARG(t,n));		\
+	}											\
+
+	TP_SCHEDULE_BARRIER(1) // void ScheduleBarrier<T1>(...)
+	TP_SCHEDULE_BARRIER(2) // void ScheduleBarrier<T1,T2>(...)
+	TP_SCHEDULE_BARRIER(3) // void ScheduleBarrier<T1,T2,T3>(...)
+	TP_SCHEDULE_BARRIER(4) // void ScheduleBarrier<T1,T2,T3,T4>(...)
 
     static void ScheduleBarrier(ThreadRoutine * r)
     {

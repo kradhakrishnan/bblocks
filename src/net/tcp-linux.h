@@ -12,12 +12,11 @@
 #include <list>
 
 #include "util.hpp"
-#include "thread-pool.h"
-#include "callback.hpp"
-#include "buffer.h"
 #include "async.h"
+#include "schd/thread-pool.h"
 #include "net/epoll.h"
-#include "perf-counter.h"
+#include "buf/buffer.h"
+#include "perf/perf-counter.h"
 
 namespace dh_core {
 

@@ -10,15 +10,25 @@
 
 namespace dh_core {
 
-//................................................................. IOBuffer ...
+//..................................................................................... IOBuffer ...
 
 /**
  * @class IOBuffer
+ *
+ * This class provides the buffer handler requirement for IO processing. This is designed to support
+ * all processing needs for both disk based systems and network based system. The class encapsulates
+ * shared pointer and provides accessors for manipulating the buffer as a network packet or as data
+ * fetched from the disk subsystem.
  */
 class IOBuffer
 {
 public:
 
+	/*
+	 * Deallocator
+	 *
+	 * TODO: Templatize the code to work with any buffer manager
+	 */
 	struct Dalloc
 	{
 		void operator()(uint8_t * data)
@@ -30,7 +40,6 @@ public:
 	/*
 	 * static methods
 	 */
-
 	static IOBuffer Alloc(const size_t size)
 	{
 		void * ptr;
@@ -39,12 +48,18 @@ public:
 		return IOBuffer(boost::shared_ptr<uint8_t>((uint8_t *) ptr, Dalloc()), size);
 	}
 
+	/*
+	 * Create/destroy
+	 */
 	IOBuffer() : size_(0), off_(0) {}
 	virtual ~IOBuffer() {}
 
 	uint8_t * operator->() { return data_.get() + off_; }
 	operator bool() const { return data_.get(); }
 
+	/*
+	 * Generic helper
+	 */
 	uint8_t * Ptr()
 	{
 		ASSERT(data_.get());
@@ -101,6 +116,9 @@ public:
 		memcpy(data_.get(), (uint8_t *) &t, sizeof(T));
 	}
 
+	/*
+	 * Serializing/de-serializing helpers
+	 */
 	template<class T>
 	void Update(const T & t, size_t & pos)
 	{

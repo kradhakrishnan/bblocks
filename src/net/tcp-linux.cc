@@ -97,7 +97,7 @@ TCPChannel::UnregisterHandle(CHandle * h, const UnregisterDoneFn cb)
     const bool status = epoll_.Remove(fd_);
     INVARIANT(status);
 
-    ThreadPool::ScheduleBarrier(make_cb(this, &TCPChannel::BarrierDone));
+    ThreadPool::ScheduleBarrier(this, &TCPChannel::BarrierDone, /*nonce=*/ 0);
 }
 
 void

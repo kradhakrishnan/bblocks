@@ -6,7 +6,8 @@
 #include "async.h"
 #include "logger.h"
 #include "inlist.hpp"
-#include "thread.h"
+#include "buf/buffer.h"
+#include "schd/thread.h"
 
 namespace dh_core {
 

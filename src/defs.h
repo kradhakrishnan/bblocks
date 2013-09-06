@@ -14,22 +14,24 @@
 #define unlikely(x)     (x)
 #endif
 
-//
-// Computation helpers
-//
+#define ALIGNED(x) __attribute__((aligned(sizeof(x))))
+
+/*
+ * Computation helpers
+ */
 #define ROUNDUP(x,y) ((x / y) + (x % y ? 1 : 0)) * y
 
-//
-// Size notations
-//
+/*
+ * Size notations
+ */
 #define KiB(x) (x * 1024)
 #define MiB(x) (KiB(x) * 1024)
 #define GiB(x) (MiB(x) * 1024)
 #define TiB(x) (GiB(x) * 1024)
 
-//
-// Enumerable types T1, T2, ..., Tn
-//
+/*
+ * Enumerable types T1, T2, ..., Tn
+ */
 #define COMMA ,
 #define SEMICOLON ;
 #define OPENBRACKET (

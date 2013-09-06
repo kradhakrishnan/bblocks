@@ -1,9 +1,8 @@
 #ifndef _DH_CORE_TEST_UNIT_TEST_H_
 #define _DH_CORE_TEST_UNIT_TEST_H_
 
-#include "thread-pool.h"
+#include "schd/thread-pool.h"
 #include "atomic.h"
-#include "callback.hpp"
 #include "util.hpp"
 
 #define TEST(x) cout << #x << endl; x();

@@ -55,4 +55,3 @@
 
 #endif
 
-#define STATIC_ASSERT(x) static_assert(x, "error" #x)
