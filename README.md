@@ -2,7 +2,7 @@
 
 ### About the project
 
-Building blocks project aims to provide building blocks for the development of modern high performance system programming with C++. The project is at the intersection of high performance, extreme scalability, and modern system programming methodologies. The gernal components include networking infrastructure -- tcp, udp, multicasting, storage access abstractions, paxos, buffer management etc. The library is built using well established design patterns and/or based on popular research papers.
+Building blocks project aims to provide building blocks for the development of modern high performance system programming with C++. The project is at the intersection of high performance, extreme scalability, and modern system programming methodologies. The gernal components include proactor based asynchronous handler, networking infrastructure -- tcp, udp, multicasting, storage access abstractions, paxos, buffer management etc. The library is built using well established design patterns and/or based on popular research papers.
 
 
 ### About Me
