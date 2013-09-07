@@ -2,14 +2,10 @@
 
 ### About the project
 
-Building blocks project aims to provide building blocks for the development of modern high performance system programming
-with C++. The project is at the intersection of high performance, extreme scalability, and modern system programming
-methodologies. The gernal components include networking infrastructure -- tcp, udp, multicasting, storage access
-abstractions, paxos, buffer management etc. The library is built using well established design patterns and/or based on
-popular research papers.
+Building blocks project aims to provide building blocks for the development of modern high performance system programming with C++. The project is at the intersection of high performance, extreme scalability, and modern system programming methodologies. The gernal components include networking infrastructure -- tcp, udp, multicasting, storage access abstractions, paxos, buffer management etc. The library is built using well established design patterns and/or based on popular research papers.
 
 
-### About the author
+### About Me
 
 I spent most of my professional life writing infrastructure for computing ranging from messaging service for
 enterprise clusters, to web scale distributed platform for prominent web services, to building cloud (public and private).
@@ -20,11 +16,11 @@ and over again.
 
 ###### 1. What are the OS supported ?
 
-Currently, we supported Ubuntu.
+Currently, only Ubuntu is supported.
 
 ###### 2. What are future OS support we can expect ?
 
-We plan to support RedHat soon.
+Support for RedHat can be expected soon.
 
 ###### 3. Is there plans to support Windows ?
 
