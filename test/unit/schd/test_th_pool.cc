@@ -5,7 +5,9 @@
 using namespace dh_core;
 using namespace std;
 
-struct Th : public NonBlockingLogic
+//.................................................................................. SimpleTest ....
+
+struct Th
 {
     Th() : i_(0) {}
 
@@ -41,19 +43,21 @@ simple_test()
     ThreadPool::Wait();
 }
 
+//................................................................................ ParallelTest ....
+
 class ThMaster;
 
-struct ThSlave : public NonBlockingLogic
+struct ThSlave
 {
     ThSlave()
     {
         cout << "Slave created." << endl;
     }
 
-    virtual void Run(ThMaster * th);
+    void Run(ThMaster * th);
 };
 
-struct ThMaster : public NonBlockingLogic
+struct ThMaster
 {
     ThMaster() : i_(0), out_(0) {}
 

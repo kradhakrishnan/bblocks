@@ -8,204 +8,166 @@ namespace dh_core {
 
 class NonBlockingThread;
 
-// .......................................................... ThreadRoutine ....
+//............................................................................... ThreadRoutine ....
 
-/**
- *
- */
 class ThreadRoutine : public InListElement<ThreadRoutine>
 {
 public:
 
-    virtual void Run() = 0;
-    virtual ~ThreadRoutine() {}
+	virtual void Run() = 0;
+	virtual ~ThreadRoutine() {}
 };
 
-// ........................................................ MemberFnPtr*<*> ....
+//............................................................................. MemberFnPtr*<*> ....
 
-/**
- *
- */
-#define MEMBERFNPTR(n)                                                      \
-template<class _OBJ_, TDEF(T,n)>                                            \
-class MemberFnPtr##n : public ThreadRoutine                                 \
-{                                                                           \
-public:                                                                     \
-                                                                            \
-    MemberFnPtr##n(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)),              \
-                  TPARAM(T,t,n))                                            \
-        : obj_(obj), fn_(fn), TASSIGN(t,n)                                  \
-    {                                                                       \
-    }                                                                       \
-                                                                            \
-    virtual void Run()                                                      \
-    {                                                                       \
-        (obj_->*fn_)(TARGEX(t,_,n));                                        \
-        delete this;                                                        \
-    }                                                                       \
-                                                                            \
-private:                                                                    \
-                                                                            \
-    _OBJ_ * obj_;                                                           \
-    void (_OBJ_::*fn_)(TENUM(T,n));                                         \
-    TMEMBERDEF(T,t,n);                                                      \
-};                                                                          \
+#define MEMBERFNPTR(n)										\
+template<class _OBJ_, TDEF(T,n)>								\
+class MemberFnPtr##n : public ThreadRoutine							\
+{												\
+public:												\
+												\
+	MemberFnPtr##n(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), TPARAM(T,t,n))		\
+		: obj_(obj), fn_(fn), TASSIGN(t,n)						\
+	{}											\
+												\
+	virtual void Run()									\
+	{											\
+		(obj_->*fn_)(TARGEX(t,_,n));							\
+		delete this;									\
+	}											\
+												\
+    private:											\
+												\
+	_OBJ_ * obj_;										\
+	void (_OBJ_::*fn_)(TENUM(T,n));								\
+	TMEMBERDEF(T,t,n);									\
+};												\
 
 MEMBERFNPTR(1)  // MemberFnPtr1<_OBJ_, T1>
 MEMBERFNPTR(2)  // MemberFnPtr2<_OBJ_, T1, T2>
 MEMBERFNPTR(3)  // MemberFnPtr3<_OBJ_, T1, T2, T3>
 MEMBERFNPTR(4)  // MemberFnPtr4<_OBJ_, T1, T2, T3, T4>
 
-// ....................................................... NonBlockingLogic ....
+//........................................................................... NonBlockingThread ....
 
-/**
- * TODO: Throw this legacy stuff out pls
- */
-class NonBlockingLogic
-{
-public:
-
-    friend class NonBlockingThreadPool;
-
-    NonBlockingLogic()
-        : thAffinity_(RRCpuId::Instance().GetId())
-    {
-    }
-
-    virtual ~NonBlockingLogic()
-    {
-    }
-
-protected:
-
-    const uint32_t thAffinity_;
-};
-
-// ...................................................... NonBlockingThread ....
-
-/**
- *
- */
 class NonBlockingThread : public Thread
 {
 public:
 
-    NonBlockingThread(const std::string & path, const uint32_t tid)
-        : Thread(path)
-        , q_(path)
-        , tid_(tid)
-    {
-    }
+	NonBlockingThread(const std::string & path, const uint32_t tid)
+	    : Thread(path)
+	    , q_(path)
+	    , tid_(tid)
+	{
+	}
 
-    virtual void * ThreadMain();
+	virtual void * ThreadMain();
 
-    void Push(ThreadRoutine * r)
-    {
-        q_.Push(r);
-    }
+	void Push(ThreadRoutine * r)
+	{
+	    q_.Push(r);
+	}
 
-    bool IsEmpty() const
-    {
-        return q_.IsEmpty();
-    }
+	bool IsEmpty() const
+	{
+	    return q_.IsEmpty();
+	}
 
-private:
+    private:
 
-    InQueue<ThreadRoutine> q_;
-    const uint32_t tid_;
+	InQueue<ThreadRoutine> q_;
+	const uint32_t tid_;
 };
 
-// .................................................. NonBlockingThreadPool ....
+//....................................................................... NonBlockingThreadPool ....
 
-/**
- *
- */
 class NonBlockingThreadPool : public Singleton<NonBlockingThreadPool>
 {
 public:
 
-    friend class NonBlockingThread;
+	friend class NonBlockingThread;
 
-    class BarrierRoutine
-    {
-    public:
+	class BarrierRoutine
+	{
+	public:
 
-        BarrierRoutine(ThreadRoutine * cb, const size_t count)
-            : cb_(cb), pendingCalls_(count)
-        {
-        }
+		BarrierRoutine(ThreadRoutine * cb, const size_t count)
+			: cb_(cb), pendingCalls_(count)
+		{}
 
-        void Run(int)
-        { 
-            const uint64_t count = pendingCalls_.Add(/*count=*/ -1);
+		void Run(int)
+		{ 
+			const uint64_t count = pendingCalls_.Add(/*count=*/ -1);
 
-            INFO(LogPath("/barrierRoutine")) << "Count=" << count;
+			if (count == 1) {
+				INVARIANT(!pendingCalls_.Count());
+				NonBlockingThreadPool::Instance().Schedule(cb_);
+				cb_ = NULL;
+				delete this;
+			}
+		}
 
-            if (count == 1) {
-                INVARIANT(!pendingCalls_.Count());
-                NonBlockingThreadPool::Instance().Schedule(cb_);
-                cb_ = NULL;
-                delete this;
-            }
-        }
+	private:
 
-    private:
-
-        ThreadRoutine * cb_;
-        AtomicCounter pendingCalls_;
-    };
+		ThreadRoutine * cb_;
+		AtomicCounter pendingCalls_;
+	};
 
 
-    NonBlockingThreadPool()
-        : nextTh_(0)
-    {
-    }
+	NonBlockingThreadPool()
+		: nextTh_(0)
+	{}
 
-    void Start(const uint32_t maxCores)
-    {
-        AutoLock _(&lock_);
+	void Start(const uint32_t ncpu)
+	{
+		Guard _(&lock_);
 
-        for (size_t i = 0; i < maxCores; ++i) {
-            NonBlockingThread * th = new NonBlockingThread("/th/" + STR(i), i);
-            threads_.push_back(th);
-            th->StartNonBlockingThread();
-        }
-    }
+		for (size_t i = 0; i < ncpu; ++i) {
+			NonBlockingThread * th = new NonBlockingThread("/th/" + STR(i), i);
+			threads_.push_back(th);
+			th->StartNonBlockingThread();
+		}
+	}
 
-    void Shutdown()
-    {
-        AutoLock _(&lock_);
-        DestroyThreads();
-        condExit_.Broadcast();
-    }
+	size_t ncpu() const
+	{
+		return threads_.size();
+	}
 
-    void Wait()
-    {
-        AutoLock _(&lock_);
-        condExit_.Wait(&lock_);
-    }
+	void Shutdown()
+	{
+		Guard _(&lock_);
+		DestroyThreads();
+		condExit_.Broadcast();
+	}
 
-    #define NBTP_SCHEDULE(n)                                                \
-    template<class _OBJ_, TDEF(T,n)>                                        \
-    void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)),               \
-                  TPARAM(T,t,n))                                            \
-    {                                                                       \
-        ThreadRoutine * r;                                                  \
-        r = new MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));      \
-        threads_[nextTh_++ % threads_.size()]->Push(r);                     \
-    }                                                                       \
+	void Wait()
+	{
+		Guard _(&lock_);
+		condExit_.Wait(&lock_);
+	}
 
-    NBTP_SCHEDULE(1) // void Schedule<T1>(...)
-    NBTP_SCHEDULE(2) // void Schedule<T1,T2>(...)
-    NBTP_SCHEDULE(3) // void Schedule<T1,T2,T3>(...)
-    NBTP_SCHEDULE(4) // void Schedule<T1,T2,T3,T4>(...)
+	#define NBTP_SCHEDULE(n)								\
+	template<class _OBJ_, TDEF(T,n)>							\
+	void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)),				\
+	              TPARAM(T,t,n))								\
+	{											\
+		ThreadRoutine * r;								\
+		r = new MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));			\
+		threads_[nextTh_++ % threads_.size()]->Push(r);					\
+	}											\
 
-    void Schedule(ThreadRoutine * r)
-    {
-        threads_[nextTh_++ % threads_.size()]->Push(r);
-    }
+	NBTP_SCHEDULE(1) // void Schedule<T1>(...)
+	NBTP_SCHEDULE(2) // void Schedule<T1,T2>(...)
+	NBTP_SCHEDULE(3) // void Schedule<T1,T2,T3>(...)
+	NBTP_SCHEDULE(4) // void Schedule<T1,T2,T3,T4>(...)
 
-    bool ShouldYield();
+	void Schedule(ThreadRoutine * r)
+	{
+		threads_[nextTh_++ % threads_.size()]->Push(r);
+	}
+
+	bool ShouldYield();
 
 	#define NBTP_SCHEDULE_BARRIER(n)							\
 	template<class _OBJ_, TDEF(T,n)>							\
@@ -225,35 +187,37 @@ public:
 	{
 		BarrierRoutine * br = new BarrierRoutine(r, threads_.size());
 		for (size_t i = 0; i < threads_.size(); ++i) {
-			ThreadRoutine * r = new MemberFnPtr1<BarrierRoutine, int>
-						    (br, &BarrierRoutine::Run, /*status=*/ 0);
+			ThreadRoutine * r;
+			r = new MemberFnPtr1<BarrierRoutine, int>(br, &BarrierRoutine::Run,
+								  /*status=*/ 0);
 			threads_[i]->Push(r);
 		}
 	}
 
 private:
 
-    typedef std::vector<NonBlockingThread *> threads_t;
+	typedef std::vector<NonBlockingThread *> threads_t;
 
-    void DestroyThreads()
-    {
-        for (threads_t::iterator it = threads_.begin(); it != threads_.end();
-             ++it) {
-            NonBlockingThread * th = *it;
-            // Stop the thread
-            th->Stop();
-            // destroy the thread object
-            delete th;
-        }
+	void DestroyThreads()
+	{
+		for (threads_t::iterator it = threads_.begin(); it != threads_.end(); ++it) {
+			NonBlockingThread * th = *it;
+			
+			/*
+			 * Stop and destroy the thread
+			 */
+			th->Stop();
+			delete th;
+		}
 
-        threads_.clear();
-    }
+		threads_.clear();
+	}
 
 
-    PThreadMutex lock_;
-    threads_t threads_;
-    WaitCondition condExit_;
-    uint32_t nextTh_;
+	PThreadMutex lock_;
+	threads_t threads_;
+	WaitCondition condExit_;
+	uint32_t nextTh_;
 };
 
 // ............................................................. ThreadPool ....
