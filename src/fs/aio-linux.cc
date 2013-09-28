@@ -71,6 +71,16 @@ LinuxAioProcessor::~LinuxAioProcessor()
 {
 	Guard _(&lock_);
 
+	/* 
+	 * close aio context
+	 */
+	for (auto it = ctxs_.begin(); it != ctxs_.end(); ++it) {
+		aio_context_t & ctx = *it;
+		long status = io_destroy(ctx);
+		INVARIANT(status != -1);
+	}
+	ctxs_.clear();
+
 	/*
 	 * stop and destroy threads
 	 */
@@ -82,16 +92,6 @@ LinuxAioProcessor::~LinuxAioProcessor()
 		INFO(log_) << "Destroyed aio thread.";
 	}
 	aioths_.clear();
-
-	/* 
-	 * close aio context
-	 */
-	for (auto it = ctxs_.begin(); it != ctxs_.end(); ++it) {
-		aio_context_t & ctx = *it;
-		long status = io_destroy(ctx);
-		INVARIANT(status != -1);
-	}
-	ctxs_.clear();
 }
 
 void
@@ -191,6 +191,8 @@ LinuxAioProcessor::PollThread::ThreadMain()
 {
 	io_event events[LinuxAioProcessor::DEFAULT_MAX_EVENTS];
 
+	DisableThreadCancellation();
+
 	while (true) {
 		long status = io_getevents(ctx_, /*min_nr=*/ 1, sizeof(events), events,
 					   /*timeout=*/ NULL);
@@ -202,6 +204,9 @@ LinuxAioProcessor::PollThread::ThreadMain()
 			if (errno == EINTR) {
 				// got interrupted by signal
 				continue;
+			} else if (errno == EINVAL) {
+				// the ctx has been closed
+				return NULL;
 			}
 
 			/*
@@ -234,6 +239,7 @@ LinuxAioProcessor::PollThread::ThreadMain()
 			 */
 			op->ch_.Interrupt(int(ev.res), op);
 		}
+
 	}
 
 	return NULL;

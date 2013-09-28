@@ -54,29 +54,48 @@ class NonBlockingThread : public Thread
 {
 public:
 
-	NonBlockingThread(const std::string & path, const uint32_t tid)
-	    : Thread(path)
-	    , q_(path)
-	    , tid_(tid)
-	{
-	}
+	NonBlockingThread(const std::string & path, const uint32_t id)
+		: Thread(path)
+		, exitMain_(false)
+		, q_(path)
+		, id_(id)
+	{}
 
 	virtual void * ThreadMain();
 
 	void Push(ThreadRoutine * r)
 	{
-	    q_.Push(r);
+		q_.Push(r);
 	}
 
 	bool IsEmpty() const
 	{
-	    return q_.IsEmpty();
+		return q_.IsEmpty();
 	}
 
-    private:
+	virtual void Stop()
+	{
+		INVARIANT(!exitMain_);
+		exitMain_ = true;
+		Push(new WakeupRoutine());
 
+		int status = pthread_join(tid_, NULL);
+		INVARIANT(!status);
+	}
+
+private:
+
+	struct WakeupRoutine : ThreadRoutine
+	{
+		virtual void Run()
+		{
+			delete this;
+		}
+	};
+
+	bool exitMain_;
 	InQueue<ThreadRoutine> q_;
-	const uint32_t tid_;
+	const uint32_t id_;
 };
 
 //....................................................................... NonBlockingThreadPool ....
@@ -120,6 +139,8 @@ public:
 
 	void Start(const uint32_t ncpu)
 	{
+		INVARIANT(ncpu <= SysConf::NumCores());
+
 		Guard _(&lock_);
 
 		for (size_t i = 0; i < ncpu; ++i) {
@@ -138,6 +159,11 @@ public:
 	{
 		Guard _(&lock_);
 		DestroyThreads();
+	}
+
+	void Wakeup()
+	{
+		Guard _(&lock_);
 		condExit_.Broadcast();
 	}
 
@@ -202,7 +228,6 @@ private:
 	{
 		for (threads_t::iterator it = threads_.begin(); it != threads_.end(); ++it) {
 			NonBlockingThread * th = *it;
-			
 			/*
 			 * Stop and destroy the thread
 			 */
@@ -220,44 +245,48 @@ private:
 	uint32_t nextTh_;
 };
 
-// ............................................................. ThreadPool ....
+// ................................................................................. ThreadPool ....
 
 class ThreadPool
 {
 public:
 
-    static void Start(const uint32_t ncores)
-    {
-        NonBlockingThreadPool::Instance().Start(ncores);
-    }
+	static void Start(const uint32_t ncores = SysConf::NumCores())
+	{
+		NonBlockingThreadPool::Instance().Start(ncores);
+	}
 
-    static void Shutdown()
-    {
-        NonBlockingThreadPool::Instance().Shutdown();
-    }
+	static void Shutdown()
+	{
+		NonBlockingThreadPool::Instance().Shutdown();
+	}
 
-    static void Wait()
-    {
-        NonBlockingThreadPool::Instance().Wait();
-    }
+	static void Wait()
+	{
+		NonBlockingThreadPool::Instance().Wait();
+	}
 
-    #define TP_SCHEDULE(n)                                                  \
-    template<class _OBJ_, TDEF(T,n)>                                        \
-    static void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)),        \
-                         TPARAM(T,t,n))                                     \
-    {                                                                       \
-        NonBlockingThreadPool::Instance().Schedule(obj, fn, TARG(t,n));     \
-    }                                                                       \
+	static void Wakeup()
+	{
+		NonBlockingThreadPool::Instance().Wakeup();
+	}
 
-    TP_SCHEDULE(1) // void Schedule<T1>(...)
-    TP_SCHEDULE(2) // void Schedule<T1,T2>(...)
-    TP_SCHEDULE(3) // void Schedule<T1,T2,T3>(...)
-    TP_SCHEDULE(4) // void Schedule<T1,T2,T3,T4>(...)
+	#define TP_SCHEDULE(n)									\
+	template<class _OBJ_, TDEF(T,n)>							\
+	static void Schedule(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), TPARAM(T,t,n))		\
+	{											\
+	    NonBlockingThreadPool::Instance().Schedule(obj, fn, TARG(t,n));			\
+	}											\
 
-    static void Schedule(ThreadRoutine * r)
-    {
-        NonBlockingThreadPool::Instance().Schedule(r);
-    }
+	TP_SCHEDULE(1) // void Schedule<T1>(...)
+	TP_SCHEDULE(2) // void Schedule<T1,T2>(...)
+	TP_SCHEDULE(3) // void Schedule<T1,T2,T3>(...)
+	TP_SCHEDULE(4) // void Schedule<T1,T2,T3,T4>(...)
+
+	static void Schedule(ThreadRoutine * r)
+	{
+		NonBlockingThreadPool::Instance().Schedule(r);
+	}
 
 	#define TP_SCHEDULE_BARRIER(n)								\
 	template<class _OBJ_, TDEF(T,n)>							\
@@ -271,15 +300,20 @@ public:
 	TP_SCHEDULE_BARRIER(3) // void ScheduleBarrier<T1,T2,T3>(...)
 	TP_SCHEDULE_BARRIER(4) // void ScheduleBarrier<T1,T2,T3,T4>(...)
 
-    static void ScheduleBarrier(ThreadRoutine * r)
-    {
-        NonBlockingThreadPool::Instance().ScheduleBarrier(r);
-    }
+	static void ScheduleBarrier(ThreadRoutine * r)
+	{
+		NonBlockingThreadPool::Instance().ScheduleBarrier(r);
+	}
 
-    static bool ShouldYield()
-    {
-        return NonBlockingThreadPool::Instance().ShouldYield();
-    }
+	static bool ShouldYield()
+	{
+		return NonBlockingThreadPool::Instance().ShouldYield();
+	}
+
+	const size_t ncpu()
+	{
+		return NonBlockingThreadPool::Instance().ncpu();
+	}
 };
 
 

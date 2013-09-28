@@ -1,22 +1,43 @@
+#include "schd/schd-helper.h"
 #include "schd/thread-pool.h"
 
 using namespace dh_core;
 
-__thread uint32_t _tid = UINT32_MAX;
+__thread uint32_t ThreadCtx::tid_;
+__thread std::list<uint8_t *> * ThreadCtx::pool_;
+
+static void DestroyBufferPool()
+{
+	for (int i = 0; i < SLAB_DEPTH; ++i) {
+		auto l = ThreadCtx::pool_[i];
+		for (auto it = l.begin(); it != l.end(); ++it) {
+			::free(*it);
+		}
+
+		l.clear();
+	}
+
+	delete[] ThreadCtx::pool_;
+	ThreadCtx::pool_ = NULL;
+}
 
 void *
 NonBlockingThread::ThreadMain()
 {
-	_tid = tid_;
+	ThreadCtx::tid_ = tid_;
+	ThreadCtx::pool_ = new std::list<uint8_t *>[SLAB_DEPTH];
+
+	DisableThreadCancellation();
 
 	while (!exitMain_)
 	{
-		EnableThreadCancellation();
 		ThreadRoutine * r = q_.Pop();
-		DisableThreadCancellation();
-
 		r->Run();
 	}
+
+	DestroyBufferPool();
+
+	INVARIANT(q_.IsEmpty());
 
 	return NULL;
 }
@@ -24,9 +45,9 @@ NonBlockingThread::ThreadMain()
 bool
 NonBlockingThreadPool::ShouldYield()
 {
-	INVARIANT(_tid != UINT32_MAX);
-	INVARIANT(_tid < threads_.size());
+	INVARIANT(ThreadCtx::tid_ != UINT32_MAX);
+	INVARIANT(ThreadCtx::tid_ < threads_.size());
 
-	return !threads_[_tid]->IsEmpty();
+	return !threads_[ThreadCtx::tid_]->IsEmpty();
 }
 

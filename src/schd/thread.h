@@ -15,7 +15,6 @@ public:
 
 	Thread(const std::string & logPath)
 		: log_(logPath)
-		, exitMain_(false)
 	{}
 
 	void StartBlockingThread()
@@ -41,32 +40,26 @@ public:
 
 	void EnableThreadCancellation()
 	{
-		int status = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE,
-			                            /*oldstate=*/ NULL);
+		int status = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, /*oldstate=*/ NULL);
 		(void) status;
 		ASSERT(!status);
 	}
 
 	void DisableThreadCancellation()
 	{
-		int status = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE,
-			                            /*oldstate=*/ NULL);
+		int status = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, /*oldstate=*/ NULL);
 		(void) status;
 		ASSERT(!status);
 	}
 
-	void Stop()
+	virtual void Stop()
 	{
-		ASSERT(!exitMain_);
-		exitMain_ = true;
-
 		int status = pthread_cancel(tid_);
 		INVARIANT(!status);
 
-		DEBUG(log_) << "Waiting for MainLoop to exit.";
-
-		status = pthread_join(tid_, /*exit status=*/ NULL);
-		// ASSERT(!status);
+		void * ret;
+		status = pthread_join(tid_, &ret);
+		INVARIANT(!status || ret == PTHREAD_CANCELED);
 	}
 
 	void SetProcessorAffinity()
@@ -86,7 +79,7 @@ public:
 	static void * ThFn(void * args)
 	{
 		Thread * th = (Thread *) args;
-		return th->ThreadMain();
+		pthread_exit(th->ThreadMain());
 	}
 
 protected:
@@ -95,7 +88,6 @@ protected:
 
 	LogPath log_;
 	pthread_t tid_;
-	bool exitMain_;
 };
 
 }

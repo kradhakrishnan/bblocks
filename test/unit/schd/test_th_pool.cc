@@ -1,9 +1,62 @@
 #include <iostream>
 
+#include "buf/bufpool.h"
 #include "test/unit-test.h"
 
 using namespace dh_core;
 using namespace std;
+
+//.............................................................................. BufferPoolTest ....
+
+class TestObject
+{
+public:
+
+    TestObject(int i) : i_(i) {}
+
+private:
+
+    const int i_;
+
+};
+
+struct BufferPoolTest
+{
+	typedef BufferPoolTest This;
+
+	BufferPoolTest() : count_(0) {}
+
+	void Alloc(int count)
+	{
+		TestObject * o = new (BufferPool::Alloc<TestObject>()) TestObject(5);
+		ThreadPool::Schedule(this, &This::Dalloc, o);
+	}
+
+	void Dalloc(TestObject * o)
+	{
+		BufferPool::Dalloc(o);
+
+		if (++count_ == 99) {
+			ThreadPool::Wakeup();
+		}
+	}
+
+	std::atomic<int> count_;
+};
+
+void
+bufferpool_test()
+{
+    ThreadPool::Start();
+
+    BufferPoolTest test;
+    for (int i = 0; i < 100; ++i) {
+		ThreadPool::Schedule(&test, &BufferPoolTest::Alloc, i);
+    }
+
+    ThreadPool::Wait();
+    ThreadPool::Shutdown();
+}
 
 //.................................................................................. SimpleTest ....
 
@@ -13,27 +66,23 @@ struct Th
 
     virtual void Run(Th * th)
     {
-        if (!(i_ % 100000)) {
-            cout << this << " : " << i_ << endl;
-        }
-
         i_++;
-        if (i_ > 1000000) {
-            ThreadPool::Shutdown();
+        if (i_ > 1000) {
+            ThreadPool::Wakeup();
             return;
         } else {
             ThreadPool::Schedule(th, &Th::Run, this);
         }
     }
 
-    uint64_t i_;
+    std::atomic<uint64_t> i_;
 
 };
 
 void
 simple_test()
 {
-    ThreadPool::Start(/*maxCores=*/   1);
+    ThreadPool::Start();
 
     Th th1;
     Th th2;
@@ -41,6 +90,7 @@ simple_test()
     th1.Run(&th2);
 
     ThreadPool::Wait();
+    ThreadPool::Shutdown();
 }
 
 //................................................................................ ParallelTest ....
@@ -63,32 +113,26 @@ struct ThMaster
 
     void Start(ThSlave * th)
     {
-        out_.Add(1);
+        ++out_;
         ThreadPool::Schedule(this, &ThMaster::Run, th);
     }
 
     virtual void Run(ThSlave * th)
     {
-        if (!(i_.Count() % 1000)) {
-            cout << (unsigned int) i_.Count() << " : " << out_.Count() << endl;
-        }
+	++i_;
+	--out_;
 
-        i_.Add(1);
-        out_.Add(-1);
-
-        if (i_.Count() > 50000) {
-            if (!out_.Count()) {
-                ThreadPool::Shutdown();
-            }
+        if (i_ > 1000) {
+            if (!out_) ThreadPool::Wakeup();
             return;
         }
 
-        out_.Add(1);
+        ++out_;
         ThreadPool::Schedule(th, &ThSlave::Run, this);
     }
 
-    AtomicCounter i_;
-    AtomicCounter out_;
+    std::atomic<int> i_;
+    std::atomic<int> out_;
 };
 
 void ThSlave::Run(ThMaster * th)
@@ -99,18 +143,18 @@ void ThSlave::Run(ThMaster * th)
 void
 parallel_test()
 {
-    const unsigned int cores = 4;
-    ThreadPool::Start(cores);
+    ThreadPool::Start();
 
     ThMaster m;
     std::vector<ThSlave *> ss;
-    for (unsigned int i = 0; i < cores - 1; ++i) {
+    for (unsigned int i = 0; i < SysConf::NumCores() - 1; ++i) {
         ThSlave * s = new ThSlave();
         m.Start(s);
         ss.push_back(s);
     }
 
     ThreadPool::Wait();
+    ThreadPool::Shutdown();
 
     for (unsigned int i = 0; i < ss.size(); ++i) {
         delete ss[i];
@@ -124,6 +168,7 @@ main(int argc, char ** argv)
 {
     InitTestSetup();
 
+    TEST(bufferpool_test);
     TEST(simple_test);
     TEST(parallel_test);
 

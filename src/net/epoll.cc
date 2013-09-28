@@ -266,6 +266,8 @@ Epoll::ThreadMain()
 			DEADEND
 		}
 
+		DisableThreadCancellation();
+
 		DEFENSIVE_CHECK(nfds > 0);
 
 		/*
@@ -295,6 +297,8 @@ Epoll::ThreadMain()
 		 */
 		Guard _(&lock_);
 		EmptyTrashcan();
+
+		EnableThreadCancellation();
 	}
 
 	return NULL;

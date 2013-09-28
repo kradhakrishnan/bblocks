@@ -52,8 +52,20 @@ MakeSharedPtr(T * t)
 	return SharedPtr<T>(t);
 }
 
-// ................................................................... Time ....
+//........................................................................................ Math ....
 
+class Math
+{
+public:
+
+	inline static size_t Roundup(const size_t n, const size_t s)
+	{
+		INVARIANT(s);
+		return ((n / s) + (n % s ? 1 : 0)) * s;
+	}
+};
+
+//........................................................................................ Time ....
 
 class Time
 {
@@ -69,7 +81,7 @@ public:
 	}
 };
 
-// ................................................................ Adler32 ....
+//..................................................................................... Adler32 ....
 
 /**
  * Adler32 checksume wrapper.
@@ -96,15 +108,15 @@ public:
 		cksum_ = adler32(cksum_, (uint8_t *) &t, sizeof(T));
 	}
 
-	uint32_t Hash() const	{ return cksum_;    }
-	void Reset()		{ cksum_ = 0;	    }
+	uint32_t Hash() const { return cksum_; }
+	void Reset() { cksum_ = 0; }
 
 private:
 
 	uint32_t cksum_;
 };
 
-// ........................................................ StateMachine<T> ....
+//............................................................................. StateMachine<T> ....
 
 /**
  * A generic state machine implementation for tracking states. Typically you
@@ -161,7 +173,7 @@ private:
 	T state_;
 };
 
-// ........................................................... Singleton<T> ....
+//................................................................................ Singleton<T> ....
 
 /**
  * A generic implementation of singleton design pattern
@@ -203,7 +215,7 @@ private:
 template<class T>
 T * Singleton<T>::instance_ = NULL;
 
-//............................................................ BoundedQueue ....
+//................................................................................ BoundedQueue ....
 
 template<class T>
 class BoundedQ

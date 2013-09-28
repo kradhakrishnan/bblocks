@@ -5,6 +5,8 @@
 using namespace dh_core;
 using namespace std;
 
+//................................................................................ test_handler ....
+
 class ICallee
 {
 public:
@@ -24,16 +26,7 @@ public:
         cout << "Got handle " << count_ << endl;
         ASSERT(val == 0xfeaf);
         if (++count_ == 100) {
-            ThreadPool::Shutdown();
-        }
-    }
-
-    void Callback(int val)
-    {
-        cout << "Got callback " << count_ << endl;
-        ASSERT(val == 0xfeaf);
-        if (++count_ == 100) {
-            ThreadPool::Shutdown();
+            ThreadPool::Wakeup();
         }
     }
 
@@ -48,7 +41,7 @@ public:
 
     Caller(ICallee * h = NULL) : h_(h) {}
 
-    void StartHandler(int val)
+    void Start(int val)
     {
         ASSERT(h_);
         ThreadPool::Schedule(h_, &ICallee::Handle, val);
@@ -65,12 +58,14 @@ test_handler()
     Callee callee;
     Caller caller(&callee);
     for (int i = 0; i < 100; ++i) {
-        ThreadPool::Schedule(&caller, &Caller::StartHandler,
-                             /*val=*/ (int) 0xfeaf);
+        ThreadPool::Schedule(&caller, &Caller::Start, /*val=*/ (int) 0xfeaf);
     }
 
     ThreadPool::Wait();
+    ThreadPool::Shutdown();
 }
+
+//........................................................................................ main ....
 
 int
 main(int argc, char ** argv)

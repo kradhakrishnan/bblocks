@@ -88,7 +88,12 @@ public:
 			StartBlockingThread();
 		}
 
-		//.... Thread override ....//
+		virtual void Stop()
+		{
+			void * ret;
+			int status = pthread_join(tid_, &ret);
+			INVARIANT(!status || ret == PTHREAD_CANCELED);
+		}
 
 		virtual void * ThreadMain();
 

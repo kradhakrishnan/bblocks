@@ -2,11 +2,51 @@
 #define _BUF_BUFPOOL_H_
 
 #include <inttypes.h>
+#include <list>
 
-namespace bblocks {
+#include "schd/schd-helper.h"
+#include "util.hpp"
+#include "lock.h"
 
-};
+namespace dh_core {
 
+//.................................................................................. BufferPool ....
+
+class BufferPool : public Singleton<BufferPool>
+{
+public:
+
+	template<class T>
+	static void * Alloc()
+	{
+		void * ptr = NULL;
+		const size_t size = Math::Roundup(sizeof(T), 512);
+		const size_t id = (size / 512) - 1;
+
+		if (id >= SLAB_DEPTH || ThreadCtx::pool_[id].empty()) {
+			int status = posix_memalign(&ptr, 512, size);
+			INVARIANT(status != -1);
+			return ptr;
+		}
+
+		uint8_t * data = ThreadCtx::pool_[id].front();
+		ThreadCtx::pool_[id].pop_front();
+		return data;
+	}
+
+	template<class T>
+	static void Dalloc(T * t)
+	{
+		const size_t size = Math::Roundup(sizeof(T), 512);
+		const size_t id = (size / 512) - 1;
+
+		if (id >= SLAB_DEPTH) {
+			::free((void *) t);
+			return;
+		}
+
+		ThreadCtx::pool_[id].push_back((uint8_t *) t);
+	}
 };
 
 }

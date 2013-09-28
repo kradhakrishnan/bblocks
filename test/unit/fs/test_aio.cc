@@ -30,13 +30,10 @@ public:
         IOBuffer buf_;
     };
 
-    //.... create/destroy ....//
-
     BasicAioTest()
         : log_("testaio/")
-        , aio_(new LinuxAioProcessor())
         , iter_(0)
-        , dev_("../build/test.out", /*size=*/ 10 * 1024 * 1024, aio_)
+        , dev_("../build/test.out", /*size=*/ 10 * 1024 * 1024, &aio_)
     {
     }
 
@@ -50,8 +47,6 @@ public:
         int status = dev_.OpenDevice();
         INVARIANT(status > 0);
 
-        // fill up the buffer
-
         // start writing data to device
         for (int i = 0; i < 1000; ++i) {
             count_.Add(/*val=*/ 1);
@@ -59,15 +54,11 @@ public:
             IOBuffer buf = IOBuffer::Alloc(WBUFFERSIZE);
             IOCtx * ctx = new IOCtx(i, buf);
             buf.Fill('a' + (i % 26));
-            const int status = dev_.Write(ctx->buf_, (i * WBUFFERSIZE) / 512,
-                                          WBUFFERSIZE / 512,
-                                          async_fn(this, &BasicAioTest::WriteDone,
-                                                   ctx));
+            const int status = dev_.Write(ctx->buf_, (i * WBUFFERSIZE) / 512, WBUFFERSIZE / 512,
+                                          async_fn(this, &BasicAioTest::WriteDone, ctx));
             INVARIANT(status == 1);
         }
     }
-
-    //.... handlers ....//
 
     __completion_handler__
     void WriteDone(int status, IOCtx * ctx)
@@ -100,14 +91,14 @@ public:
         // TODO: Unregister and then shutdown
 
         if (count_.Add(/*val=*/ -1) == 1) {
-            ThreadPool::Shutdown();
+            ThreadPool::Wakeup();
         }
     }
 
 private: 
 
     LogPath log_;
-    AioProcessor * aio_;
+    LinuxAioProcessor aio_;
     uint32_t iter_;
     SpinningDevice dev_;
     AtomicCounter count_;
@@ -116,13 +107,13 @@ private:
 void
 test_aio_basic()
 {
-    ThreadPool::Start(/*ncores=*/ 4);
+    ThreadPool::Start();
 
     BasicAioTest test;
-
     ThreadPool::Schedule(&test, &BasicAioTest::Start, /*nonce=*/ 0);
 
     ThreadPool::Wait();
+    ThreadPool::Shutdown();
 }
 
 //.................................................................... main ....

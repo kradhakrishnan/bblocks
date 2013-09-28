@@ -22,8 +22,6 @@ public:
     static const uint32_t WBUFFERSIZE = 4 * 1024;  // 4 KiB
     static const uint32_t TIMEINTERVAL_MS = 1 * 1000;   // 1 s
 
-    //.... create/destroy ....//
-
     BasicTCPTest()
         : log_("testtcp/")
         , epoll_("/epoll")
@@ -45,14 +43,11 @@ public:
 
     void Start(int nonce)
     {
-        bool ok = tcpServer_.Listen(addr_.RemoteAddr(),
-                                    async_fn(this, &This::HandleServerConn));
+        bool ok = tcpServer_.Listen(addr_.RemoteAddr(), async_fn(this, &This::HandleServerConn));
         INVARIANT(ok);
 
         tcpClient_.Connect(addr_, async_fn(this, &This::HandleClientConn));
     }
-
-    //.... handlers ....//
 
     __completion_handler__
     virtual void HandleServerConn(TCPServer *, int status, TCPChannel * ch)
@@ -131,7 +126,7 @@ public:
         tcpServer_.Shutdown();
         tcpClient_.Shutdown();
 
-        ThreadPool::Shutdown();
+        ThreadPool::Wakeup();
     }
 
 private: 
@@ -147,8 +142,7 @@ private:
                     << " EMPTY:" << cksum_.empty();
 
         if (cksum_.empty() && iter_ > MAX_ITERATION) {
-            client_ch_->UnregisterHandle(this,
-                                            async_fn(&This::ClientUnregistered));
+            client_ch_->UnregisterHandle(this, async_fn(&This::ClientUnregistered));
             return;
         }
     }
@@ -177,8 +171,7 @@ private:
 
         int status = client_ch_->EnqueueWrite(wbuf_);
         if ((size_t) status == wbuf_.Size()) {
-            ThreadPool::Schedule(this, &BasicTCPTest::WriteDone, client_ch_,
-                                 status);
+            ThreadPool::Schedule(this, &BasicTCPTest::WriteDone, client_ch_, status);
         } else {
             INVARIANT(status == 0);
         }
@@ -211,6 +204,7 @@ test_tcp_basic()
     ThreadPool::Schedule(&test, &BasicTCPTest::Start, /*nonce=*/ 0);
 
     ThreadPool::Wait();
+    ThreadPool::Shutdown();
 }
 
 //.................................................................... main ....

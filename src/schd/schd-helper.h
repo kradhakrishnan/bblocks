@@ -12,6 +12,26 @@
 
 namespace dh_core {
 
+//............................................................................... ThreadContext ....
+
+#define SLAB_DEPTH 4
+
+struct ThreadCtx
+{
+	static __thread uint32_t tid_;
+
+	/*
+	 * Per thread pool
+	 *
+	 * The slab sizes are
+	 * 0 : 0    - 512
+	 * 1 : 512  - 1024
+	 * 2 : 1024 - 2048
+	 * 3 : 2048 - 5196
+	 */
+	static __thread std::list<uint8_t *> * pool_;
+};
+
 //..................................................................................... SysConf ....
 
 class SysConf

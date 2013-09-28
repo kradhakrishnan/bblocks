@@ -12,7 +12,7 @@ import time
 #
 _debug = None
 _valgrind = False
-_valgrindsupp = "tools/unit-testing/valgrind.supp"
+_valgrindsupp = ""
 _verbose = False
 
 def EnableValgrind():
@@ -56,12 +56,20 @@ def GetAttr(node, name):
 #
 def Exec(test, timeout):
 	if _valgrind:
-	    cmd = [ "timeout", "--kill-after=%d" % timeout, "%ds" % timeout,
-		    "valgrind", "--tool=memcheck", "--leak-check=full",
-		    "--trace-children=yes", "--trace-children-skip=timeout",
-		    "--track-fds=yes", "--suppressions=%s" % _valgrindsupp,
+	    cmd = [ "timeout",
+		    "--kill-after=%d" % timeout,
+		    "%ds" % timeout,
+		    "valgrind",
+		    "--tool=memcheck",
+		    "--leak-check=full",
+		    "--trace-children=yes",
+		    "--trace-children-skip=timeout",
+		    "--track-fds=yes",
+		    "--suppressions=%s" % _valgrindsupp,
 		    "--error-exitcode=%d" % 255,
-		    "--gen-suppressions=yes", "--track-origins=yes", "-v",
+		    "--gen-suppressions=all",
+		    "--track-origins=yes",
+		    "-v",
 		    test ]
 	else:
 	    cmd = [ "timeout",  "--kill-after=%d" % timeout, "%ds" % timeout,
@@ -98,8 +106,6 @@ oparser.add_option("-b", "--build-dir", action="store", type="string", dest="bui
 oparser.add_option("-o", "--output", action="store", type="string", dest="outfile")
 # -v or --valgrind
 oparser.add_option("-v", "--valgrind", action="store_true", default=False, dest="valgrind")
-# -s <filename> or --valgrind-supp
-oparser.add_option("-s", "--valgrind-supp", action="store", type="string", dest="valgrindsupp")
 
 (options, args) = oparser.parse_args()
 
@@ -113,8 +119,7 @@ if options.valgrind:
 	Debug("> Enabling valgrind")
 	EnableValgrind()
 
-if options.valgrindsupp:
-	_valgrindsupp = options.valgrindsupp
+_valgrindsupp = "%s.supp" % options.filename
 
 Debug("[ %s ]" % options.filename)
 
