@@ -3,7 +3,9 @@
 
 /test
 - Create a simpler format for representing test config
-- Run individual test
+- Run individual test via test tool
+- Wire in code coverage tool
+- Setup chroot based compilation so we dont have to worry about library compatibility
 
 /src/buf
 
