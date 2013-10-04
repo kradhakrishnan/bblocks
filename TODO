@@ -1,14 +1,29 @@
+/
+- Global config manager to control all config settings
+
+/test
+- Create a simpler format for representing test config
+- Run individual test via test tool
+- Wire in code coverage tool
+- Setup chroot based compilation so we dont have to worry about library compatibility
+
 /src/buf
 
 - Implement buffer management mostly based on Kurd
   * IOBuffer types -- smart, raw, managed
-  * Per thread and global preallocator to make memory operations faster
-
+- [ 80% ] Adaptive Buffer Pool : Per thread allocator to make memory operations faster
+  * Make function invocation events to use buffer pool
+  * Figure a mechanism to clear the cache
+    * Detect usage slack
+    * Space threshold
+ 
 /src/net
 
+- Implement cli feature
+- Implement Test/HTTP CommandServer feature
 - Implement UDP and ICMP processors
 - RPC
-  * Implement TCP transport
+  * [ 50% ] Implement TCP transport
   * Implement multipath for TCP Transport
   * Implement RPC Server and client
 
@@ -23,7 +38,9 @@
 - Make all unit tests more random and ready for longevity
 - Framework for logevity test
 - Framework for sustained performance
+- Fix broken valgrin test
 
 /test/perf
 
-
+- Make it to detect regression
+- Setup unit-box setup with email reporting
