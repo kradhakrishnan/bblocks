@@ -11,7 +11,6 @@ TCPChannel::TCPChannel(const std::string & name, int fd, Epoll & epoll)
     , lock_(name)
     , fd_(fd)
     , epoll_(epoll)
-    , wbuf_(DEFAULT_WRITE_BACKLOG)
     /* Perf Counters */
     , statReadSize_("stat/read-io", "bytes", PerfCounter::BYTES)
     , statWriteSize_("stat/write-io", "bytes", PerfCounter::BYTES)
@@ -30,26 +29,51 @@ TCPChannel::~TCPChannel()
 int
 TCPChannel::EnqueueWrite(const IOBuffer & data)
 {
+    ASSERT(data);
+
     Guard _(&lock_);
 
-    if (wbuf_.Size() > DEFAULT_WRITE_BACKLOG) {
+    /*
+     * DEPRECATED : Please use Write(const IOBuffer &, const WriteDoneHandler &) variant
+     */
+
+    if (wbuf_.size() > DEFAULT_WRITE_BACKLOG) {
         // Reached backlog limits, need to reject the write
         return -EBUSY;
     }
 
-    if (wbuf_.IsEmpty()) {
+    if (wbuf_.empty()) {
         // No backlog. We should try to process the write synchronously
         // first
-        wbuf_.Push(data);
+        wbuf_.push_back(WriteCtx(data, client_.writeDoneHandler_));
         return WriteDataToSocket(/*isasync=*/ false);
     }
 
-    DEFENSIVE_CHECK(!wbuf_.IsEmpty() && wbuf_.Size() <= DEFAULT_WRITE_BACKLOG);
+    DEFENSIVE_CHECK(!wbuf_.empty() && wbuf_.size() <= DEFAULT_WRITE_BACKLOG);
 
-    wbuf_.Push(data);
+    wbuf_.push_back(WriteCtx(data, client_.writeDoneHandler_));
     WriteDataToSocket(/*isasync=*/ true);
 
     return 0;
+}
+
+int
+TCPChannel::Write(const IOBuffer & buf, const WriteDoneHandler & h)
+{
+	ASSERT(buf);
+
+	Guard _(&lock_);
+
+	if (wbuf_.empty()) {
+		/*
+		 * There is no backlog, trying writing synchronously
+		 */
+		 wbuf_.push_back(WriteCtx(buf, h));
+		 return WriteDataToSocket(/*isasync=*/ false);
+	}
+
+	wbuf_.push_back(WriteCtx(buf, h));
+	return WriteDataToSocket(/*isasync=*/ this);
 }
 
 bool
@@ -111,7 +135,7 @@ TCPChannel::BarrierDone(int)
         // at this point we should have no more code in TCPChannel
         // clear all buffer, reset client
 
-        wbuf_.Clear();
+        wbuf_.clear();
         rctx_ = ReadCtx();
         client_ = Client();
     }
@@ -223,17 +247,17 @@ TCPChannel::WriteDataToSocket(const bool isasync)
     int bytesWritten = 0;
 
     while (true) {
-        if (wbuf_.IsEmpty()) {
+        if (wbuf_.empty()) {
             // nothing to write
             break;
         }
 
         // construct iovs
-        unsigned int iovlen = wbuf_.Size() > IOV_MAX ? IOV_MAX : wbuf_.Size();
+        unsigned int iovlen = wbuf_.size() > IOV_MAX ? IOV_MAX : wbuf_.size();
         iovec iovecs[iovlen];
         unsigned int i = 0;
-        for (auto it = wbuf_.Begin(); it != wbuf_.End(); ++it) {
-            IOBuffer & data = *it;
+        for (auto it = wbuf_.begin(); it != wbuf_.end(); ++it) {
+            IOBuffer & data = it->buf_;
             iovecs[i].iov_base = data.Ptr();
             iovecs[i].iov_len = data.Size();
 
@@ -276,25 +300,26 @@ TCPChannel::WriteDataToSocket(const bool isasync)
         // trim the buffer
         uint32_t bytes = status;
         while (true) {
-            ASSERT(!wbuf_.IsEmpty());
+            ASSERT(!wbuf_.empty());
 
-            if (bytes >= wbuf_.Front().Size()) {
-                IOBuffer data = wbuf_.Pop();
-                bytes -= data.Size();
+            if (bytes >= wbuf_.front().buf_.Size()) {
+		WriteCtx wctx = wbuf_.front();
+		wbuf_.pop_front();
+                bytes -= wctx.buf_.Size();
+
+	        if (isasync) {
+		    wctx.h_.Wakeup(this, wctx.buf_.Size());
+		}
 
                 if (bytes == 0) {
                     break;
                 }
             } else {
-                wbuf_.Front().Cut(bytes);
+                wbuf_.front().buf_.Cut(bytes);
                 bytes = 0;
                 break;
             }
         }
-    }
-
-    if (isasync && bytesWritten) {
-        client_.writeDoneHandler_.Wakeup(this, bytesWritten);
     }
 
     return bytesWritten;

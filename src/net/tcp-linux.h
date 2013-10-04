@@ -207,6 +207,8 @@ public:
 	 */
 	int EnqueueWrite(const IOBuffer & data);
 
+	int Write(const IOBuffer & buf, const WriteDoneHandler & h);
+
 	/**
 	 * Invoke asynchronous read operation
 	 *
@@ -289,6 +291,20 @@ public:
 		ReadDoneHandler chandler_;
 	};
 
+	struct WriteCtx
+	{
+		WriteCtx() { std::cerr << "!!" << std::endl; }
+
+		WriteCtx(const IOBuffer & buf, const WriteDoneHandler & h)
+		    : buf_(buf), h_(h)
+		{
+			ASSERT(buf);
+		}
+
+		IOBuffer buf_;
+		WriteDoneHandler h_;
+	};
+
 	/*.... Private member methods ....*/
 
 	/**
@@ -318,7 +334,7 @@ public:
 	int fd_;
 	Epoll & epoll_;
 	Client client_;
-	BoundedQ<IOBuffer> wbuf_;
+	std::list<WriteCtx> wbuf_;
 	ReadCtx rctx_;
 
 	PerfCounter statReadSize_;

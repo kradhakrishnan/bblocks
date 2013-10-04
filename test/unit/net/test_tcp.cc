@@ -93,12 +93,7 @@ public:
     __completion_handler__
     virtual void WriteDone(TCPChannel *, int status)
     {
-        ASSERT(status > 0 &&  ((size_t) status <= wbuf_.Size()));
-
-        if ((size_t) status < wbuf_.Size()) {
-            wbuf_.Cut(status);
-            return;
-        }
+        ASSERT(status > 0 &&  ((size_t) status == wbuf_.Size()));
 
         INFO(log_) << "ClientWriteDone.";
 

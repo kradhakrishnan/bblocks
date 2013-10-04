@@ -18,8 +18,7 @@ static LogPath _log("/bmark_tcp");
 //
 struct ChStats
 {
-	ChStats()
-		: start_ms_(NowInMilliSec()), bytes_read_(0), bytes_written_(0)
+	ChStats() : start_ms_(NowInMilliSec()), bytes_read_(0), bytes_written_(0)
 	{}
 
 	uint64_t start_ms_;
@@ -98,8 +97,7 @@ public:
 			UpdateStats(ch, buf_.Size());
 
 			if (ThreadPool::ShouldYield()) {
-				ThreadPool::Schedule(this,
-					    &This::ReadUntilBlocked, ch);
+				ThreadPool::Schedule(this, &This::ReadUntilBlocked, ch);
 				return;
 			}
 		}
@@ -136,9 +134,9 @@ private:
 			/* Print results on screen */
 			double MB = it->second.bytes_read_ / double(1024 * 1024);
 			double MBps = MB / (double) elapsed_s;
-				INFO(_log) << "ch " << (uint64_t) it->first
-					   << " bytes " << it->second.bytes_read_
-					   << " MBps " << MBps;
+			INFO(_log) << "ch " << (uint64_t) it->first
+				   << " bytes " << it->second.bytes_read_
+				   << " MBps " << MBps;
 
 			/* Reset print timer */
 			it->second.bytes_read_ = 0;
@@ -269,8 +267,7 @@ private:
             Guard _(&lock_);
             for (auto chstat : chstats_) {
                 TCPChannel * ch = chstat.first;
-                ch->UnregisterHandle(static_cast<CHandle *>(this),
-                                     async_fn(&This::Unregistered));
+                ch->UnregisterHandle(static_cast<CHandle *>(this), async_fn(&This::Unregistered));
             }
         }
     }
@@ -330,8 +327,7 @@ private:
         Guard _(&lock_);
 
         for (auto stat : chstats_) {
-            auto MBps = B2MB(stat.second.bytes_written_) /
-                                                MS2SEC(timer_.Elapsed());
+            auto MBps = B2MB(stat.second.bytes_written_) / MS2SEC(timer_.Elapsed());
             INFO(_log) << "Channel " << stat.first << " :"
                        << " w-bytes " << stat.second.bytes_written_ << " bytes"
                        << " time : " << MS2SEC(timer_.Elapsed()) << " s"

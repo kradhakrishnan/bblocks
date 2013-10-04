@@ -49,6 +49,30 @@ public:
 	}
 };
 
+// ............................................................................. AutoRelease<T> ....
+
+template<class T>
+class AutoRelease
+{
+public:
+
+    explicit AutoRelease(T * t) : t_(t) {}
+    ~AutoRelease()
+    {
+	    if (t_) {
+		    BufferPool::Dalloc<T>(t_);
+	    }
+    }
+
+private:
+
+    AutoRelease();
+    AutoRelease(const AutoRelease &);
+    AutoRelease<T> & operator=(const AutoRelease<T> &);
+
+    T * t_;
+};
+
 }
 
 #endif

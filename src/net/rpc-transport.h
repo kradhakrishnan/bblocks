@@ -11,112 +11,114 @@ namespace dh_core { namespace rpc {
 
 using namespace dh_core;
 
-// ................................................................................... Endpoint ....
-
-class Endpoint
-{
-public:
-
-	Endpoint(const std::string & name, const uint64_t uuid)
-		: name_(name), uuid_(uuid)
-	{}
-
-	const std::string & GetName() const { return name_; }
-	uint64_t GetUID() const { return uuid_; }
-
-protected:
-
-	const std::string name_;
-	const uint64_t uuid_;
-
-};
-
 // .................................................................................. Transport ....
 
 class Transport
 {
 public:
 
-	typedef Fn2<bool, uint64_t> StartCallback;
-	typedef Fn<bool> StopCallback;
-	typedef Fn2<int, uint8_t *> PeekDoneFn;
-	typedef Fn2<int, IOBuffer> ReadDoneFn;
-	typedef Fn<int> WriteDoneFn;
+	typedef Fn<bool> StopHandle;
+	typedef Fn2<int, IOBuffer> ReadHandle;
+	typedef Fn<int> WriteHandle;
 
-	virtual void NotifyError(const Fn<int> & cb);
-	virtual void NotifyEndpointDiscovery(const Fn<Endpoint> & cb);
-	virtual void NotifyEnpointClosure(const Fn<Endpoint> & cb);
+	virtual bool Stop(const StopHandle & cb) = 0;
 
-	virtual bool Start(const Fn<bool> & cb) = 0;
-	virtual bool Stop(const Fn<bool> & cb) = 0;
-	virtual bool Peek(const uint64_t euid, const size_t size,
-			  uint8_t * data, const PeekDoneFn & fn) = 0;
-	virtual bool Read(const uint64_t euid, IOBuffer & buf,
-			  const ReadDoneFn & fn) = 0;
-	virtual bool Write(const uint64_t euid, IOBuffer & buf,
-			   const WriteDoneFn & fn) = 0;
+	// virtual bool Peek(IOBuffer & data, const ReadHandle & h) = 0;
+	virtual bool Read(IOBuffer & buf, const ReadHandle & h) = 0;
+	virtual bool Write(IOBuffer & buf, const WriteHandle & h) = 0;
+};
+
+// ............................................................................... TCPTransport ....
+
+class TCPTransport : public CHandle, public Transport, public AsyncProcessor
+{
+public:
+
+	virtual ~TCPTransport() {}
+
+protected:
+
+	typedef TCPTransport This;
+
+	// void Peek(TCPChannel & ch, IOBuffer & buf, const ReadHandle & h);
+	void Read(TCPChannel & ch, IOBuffer & buf, ReadHandle & h);
+	void Write(TCPChannel & ch, IOBuffer & buf, WriteHandle & h);
+
+	__interrupt__ void ReadDone(TCPChannel *, int status, IOBuffer buf, ReadHandle * h);
+	__interrupt__ void WriteDone(TCPChannel *, int status, WriteHandle * h);
 };
 
 // ......................................................................... TCPServerTransport ....
 
-class TCPServerTransport : public CompletionHandle, public Transport,
-			   public AsyncProcessor
+class TCPServerTransport : public TCPTransport
 {
 public:
 
-	TCPServerTransport(const Endpoint & endpoint,
-			   const SocketAddress & addr);
-	TCPServerTransport(const Endpoint & endpoint,
-			   const std::vector<SocketAddress> & addrs);
+	typedef Fn<bool> StartHandle;
 
-	virtual bool Start(const StartCallback & cb);
-	virtual bool Stop(const StopCallback & cb);
-	virtual bool Peek(const Endpoint & endpoint, const size_t size,
-			  uint8_t * data, const PeekDoneFn & cb);
-	virtual bool Read(Endpoint & endpoint, IOBuffer & buf,
-			  const ReadDoneFn & cb);
-	virtual bool Write(Endpoint & endpoint, IOBuffer & buf,
-			   const WriteDoneFn & cb);
+	TCPServerTransport(const std::string path = "/rpc/transport/tcpserver")
+	    : log_(path), lock_(path), epoll_(path)
+	    , tcpserver_(epoll_)
+	{}
+
+	virtual bool Listen(const SocketAddress & addr, const StartHandle & h);
+	virtual bool Listen(const std::vector<SocketAddress> & addr, StartHandle & h);
+
+	virtual bool Stop(const StopHandle & h) override;
+
+	// virtual bool Peek(IOBuffer & buf, const ReadHandle & h) override;
+	virtual bool Read(IOBuffer & buf, const ReadHandle & h) override;
+	virtual bool Write(IOBuffer & buf, const WriteHandle & h) override;
 
 private:
+
+	const LogPath log_;
+
+	SpinMutex lock_;
+	std::vector<SocketAddress> addr_;
+	Epoll epoll_;
+	TCPServer tcpserver_;
+	std::list<boost::shared_ptr<TCPChannel> > chs_;
 };
 
 // ......................................................................... TCPClientTransport ....
 
-class TCPClientTransport : public CompletionHandle, public Transport,
-			   public AsyncProcessor
+class TCPClientTransport : public TCPTransport
 {
 public:
 
-	TCPClientTransport(const Endpoint & endpoint);
+	typedef TCPClientTransport This;
+	typedef Fn<bool> StartHandle;
 
-	void AddPath(const Endpoint & endpoint, const SocketAddress & addr);
-	void AddPath(const Endpoint & endpoint,
-		     const std::vector<SocketAddress> & addrs);
+	TCPClientTransport(Epoll & epoll)
+	    : log_("/rpc/transport/tcpclient")
+	    , lock_("/rpc/transport/tcpclient")
+	    , epoll_(epoll)
+	    , tcpclient_(epoll)
+	{}
 
-	virtual bool Start(const StartCallback & cb);
-	virtual bool Stop(const StopCallback & cb);
-	virtual bool Peek(const uint64_t uuid, const size_t size,
-			  uint8_t * data, const PeekDoneFn & cb);
-	virtual bool Read(const uint64_t uid, IOBuffer & buf,
-			  const ReadDoneFn & cb);
-	virtual bool Write(const uint64_t endpoint, IOBuffer & buf,
-			   const WriteDoneFn & cb);
+	virtual ~TCPClientTransport() {}
+
+	void Connect(const SocketAddress & addr, const StartHandle & cb);
+	virtual bool Stop(const StopHandle & cb) override;
+
+	// virtual bool Peek(IOBuffer & buf, const PeekHandle & h) override;
+	virtual bool Read(IOBuffer & buf, const ReadHandle & h) override;
+	virtual bool Write(IOBuffer & buf, const WriteHandle & h) override;
 
 private:
+
+	__interrupt__ void ConnectDone(TCPConnector *, int status, TCPChannel * ch,
+				       StartHandle * h);
+
+	const LogPath log_;
+
+	SpinMutex lock_;
+	Epoll & epoll_;
+	TCPConnector tcpclient_;
+	boost::shared_ptr<TCPChannel> ch_;
 };
 
-// ............................................................................... RPCSynPacket ....
-
-struct RPCSynPacket : RPCPacket
-{
-	UInt64 magic_;
-	UInt64 uid_;
-	String name_;
-	UInt64 serveruid_;
-	UInt64 path_;
-	UInt64 pathVersion_;
-};
 
 } } // namespace dh_core::rpc
 
