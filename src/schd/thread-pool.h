@@ -2,6 +2,7 @@
 #define _DH_CORE_THREADPOOL_H_
 
 #include "defs.h"
+#include "buf/bufpool.h"
 #include "schd/thread.h"
 
 namespace dh_core {
@@ -22,7 +23,8 @@ public:
 
 #define MEMBERFNPTR(n)										\
 template<class _OBJ_, TDEF(T,n)>								\
-class MemberFnPtr##n : public ThreadRoutine							\
+class MemberFnPtr##n : public ThreadRoutine,							\
+		       public BufferPoolObject<MemberFnPtr##n<_OBJ_, TENUM(T,n)> >		\
 {												\
 public:												\
 												\
@@ -36,7 +38,7 @@ public:												\
 		delete this;									\
 	}											\
 												\
-    private:											\
+private:											\
 												\
 	_OBJ_ * obj_;										\
 	void (_OBJ_::*fn_)(TENUM(T,n));								\
@@ -92,6 +94,11 @@ private:
 			delete this;
 		}
 	};
+
+	virtual bool ShouldYield() override
+	{
+		return !q_.IsEmpty();
+	}
 
 	bool exitMain_;
 	InQueue<ThreadRoutine> q_;
@@ -179,7 +186,8 @@ public:
 	              TPARAM(T,t,n))								\
 	{											\
 		ThreadRoutine * r;								\
-		r = new MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));			\
+		void * buf = BufferPool::Alloc<MemberFnPtr##n<_OBJ_, TENUM(T,n)> >();		\
+		r = new (buf) MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));		\
 		threads_[nextTh_++ % threads_.size()]->Push(r);					\
 	}											\
 
@@ -200,7 +208,8 @@ public:
 	void ScheduleBarrier(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), TPARAM(T,t,n))		\
 	{											\
 		ThreadRoutine * r;								\
-		r = new MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));			\
+		void * buf = BufferPool::Alloc<MemberFnPtr##n<_OBJ_, TENUM(T,n)> >();		\
+		r = new (buf) MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));	    	\
 		threads_[nextTh_++ % threads_.size()]->Push(r);					\
 	}											\
 
@@ -214,8 +223,9 @@ public:
 		BarrierRoutine * br = new BarrierRoutine(r, threads_.size());
 		for (size_t i = 0; i < threads_.size(); ++i) {
 			ThreadRoutine * r;
-			r = new MemberFnPtr1<BarrierRoutine, int>(br, &BarrierRoutine::Run,
-								  /*status=*/ 0);
+			void * buf = BufferPool::Alloc<MemberFnPtr1<BarrierRoutine, int> >(); 
+			r = new (buf) MemberFnPtr1<BarrierRoutine, int>(br, &BarrierRoutine::Run,
+									/*status=*/ 0);
 			threads_[i]->Push(r);
 		}
 	}
@@ -253,21 +263,27 @@ public:
 
 	static void Start(const uint32_t ncores = SysConf::NumCores())
 	{
+		ThreadCtx::Init(/*id=*/ 0xFFFFFFFF, /*tinst=*/ NULL);
 		NonBlockingThreadPool::Instance().Start(ncores);
 	}
 
 	static void Shutdown()
 	{
+		INVARIANT(ThreadCtx::tid_ == 0xFFFFFFFF);
+
 		NonBlockingThreadPool::Instance().Shutdown();
+		ThreadCtx::Cleanup();
 	}
 
 	static void Wait()
 	{
+		INVARIANT(ThreadCtx::tid_ == 0xFFFFFFFF);
 		NonBlockingThreadPool::Instance().Wait();
 	}
 
 	static void Wakeup()
 	{
+		INVARIANT(ThreadCtx::tid_ != 0xFFFFFFFF);
 		NonBlockingThreadPool::Instance().Wakeup();
 	}
 

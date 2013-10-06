@@ -462,8 +462,8 @@ TCPConnector::Connect(const SocketAddress addr, const ConnectHandler & chandler)
     status = SocketOptions::SetTcpNoDelay(fd, /*enable=*/ false);
     INVARIANT(status);
 
-    status = SocketOptions::SetTcpWindow(fd, /*size=*/ 640 * 1024);
-    INVARIANT(status);
+    // status = SocketOptions::SetTcpWindow(fd, /*size=*/ 640 * 1024);
+    // INVARIANT(status);
 
     status = ::bind(fd, (sockaddr *) &addr.LocalAddr(), sizeof(sockaddr_in));
     INVARIANT(status == 0);

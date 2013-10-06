@@ -99,11 +99,6 @@ public:
 	{
 		while (ch->Read(buf_, cqueue_fn(&rcqueue_))) {
 			UpdateStats(ch, buf_.Size());
-
-			if (ThreadPool::ShouldYield()) {
-				wakeupq_.Wakeup(ch);
-				return;
-			}
 		}
 	}
 
@@ -308,6 +303,7 @@ private:
 			++pendingios_;
 
 			status = ch->Write(buf_, cqueue_fn(&wcqueue_));
+
 			INVARIANT(size_t(status) <= buf_.Size());
 
 			if (size_t(status) != buf_.Size()) {
@@ -317,11 +313,9 @@ private:
 			UpdateStats(ch, status);
 			--pendingios_;
 
-			if (ThreadPool::ShouldYield()) {
-				++pendingWakeups_;
-				wakeupq_.Wakeup(ch);
-				break;
-			}
+			++pendingWakeups_;
+			wakeupq_.Wakeup(ch);
+			break;
 		}
 	}
 
@@ -332,9 +326,9 @@ private:
 		for (auto stat : chstats_) {
 			auto MBps = B2MB(stat.second.bytes_written_) / MS2SEC(timer_.Elapsed());
 			INFO(_log) << "Channel " << stat.first << " :"
-					   << " w-bytes " << stat.second.bytes_written_ << " bytes"
-					   << " time : " << MS2SEC(timer_.Elapsed()) << " s"
-					   << " write throughput : " << MBps << " MBps";
+				   << " w-bytes " << stat.second.bytes_written_ << " bytes"
+				   << " time : " << MS2SEC(timer_.Elapsed()) << " s"
+				   << " write throughput : " << MBps << " MBps";
 		}
 	}
 
@@ -370,6 +364,8 @@ main(int argc, char ** argv)
 	int nconn = 1;
 	int seconds = 60;
 	int ncpu = SysConf::NumCores();
+
+	SysConf::SetMaxOpenFds(100000);
 
 	po::options_description desc("Options:");
 	desc.add_options()

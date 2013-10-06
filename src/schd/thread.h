@@ -1,5 +1,6 @@
-#ifndef _DH_CORE_THREAD_H_
-#define _DH_CORE_THREAD_H_
+#pragma once
+
+#include <atomic>
 
 #include "logger.h"
 #include "util.hpp"
@@ -12,6 +13,8 @@ namespace dh_core {
 class Thread
 {
 public:
+
+	friend class NonBlockingThreadPool;
 
 	Thread(const std::string & logPath)
 		: log_(logPath)
@@ -78,18 +81,35 @@ public:
 
 	static void * ThFn(void * args)
 	{
+		INVARIANT(args);
+
 		Thread * th = (Thread *) args;
-		pthread_exit(th->ThreadMain());
+
+		ThreadCtx::Init(++nextThId_, th);
+
+		void * thstatus = th->ThreadMain();
+
+		ThreadCtx::Cleanup();
+		pthread_exit(thstatus);
 	}
 
 protected:
+
+	virtual bool ShouldYield()
+	{
+		/*
+		 * This is a query used by async process to make sure they are not blocking other
+		 * operations during long CPU intensive work.
+		 */
+		 return false;
+	}
 
 	virtual void * ThreadMain() = 0;
 
 	LogPath log_;
 	pthread_t tid_;
+
+	static std::atomic<uint32_t> nextThId_;
 };
 
 }
-
-#endif

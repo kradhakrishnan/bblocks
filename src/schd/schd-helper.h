@@ -2,7 +2,7 @@
 #define _IOCORE_SCHEDULER_H_
 
 #include <inttypes.h>
-
+#include <sys/resource.h>
 #include <pthread.h>
 #include <boost/shared_ptr.hpp>
 #include <signal.h>
@@ -11,6 +11,8 @@
 #include "inlist.hpp"
 
 namespace dh_core {
+
+class Thread;
 
 //............................................................................... ThreadContext ....
 
@@ -30,6 +32,32 @@ struct ThreadCtx
 	 * 3 : 2048 - 5196
 	 */
 	static __thread std::list<uint8_t *> * pool_;
+
+	/* Thread instance */
+	static __thread Thread * tinst_;
+
+	static void Init(const uint32_t tid, Thread * tinst)
+	{
+		tid_ = tid;
+		tinst_ = tinst;
+		pool_ = new std::list<uint8_t *>[SLAB_DEPTH];
+	}
+
+	static void Cleanup()
+	{
+		for (int i = 0; i < SLAB_DEPTH; ++i) {
+			auto l = ThreadCtx::pool_[i];
+			for (auto it = l.begin(); it != l.end(); ++it) {
+				::free(*it);
+			}
+
+			l.clear();
+		}
+
+		delete[] ThreadCtx::pool_;
+		ThreadCtx::pool_ = NULL;
+	}
+
 };
 
 //..................................................................................... SysConf ....
@@ -44,6 +72,17 @@ public:
 		ASSERT(numCores >= 1);
 
 		return numCores;
+	}
+
+	static bool SetMaxOpenFds(const size_t size)
+	{
+		rlimit rl;
+		rl.rlim_max = rl.rlim_cur = size + 1;
+
+		int status = setrlimit(RLIMIT_NOFILE, &rl);
+		ASSERT(status == 0);
+
+		return status == 0;
 	}
 };
 

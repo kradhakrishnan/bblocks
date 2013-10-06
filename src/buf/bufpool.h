@@ -1,5 +1,4 @@
-#ifndef _BUF_BUFPOOL_H_
-#define _BUF_BUFPOOL_H_
+#pragma once
 
 #include <inttypes.h>
 #include <list>
@@ -49,6 +48,29 @@ public:
 	}
 };
 
+// ........................................................................ BufferPoolObject<T> ....
+
+template<class T>
+class BufferPoolObject
+{
+public:
+
+	void * operator new(size_t size, void * ptr)
+	{
+		ASSERT(size == sizeof(T));
+		return ptr;
+	}
+
+	void operator delete(void * ptr)
+	{
+		BufferPool::Dalloc<T>((T *) ptr);
+	}
+
+protected:
+
+	void * operator new(size_t size);
+};
+
 // ............................................................................. AutoRelease<T> ....
 
 template<class T>
@@ -56,23 +78,21 @@ class AutoRelease
 {
 public:
 
-    explicit AutoRelease(T * t) : t_(t) {}
-    ~AutoRelease()
-    {
-	    if (t_) {
-		    BufferPool::Dalloc<T>(t_);
-	    }
-    }
+	explicit AutoRelease(T * t) : t_(t) {}
+	~AutoRelease()
+	{
+		if (t_) {
+			BufferPool::Dalloc<T>(t_);
+		}
+	}
 
 private:
 
-    AutoRelease();
-    AutoRelease(const AutoRelease &);
-    AutoRelease<T> & operator=(const AutoRelease<T> &);
+	AutoRelease();
+	AutoRelease(const AutoRelease &);
+	AutoRelease<T> & operator=(const AutoRelease<T> &);
 
-    T * t_;
+	T * t_;
 };
 
 }
-
-#endif
