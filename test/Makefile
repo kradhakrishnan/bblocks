@@ -11,6 +11,8 @@ TARGET += test/unit/schd/test_th_pool.cc		\
 	  test/unit/net/test_tcp.cc			\
 	  test/unit/net/test_rpc.cc			\
 	  test/unit/fs/test_aio.cc			\
+	  test/perf/bmark_aio.cc			\
+	  test/perf/bmark_tcp.cc			\
 
 #
 # .cc

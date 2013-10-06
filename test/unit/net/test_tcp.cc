@@ -5,6 +5,7 @@
 #include "test/unit-test.h"
 #include "util.hpp"
 #include "net/tcp-linux.h"
+#include "net/mpio-epoll.h"
 #include "async.h"
 
 using namespace std;
@@ -25,7 +26,8 @@ public:
     BasicTCPTest()
         : log_("testtcp/")
         , epoll_("/epoll")
-        , tcpServer_(epoll_)
+	, mpepoll_(/*nth=*/ 2)
+        , tcpServer_(mpepoll_)
         , tcpClient_(epoll_)
         , addr_(SocketAddress::GetAddr("127.0.0.1", 9999 + (rand() % 100)))
         , server_ch_(NULL)
@@ -176,6 +178,7 @@ private:
 
     LogPath log_;
     Epoll epoll_;
+    MultiPathEpoll mpepoll_;
     TCPServer tcpServer_;
     TCPConnector tcpClient_;
     SocketAddress addr_;

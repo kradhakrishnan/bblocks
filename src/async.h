@@ -32,6 +32,14 @@ namespace dh_core {
  * this can help to provide information about functions that language doesn't
  * have in itself
  */
+
+#define __async_fn__
+#define __intr_fn__
+#define __cqueue_fn__
+
+//
+// The following are deprecated. Please use the list above
+//
 #define __completion_handler__ /* async notification */
 #define __interrupt__ /* synchronous callback */
 #define __async_operation__ /* async operation function */

@@ -9,9 +9,9 @@ using namespace dh_core;
 //....................................................................................... Epoll ....
 
 Epoll::Epoll(const string & logPath)
-    : Thread("/epoll/" + STR(this))
-    , log_(logPath + "/epoll")
-    , lock_("/epoll" + logPath)
+	: Thread("/epoll/" + STR(this))
+	, log_(logPath + "/epoll")
+	, lock_("/epoll" + logPath)
 {
 	fd_ = epoll_create(/*size=*/ MAX_EPOLL_EVENT);
 

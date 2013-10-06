@@ -1,11 +1,11 @@
-#ifndef _BB_EPOLL_H_
-#define _BB_EPOLL_H_
+#pragma once
 
 #include <map>
 #include <sys/epoll.h>
 #include <stdint.h>
 #include <tr1/unordered_map>
 
+#include "fdpoll.h"
 #include "util.hpp"
 #include "lock.h"
 #include "async.h"
@@ -24,20 +24,14 @@ namespace dh_core {
  * Effectively the processing throughput will be what one can extract from a
  * single core.
  */
-class Epoll : public Thread
+class Epoll : public Thread, public FdPoll
 {
 public:
 
-	/* .... Typedef .... */
-
-	typedef Fn2<int, uint32_t> fn_t;
-
-	/* .... create/destroy .... */
+	using FdPoll::fn_t;
 
 	Epoll(const std::string & logPath);
 	virtual ~Epoll();
-
-	/* .... sync operations .... */
 
 	/**
 	 * Add a given file descriptor to the epoll list
@@ -47,7 +41,7 @@ public:
 	 * @param   fn		Completion handle to notify
 	 * @return  true if successful else false
 	 */
-	bool Add(const fd_t fd, const uint32_t events, const fn_t & fn);
+	virtual bool Add(const fd_t fd, const uint32_t events, const fn_t & fn) override;
 
 	/**
 	 * Remove given file descriptor from the epoll list
@@ -55,24 +49,21 @@ public:
 	 * @param   fd      File desctiptor
 	 * @return  true if successful else false
 	 */
-	bool Remove(const fd_t fd);
+	virtual bool Remove(const fd_t fd) override;
 
 	/**
 	 * Remove a given event from the registered fd
 	 */
-	bool AddEvent(const fd_t fd, const uint32_t events);
+	virtual bool AddEvent(const fd_t fd, const uint32_t events) override;
 
 	/**
 	 * Unregister a given event from the registered events for a specific fd
 	 */
-	bool RemoveEvent(const fd_t fd, const uint32_t events);
+	virtual bool RemoveEvent(const fd_t fd, const uint32_t events) override;
 
 private:
 
-	/* .... Data .... */
-
-	// Maximum epoll events that can polled for
-	static const int MAX_EPOLL_EVENT = 1024;
+	static const int MAX_EPOLL_EVENT = 10 * 1024; // C10K
 
 	/**
 	 *  Represent the Fd being polled on and its related information
@@ -101,8 +92,6 @@ private:
 	typedef std::tr1::unordered_map<fd_t, FDRecord *> fd_map_t;
 	typedef std::list<FDRecord *> fdrec_list_t;
 
-	/* .... Private methods ..... */
-
 	/**
 	 * Epoll thread entry method
 	 */
@@ -113,8 +102,6 @@ private:
 	 */
 	void EmptyTrashcan();
 
-	/* .... Private member variables .... */
-
 	LogPath log_;		    // Log file
 	SpinMutex lock_;	    // Default lock
 	fd_t fd_;		    // Epoll fd
@@ -122,6 +109,4 @@ private:
 	fdrec_list_t trashcan_;	    // FDRecords to be trashed
 };
 
-} // namespace bb {
-
-#endif /* #define _BB_EPOLL_H_ */
+}

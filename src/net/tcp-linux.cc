@@ -6,7 +6,7 @@ using namespace dh_core;
 
 //.............................................................. TCPChannel ....
 
-TCPChannel::TCPChannel(const std::string & name, int fd, Epoll & epoll)
+TCPChannel::TCPChannel(const std::string & name, int fd, FdPoll & epoll)
     : log_(name)
     , lock_(name)
     , fd_(fd)
@@ -81,11 +81,23 @@ TCPChannel::Read(IOBuffer & data, const ReadDoneHandler & chandler)
 {
     Guard _(&lock_);
 
-    // TODO: Add IOBuffer to the return so we know that read client is not
-    // misbehaving
     ASSERT(!rctx_.buf_ && !rctx_.bytesRead_);
     ASSERT(data);
-    rctx_ = ReadCtx(data, chandler);
+
+    rctx_ = ReadCtx(data, chandler, /*isPeek=*/ false);
+
+    return ReadDataFromSocket(/*isasync=*/ false);
+}
+
+bool
+TCPChannel::Peek(IOBuffer & data, const ReadDoneHandler & h)
+{
+    Guard _(&lock_);
+
+    ASSERT(!rctx_.buf_ && !rctx_.bytesRead_);
+    ASSERT(data);
+    
+    rctx_ = ReadCtx(data, h, /*isPeek=*/ true);
 
     return ReadDataFromSocket(/*isasync=*/ false);
 }
@@ -190,7 +202,7 @@ TCPChannel::ReadDataFromSocket(const bool isasync)
         uint8_t * p = rctx_.buf_.Ptr() + rctx_.bytesRead_;
         size_t size = rctx_.buf_.Size() - rctx_.bytesRead_;
 
-        int status = read(fd_, p, size);
+        int status = recv(fd_, p, size, rctx_.isPeek_ ? MSG_PEEK : 0);
 
         if (status == -1) {
             if (errno == EAGAIN) {
@@ -223,13 +235,9 @@ TCPChannel::ReadDataFromSocket(const bool isasync)
             auto rctx = rctx_;
             rctx_.Reset();
             if (isasync) {
-                // We need to respond since we are called in async context
                 rctx.chandler_.Wakeup(this, (int) rctx.bytesRead_, rctx.buf_);
             }
 
-            //
-            // Watch out, we don't own the lock here
-            //
             return true;
         }
     }

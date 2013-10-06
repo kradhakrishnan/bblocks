@@ -24,7 +24,7 @@ static void DestroyBufferPool()
 void *
 NonBlockingThread::ThreadMain()
 {
-	ThreadCtx::tid_ = tid_;
+	ThreadCtx::tid_ = id_;
 	ThreadCtx::pool_ = new std::list<uint8_t *>[SLAB_DEPTH];
 
 	DisableThreadCancellation();

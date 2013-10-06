@@ -15,6 +15,7 @@
 #include "async.h"
 #include "schd/thread-pool.h"
 #include "net/epoll.h"
+#include "net/fdpoll.h"
 #include "buf/buffer.h"
 #include "perf/perf-counter.h"
 
@@ -39,8 +40,7 @@ public:
 	static bool SetTcpNoDelay(const int fd, const bool enable)
 	{
 		const int flag = enable;
-		int status = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag,
-			                sizeof(int));
+		int status = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
 		return status != -1;
 	}
 
@@ -179,7 +179,6 @@ public:
 
 	friend class TCPConnector;
 	friend class TCPServer;
-	friend class Epoll;
 
 	typedef TCPChannel This;
 	typedef Fn3<TCPChannel *, int, IOBuffer> ReadDoneHandler;
@@ -188,7 +187,7 @@ public:
 
 	/*.... Create/Destroy ....*/
 
-	explicit TCPChannel(const std::string & name, int fd, Epoll & epoll);
+	explicit TCPChannel(const std::string & name, int fd, FdPoll & epoll);
 	virtual ~TCPChannel();
 
 	/*.... CHandle override ....*/
@@ -220,7 +219,8 @@ public:
 	 * @param   fn      Callback when read (if data not readily available)
 	 * @return  true if data read is done else false
 	 */
-	bool Read(IOBuffer & data, const ReadDoneHandler & chandler);
+	bool Read(IOBuffer & data, const ReadDoneHandler & h);
+	bool Peek(IOBuffer & data, const ReadDoneHandler & h);
 
 	/*.... sync operations ....*/
 
@@ -274,10 +274,11 @@ public:
 	{
 		ReadCtx() : bytesRead_(0) {}
 
-		ReadCtx(const IOBuffer & buf, const ReadDoneHandler & chandler)
+		ReadCtx(const IOBuffer & buf, const ReadDoneHandler & chandler, bool isPeek)
 			: buf_(buf)
 			, bytesRead_(0)
 			, chandler_(chandler)
+			, isPeek_(isPeek)
 		{}
 
 		void Reset()
@@ -289,6 +290,7 @@ public:
 		IOBuffer buf_;
 		uint32_t bytesRead_;
 		ReadDoneHandler chandler_;
+		bool isPeek_;
 	};
 
 	struct WriteCtx
@@ -332,7 +334,7 @@ public:
 	LogPath log_;
 	SpinMutex lock_;
 	int fd_;
-	Epoll & epoll_;
+	FdPoll & epoll_;
 	Client client_;
 	std::list<WriteCtx> wbuf_;
 	ReadCtx rctx_;
@@ -361,7 +363,7 @@ public:
 
 	/*.... create/destroy ....*/
 
-	TCPServer(Epoll & epoll)
+	TCPServer(FdPoll & epoll)
 		: log_(GetLogPath())
 		, lock_(GetLogPath())
 		, epoll_(epoll)
@@ -412,7 +414,7 @@ public:
 
 	LogPath log_;
 	SpinMutex lock_;
-	Epoll & epoll_;
+	FdPoll & epoll_;
 	socket_t sockfd_;
 	ConnectHandler client_;
 };
@@ -438,7 +440,7 @@ public:
 
 	/*.... create/destroy ....*/
 
-	TCPConnector(Epoll & epoll)
+	TCPConnector(FdPoll & epoll)
 	    : log_("/connector")
 	    , lock_("/connector")
 	    , epoll_(epoll)
@@ -483,7 +485,7 @@ public:
 
 	LogPath log_;           // Log path
 	SpinMutex lock_;        // Default lock
-	Epoll & epoll_;         // Socket poll helper
+	FdPoll & epoll_;        // Socket poll helper
 	clients_map_t clients_; // Clients connecting
 };
 

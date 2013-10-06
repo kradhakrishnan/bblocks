@@ -1,7 +1,9 @@
 #include <boost/program_options.hpp>
 #include <string>
 #include <iostream>
+#include <atomic>
 
+#include "net/mpio-epoll.h"
 #include "net/tcp-linux.h"
 #include "test/unit-test.h"
 
@@ -12,6 +14,8 @@ namespace po = boost::program_options;
 
 // log path
 static LogPath _log("/bmark_tcp");
+
+// .................................................................................... ChStats ....
 
 //
 // Channel stat abstraction
@@ -26,7 +30,7 @@ struct ChStats
 	uint64_t bytes_written_;
 };
 
-//...................................................... TCPServerBenchmark ....
+//.......................................................................... TCPServerBenchmark ....
 
 ///
 /// @class TCPServerBenchmark
@@ -44,10 +48,11 @@ public:
 	 */
 	TCPServerBenchmark(const size_t iosize)
 		: lock_("/server")
-		, epoll_("/server")
+		, epoll_(/*threads=*/ 2, "/server")
 		, server_(epoll_)
 		, buf_(IOBuffer::Alloc(iosize))
 		, rcqueue_(this, &This::ReadDone)
+		, wakeupq_(this, &This::ReadUntilBlocked)
 	{}
 
 	virtual ~TCPServerBenchmark() {}
@@ -71,8 +76,7 @@ public:
 	//
 	// Connection established callback
 	//
-	__completion_handler__
-	virtual void HandleServerConn(TCPServer *, int status, TCPChannel * ch)
+	virtual void HandleServerConn(TCPServer *, int status, TCPChannel * ch) __async_fn__
 	{
 		INFO(_log) << "Got ch " << ch;
 
@@ -80,8 +84,8 @@ public:
 		 * Create channel stat node
 		 */
 		{
-		    Guard _(&lock_);
-		    chstats_.insert(make_pair(ch, ChStats()));
+			Guard _(&lock_);
+			chstats_.insert(make_pair(ch, ChStats()));
 		}
 
 		ch->RegisterHandle(this);
@@ -91,13 +95,13 @@ public:
 	//
 	// Read data until blocked
 	//
-	void ReadUntilBlocked(TCPChannel * ch)
+	void ReadUntilBlocked(TCPChannel * ch) __cqueue_fn__
 	{
 		while (ch->Read(buf_, cqueue_fn(&rcqueue_))) {
 			UpdateStats(ch, buf_.Size());
 
 			if (ThreadPool::ShouldYield()) {
-				ThreadPool::Schedule(this, &This::ReadUntilBlocked, ch);
+				wakeupq_.Wakeup(ch);
 				return;
 			}
 		}
@@ -106,8 +110,7 @@ public:
 	//
 	// Read completion callback
 	//
-	__completion_handler__
-	virtual void ReadDone(TCPChannel * ch, int status, IOBuffer)
+	virtual void ReadDone(TCPChannel * ch, int status, IOBuffer) __cqueue_fn__
 	{
 		/*
 		 * Update stats
@@ -147,14 +150,15 @@ private:
 	typedef map<TCPChannel *, ChStats> chstats_map_t;
 
 	SpinMutex lock_;
-	Epoll epoll_;
+	MultiPathEpoll epoll_;
 	TCPServer server_;
 	chstats_map_t chstats_;
 	IOBuffer buf_;
 	CQueue3<TCPChannel *, int, IOBuffer> rcqueue_;
+	CQueue<TCPChannel *> wakeupq_;
 };
 
-//...................................................... TCPClientBenchmark ....
+//.......................................................................... TCPClientBenchmark ....
 
 ///
 /// @class TCPClientBenchmark
@@ -165,196 +169,197 @@ class TCPClientBenchmark : public CompletionHandle
 {
 public:
 
-    typedef TCPClientBenchmark This;
+	typedef TCPClientBenchmark This;
 
-    /*.... create/destroy ....*/
+	/*.... create/destroy ....*/
 
-    TCPClientBenchmark(const SocketAddress & addr, const size_t iosize,
-                       const size_t nconn, const size_t nsec)
-        : lock_("/client")
-        , epoll_("/client")
-        , connector_(epoll_)
-        , addr_(addr)
-        , iosize_(iosize)
-        , nconn_(nconn)
-        , nsec_(nsec)
-        , buf_(IOBuffer::Alloc(iosize))
-        , wcqueue_(this, &This::WriteDone)
-    {}
+	TCPClientBenchmark(const SocketAddress & addr, const size_t iosize,
+					   const size_t nconn, const size_t nsec)
+		: lock_("/client")
+		, epoll_("/client")
+		, connector_(epoll_)
+		, addr_(addr)
+		, iosize_(iosize)
+		, nconn_(nconn)
+		, nsec_(nsec)
+		, buf_(IOBuffer::Alloc(iosize))
+		, nactiveconn_(0)
+		, pendingios_(0)
+		, pendingConns_(0)
+		, pendingWakeups_(0)
+		, wcqueue_(this, &This::WriteDone)
+		, wakeupq_(this, &This::WakeupSendData)
+	{}
 
-    virtual ~TCPClientBenchmark()
-    {
-        Guard _(&lock_);
+	virtual ~TCPClientBenchmark()
+	{
+		Guard _(&lock_);
 
-        buf_.Trash();
+		buf_.Trash();
 
-        for (auto chstat : chstats_) {
-            TCPChannel * ch = chstat.first;
-            ch->Close();
-            delete ch;
-        }
+		for (auto chstat : chstats_) {
+			TCPChannel * ch = chstat.first;
+			ch->Close();
+			delete ch;
+		}
 
-        chstats_.clear();
-   }
+		chstats_.clear();
+	}
 
-    void Start(int)
-    {
-        Guard _(&lock_);
+	void Start(int)
+	{
+		Guard _(&lock_);
 
-        for (size_t i = 0; i < nconn_; ++i) {
-            pendingConns_.Add(/*count=*/ 1);
-            connector_.Connect(addr_, async_fn(this, &This::Connected));
-        }
-    }
+		for (size_t i = 0; i < nconn_; ++i) {
+			++pendingConns_;
+			connector_.Connect(addr_, async_fn(this, &This::Connected));
+		}
+	}
 
-    /* .... handler functions .... */
+	virtual void WriteDone(TCPChannel * ch, int status) __cqueue_fn__
+	{
+		ASSERT(status);
+		UpdateStats(ch, status);
 
-    __completion_handler__
-    virtual void WriteDone(TCPChannel * ch, int status)
-    {
-        ASSERT(status);
-        UpdateStats(ch, status);
+		--pendingios_;
 
-        pendingios_.Add(/*val=*/ -1);
+		SendData(ch);
+	}
 
-        SendData(ch);
-    }
+	void Connected(TCPConnector *, int status, TCPChannel * ch) __async_fn__
+	{
+		ASSERT(status == OK);
+		ASSERT(buf_.Size() == iosize_);
 
-    /* .... callbacks .... */
+		{
+			Guard _(&lock_);
+			chstats_.insert(make_pair(ch, ChStats()));
+		}
 
-    __completion_handler__
-    void Connected(TCPConnector *, int status, TCPChannel * ch)
-    {
-        ASSERT(status == OK);
-        ASSERT(buf_.Size() == iosize_);
+		INVARIANT(pendingConns_);
 
-        {
-            Guard _(&lock_);
-            chstats_.insert(make_pair(ch, ChStats()));
-        }
+		ch->RegisterHandle(this);
 
-        INVARIANT(pendingConns_.Count());
+		--pendingConns_;
+		++nactiveconn_;
 
-        ch->RegisterHandle(this);
-        ch->SetWriteDoneFn(cqueue_fn(&wcqueue_));
+		SendData(ch);
+	}
 
-        pendingConns_.Add(/*val=*/ -1);
-        nactiveconn_.Add(/*val=*/ 1);
+	void Unregistered(int status) __async_fn__
+	{
+		INFO(_log) << "Unregistered.";
 
-        SendData(ch);
-    }
-
-    __interrupt__
-    void Unregistered(int status)
-    {
-        INFO(_log) << "Unregistered.";
-
-        if (nactiveconn_.Add(/*val=*/ -1) == 1) {
-            // all clients disconnected
-            ThreadPool::Schedule(this, &This::Halt, /*val=*/ 0);
-        }
-    }
+		if (!(--nactiveconn_)) {
+			// all clients disconnected
+			ThreadPool::Schedule(this, &This::Halt, /*val=*/ 0);
+		}
+	}
 
 private:
 
-    void Stop()
-    {
-        ASSERT(timer_.Elapsed() > SEC2MS(nsec_));
+	void Stop()
+	{
+		ASSERT(timer_.Elapsed() > SEC2MS(nsec_));
 
-        if (!pendingios_.Count() && !pendingConns_.Count()) {
-            INFO(_log) << "Stopping channels.";
+		if (!pendingios_ && !pendingConns_ && !pendingWakeups_) {
+			INFO(_log) << "Stopping channels.";
 
-            Guard _(&lock_);
-            for (auto chstat : chstats_) {
-                TCPChannel * ch = chstat.first;
-                ch->UnregisterHandle(static_cast<CHandle *>(this), async_fn(&This::Unregistered));
-            }
-        }
-    }
+			Guard _(&lock_);
+			for (auto chstat : chstats_) {
+				TCPChannel * ch = chstat.first;
+				ch->UnregisterHandle(static_cast<CHandle *>(this),
+						     async_fn(&This::Unregistered));
+			}
+		}
+	}
 
-    void Halt(int)
-    {
-        PrintStats();
-        ThreadPool::Shutdown();
-    }
+	void Halt(int)
+	{
+		PrintStats();
+		ThreadPool::Wakeup();
+	}
 
-    void UpdateStats(TCPChannel * ch, const int bytes_written)
-    {
-        Guard _(&lock_);
+	void UpdateStats(TCPChannel * ch, const int bytes_written)
+	{
+		Guard _(&lock_);
 
-        auto it = chstats_.find(ch);
-        ASSERT(it != chstats_.end());
-        it->second.bytes_written_ += bytes_written;
-    }
+		auto it = chstats_.find(ch);
+		ASSERT(it != chstats_.end());
+		it->second.bytes_written_ += bytes_written;
+	}
 
-    void SendData(TCPChannel * ch)
-    {
-        int status;
-        while (true) {
-            if (timer_.Elapsed() > SEC2MS(nsec_)) {
-                // time elapsed, stop sending data
-                Stop();
-                break;
-            }
+	void WakeupSendData(TCPChannel * ch) __cqueue_fn__
+	{
+		--pendingWakeups_;
+		SendData(ch);
+	}
 
-            pendingios_.Add(/*val=*/ 1);
+	void SendData(TCPChannel * ch)
+	{
+		int status;
+		while (true) {
+			if (timer_.Elapsed() > SEC2MS(nsec_)) {
+				// time elapsed, stop sending data
+				Stop();
+				break;
+			}
 
-            status = ch->EnqueueWrite(buf_);
-            INVARIANT(status == -EBUSY || size_t(status) <= buf_.Size());
+			++pendingios_;
 
-            if (status == -EBUSY) {
-                pendingios_.Add(/*val=*/ -1); 
-                break;
-            } else if (size_t(status) == buf_.Size()) {
-                UpdateStats(ch, status);
-                pendingios_.Add(/*val=*/ -1);
-            } else {
-                // operate in serial mode, ideally suited for most applications
-                // unless the IO is too small
-                // TODO: Provide a config param
-                break;
-            }
+			status = ch->Write(buf_, cqueue_fn(&wcqueue_));
+			INVARIANT(size_t(status) <= buf_.Size());
 
-            if (ThreadPool::ShouldYield()) {
-                ThreadPool::Schedule(this, &This::SendData, ch);
-                break;
-            }
-        }
-    }
+			if (size_t(status) != buf_.Size()) {
+				break;
+			}
 
-    void PrintStats()
-    {
-        Guard _(&lock_);
+			UpdateStats(ch, status);
+			--pendingios_;
 
-        for (auto stat : chstats_) {
-            auto MBps = B2MB(stat.second.bytes_written_) / MS2SEC(timer_.Elapsed());
-            INFO(_log) << "Channel " << stat.first << " :"
-                       << " w-bytes " << stat.second.bytes_written_ << " bytes"
-                       << " time : " << MS2SEC(timer_.Elapsed()) << " s"
-                       << " write throughput : " << MBps << " MBps";
-        }
-    }
+			if (ThreadPool::ShouldYield()) {
+				++pendingWakeups_;
+				wakeupq_.Wakeup(ch);
+				break;
+			}
+		}
+	}
 
-    typedef map<TCPChannel *, ChStats> chstats_map_t;
+	void PrintStats()
+	{
+		Guard _(&lock_);
 
-    SpinMutex lock_;
-    Epoll epoll_;
-    TCPConnector connector_;
-    const SocketAddress addr_;
-    const size_t iosize_;
-    const size_t nconn_;
-    const size_t nsec_;
-    chstats_map_t chstats_;     //< Stats holder
-    IOBuffer buf_;
-    Timer timer_;
-    AtomicCounter nactiveconn_;
-    AtomicCounter pendingios_;
-    AtomicCounter pendingConns_;
-    CQueue2<TCPChannel *, int> wcqueue_;
+		for (auto stat : chstats_) {
+			auto MBps = B2MB(stat.second.bytes_written_) / MS2SEC(timer_.Elapsed());
+			INFO(_log) << "Channel " << stat.first << " :"
+					   << " w-bytes " << stat.second.bytes_written_ << " bytes"
+					   << " time : " << MS2SEC(timer_.Elapsed()) << " s"
+					   << " write throughput : " << MBps << " MBps";
+		}
+	}
+
+	typedef map<TCPChannel *, ChStats> chstats_map_t;
+
+	SpinMutex lock_;
+	Epoll epoll_;
+	TCPConnector connector_;
+	const SocketAddress addr_;
+	const size_t iosize_;
+	const size_t nconn_;
+	const size_t nsec_;
+	chstats_map_t chstats_;     //< Stats holder
+	IOBuffer buf_;
+	Timer timer_;
+	atomic<size_t> nactiveconn_;
+	atomic<size_t> pendingios_;
+	atomic<size_t> pendingConns_;
+	atomic<size_t> pendingWakeups_;
+	CQueue2<TCPChannel *, int> wcqueue_;
+	CQueue<TCPChannel *> wakeupq_;
 };
 
 
-//.................................................................... Main ....
+//........................................................................................ Main ....
 
 int
 main(int argc, char ** argv)
@@ -364,7 +369,7 @@ main(int argc, char ** argv)
 	int iosize = 4 * 1024;
 	int nconn = 1;
 	int seconds = 60;
-	int ncpu = 8;
+	int ncpu = SysConf::NumCores();
 
 	po::options_description desc("Options:");
 	desc.add_options()
@@ -433,6 +438,8 @@ main(int argc, char ** argv)
 			             SocketAddress::GetAddr(laddr));
 		ThreadPool::Wait();
 	}
+
+	ThreadPool::Shutdown();
 
 	TeardownTestSetup();
 	return 0;
