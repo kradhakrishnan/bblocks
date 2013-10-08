@@ -63,7 +63,7 @@ public:
 		CompletionHandler2<int, Op*> ch_;
 		iocb iocb_;
 		iocb * piocb_[1];
-    };
+	};
 };
 
 //........................................................................... LinuxAioProcessor ....

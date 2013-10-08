@@ -1,6 +1,6 @@
-#ifndef _CORE_NET_RPC_TRANSPORT_H_
-#define _CORE_NET_RPC_TRANSPORT_H_
+#pragma once
 
+#include <memory>
 #include <string>
 
 #include "async.h"
@@ -17,60 +17,87 @@ class Transport
 {
 public:
 
-	typedef Fn<bool> StopHandle;
-	typedef Fn2<int, IOBuffer> ReadHandle;
-	typedef Fn<int> WriteHandle;
+	typedef Fn<bool> StopDoneHandle;
+	typedef Fn2<int, IOBuffer> ReadDoneHandle;
+	typedef Fn<int> WriteDoneHandle;
 
-	virtual bool Stop(const StopHandle & cb) = 0;
+	virtual bool Stop(const StopDoneHandle & cb) = 0;
 
-	// virtual bool Peek(IOBuffer & data, const ReadHandle & h) = 0;
-	virtual bool Read(IOBuffer & buf, const ReadHandle & h) = 0;
-	virtual bool Write(IOBuffer & buf, const WriteHandle & h) = 0;
+	virtual bool Peek(IOBuffer & data, const ReadDoneHandle & h) = 0;
+	virtual bool Read(IOBuffer & buf, const ReadDoneHandle & h) = 0;
+	virtual bool Write(IOBuffer & buf, const WriteDoneHandle & h) = 0;
 };
 
 // ............................................................................... TCPTransport ....
 
-class TCPTransport : public CHandle, public Transport, public AsyncProcessor
+class TCPTransportChannel : public CHandle, public Transport, public AsyncProcessor
 {
 public:
 
-	virtual ~TCPTransport() {}
+	friend class TCPServerTransport;
+	friend class TCPClientTransport;
+
+	typedef TCPTransportChannel This;
+
+	virtual ~TCPTransportChannel()
+	{
+		INVARIANT(!pendingios_);
+	}
+
+	virtual bool Stop(const StopDoneHandle & cb) override;
+	virtual bool Peek(IOBuffer & data, const ReadDoneHandle & h) override;
+	virtual bool Read(IOBuffer & buf, const ReadDoneHandle & h) override;
+	virtual bool Write(IOBuffer & buf, const WriteDoneHandle & h) override;
+
+	__STATELESS_ASYNC_PROCESSOR__
 
 protected:
 
-	typedef TCPTransport This;
+	TCPTransportChannel(const std::shared_ptr<TCPChannel> & ch)
+		: pendingios_(0), ch_(ch)
+	{}
 
-	// void Peek(TCPChannel & ch, IOBuffer & buf, const ReadHandle & h);
-	void Read(TCPChannel & ch, IOBuffer & buf, ReadHandle & h);
-	void Write(TCPChannel & ch, IOBuffer & buf, WriteHandle & h);
+	void ReadDone(TCPChannel *, int status, IOBuffer buf, ReadDoneHandle * h) __intr_fn__;
+	void WriteDone(TCPChannel *, int status, WriteDoneHandle * h) __intr_fn__;
+	void PeekDone(TCPChannel *, int status, IOBuffer buf, ReadDoneHandle * h) __intr_fn__;
 
-	__interrupt__ void ReadDone(TCPChannel *, int status, IOBuffer buf, ReadHandle * h);
-	__interrupt__ void WriteDone(TCPChannel *, int status, WriteHandle * h);
+	std::atomic<size_t> pendingios_;
+	std::shared_ptr<TCPChannel> ch_;
+};
+
+// ............................................................................ TransportServer ....
+
+class ServerTransport
+{
+public:
+
+	typedef Fn<bool> StopDoneHandle;
+	typedef Fn2<bool, Transport *> ListenDoneHandle;
+
+	virtual void Listen(const SocketAddress & addr, const ListenDoneHandle & h) = 0;
+	virtual void Stop(const StopDoneHandle & h) = 0;
 };
 
 // ......................................................................... TCPServerTransport ....
 
-class TCPServerTransport : public TCPTransport
+class TCPServerTransport : public ServerTransport
 {
 public:
 
-	typedef Fn<bool> StartHandle;
+	typedef TCPServerTransport This;
 
 	TCPServerTransport(const std::string path = "/rpc/transport/tcpserver")
 	    : log_(path), lock_(path), epoll_(path)
 	    , tcpserver_(epoll_)
 	{}
 
-	virtual bool Listen(const SocketAddress & addr, const StartHandle & h);
-	virtual bool Listen(const std::vector<SocketAddress> & addr, StartHandle & h);
-
-	virtual bool Stop(const StopHandle & h) override;
-
-	// virtual bool Peek(IOBuffer & buf, const ReadHandle & h) override;
-	virtual bool Read(IOBuffer & buf, const ReadHandle & h) override;
-	virtual bool Write(IOBuffer & buf, const WriteHandle & h) override;
+	virtual void Listen(const SocketAddress & addr, const ListenDoneHandle & h) override;
+	virtual void Stop(const StopDoneHandle & h) override;
 
 private:
+
+	void ListenDone(TCPServer * s, int status, TCPChannel * ch,
+		        ListenDoneHandle * h) __intr_fn__;
 
 	const LogPath log_;
 
@@ -78,48 +105,47 @@ private:
 	std::vector<SocketAddress> addr_;
 	Epoll epoll_;
 	TCPServer tcpserver_;
-	std::list<boost::shared_ptr<TCPChannel> > chs_;
+};
+
+// ............................................................................ TransportClient ....
+
+class ClientTransport
+{
+public:
+
+	typedef Fn2<bool, Transport *> ConnectDoneHandle;
+
+	virtual void Connect(const SocketAddress & addr, const ConnectDoneHandle & h) = 0;
 };
 
 // ......................................................................... TCPClientTransport ....
 
-class TCPClientTransport : public TCPTransport
+class TCPClientTransport : public ClientTransport
 {
 public:
 
 	typedef TCPClientTransport This;
-	typedef Fn<bool> StartHandle;
 
 	TCPClientTransport(Epoll & epoll)
 	    : log_("/rpc/transport/tcpclient")
-	    , lock_("/rpc/transport/tcpclient")
 	    , epoll_(epoll)
 	    , tcpclient_(epoll)
 	{}
 
 	virtual ~TCPClientTransport() {}
 
-	void Connect(const SocketAddress & addr, const StartHandle & cb);
-	virtual bool Stop(const StopHandle & cb) override;
-
-	// virtual bool Peek(IOBuffer & buf, const PeekHandle & h) override;
-	virtual bool Read(IOBuffer & buf, const ReadHandle & h) override;
-	virtual bool Write(IOBuffer & buf, const WriteHandle & h) override;
+	virtual void Connect(const SocketAddress & addr, const ConnectDoneHandle & h) override;
 
 private:
 
-	__interrupt__ void ConnectDone(TCPConnector *, int status, TCPChannel * ch,
-				       StartHandle * h);
+	void ConnectDone(TCPConnector *, int status, TCPChannel * ch,
+			 ConnectDoneHandle * h) __intr_fn__;
 
 	const LogPath log_;
 
-	SpinMutex lock_;
 	Epoll & epoll_;
 	TCPConnector tcpclient_;
-	boost::shared_ptr<TCPChannel> ch_;
 };
 
 
 } } // namespace dh_core::rpc
-
-#endif

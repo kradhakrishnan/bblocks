@@ -44,6 +44,11 @@ namespace dh_core {
 #define __interrupt__ /* synchronous callback */
 #define __async_operation__ /* async operation function */
 
+#define __STATELESS_ASYNC_PROCESSOR__ \
+	virtual void RegisterHandle(CHandle * h) override {} \
+	virtual void UnregisterHandle(CHandle * h, const UnregisterDoneFn cb) override {}
+
+
 //........................................................................... CompletionHandler ....
 
 class CompletionHandle
