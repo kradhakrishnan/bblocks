@@ -1,7 +1,9 @@
 #include <iostream>
+#include <memory>
 
 #include "test/unit-test.h"
 #include "net/rpc-data.h"
+#include "net/rpc-transport.h"
 
 using namespace std;
 using namespace dh_core;
@@ -161,7 +163,222 @@ test_datatypes()
 	INVARIANT(data.raw_ == rawdata);
 }
 
-//.................................................................... main ....
+//.......................................................................... test_rpc_transport ....
+
+namespace test_rpc_transport
+{
+
+using namespace dh_core::rpc;
+
+struct Data : RPCData
+{
+	void Encode(IOBuffer & buf)
+	{
+		size_t pos = 0;
+		Encode(buf, pos);
+	}
+
+	virtual void Encode(IOBuffer & buf, size_t & pos)
+	{
+		i16_.Encode(buf, pos);
+	}
+
+	void Decode(IOBuffer & buf)
+	{
+		size_t pos = 0;
+		Decode(buf, pos);
+	}
+
+	virtual void Decode(IOBuffer & buf, size_t & pos)
+	{
+		i16_.Decode(buf, pos);
+	}
+
+	virtual size_t Size() const
+	{
+		return sizeof(i16_);
+	}
+
+	UInt16 i16_;
+};
+
+class Server : public TCPServerTransport
+{
+public:
+
+	typedef Server This;
+
+	Server(SocketAddress & addr)
+		: ref_(0)
+	{
+		Listen(addr, async_fn(this, &This::Connected));
+	}
+
+	void Connected(bool status, Transport * t)
+	{
+		++ref_;
+
+		INVARIANT(status);
+		INVARIANT(t);
+
+		IOBuffer buf = IOBuffer::Alloc(sizeof(Data));
+		if (t->Read(buf, async_fn(this, &This::ReadDone, t))) {
+			ReadDone(/*status=*/ buf.Size(), buf, t);
+		}
+	}
+
+	void ReadDone(int status, IOBuffer buf, Transport * t)
+	{
+		INVARIANT(status == (int) buf.Size());
+		INVARIANT(t);
+
+		Data data;
+		data.Decode(buf);
+		INVARIANT(data.i16_ == 55);
+
+		int ok = t->Write(buf, async_fn(this, &This::WriteDone, t));
+		if (ok == (int) buf.Size()) {
+			WriteDone(ok, t);
+		}
+	}
+
+	void WriteDone(int status, Transport * t)
+	{
+		INVARIANT(status > 0);
+		t->Stop(async_fn(this, &This::Stopped, t));
+	}
+
+	void Stopped(bool status, Transport * t)
+	{
+		INVARIANT(status);
+		delete t;
+
+		--ref_;
+	}
+
+	void Stop()
+	{
+		AsyncWait<bool> waiter;
+
+		/*
+		 * Wait for ref to come down
+		 */
+		while (ref_) {}
+
+		TCPServerTransport::Stop(async_fn(&waiter, &AsyncWait<bool>::Done));
+		bool status = waiter.Wait();
+		INVARIANT(status);
+	}
+
+private:
+
+	atomic<size_t> ref_;
+};
+
+class Client : public TCPClientTransport
+{
+public:
+
+	typedef Client This;
+
+	Client(const SocketAddress & addr, atomic<size_t> & ref)
+		: ref_(ref)
+	{
+		++ref_;
+		Connect(addr, intr_fn(this, &This::Connected));
+	}
+
+	void Connected(bool status, Transport * t)
+	{
+		if (!ref_ && !status) {
+			/*
+			 * The test is done, server is shutdown
+			 */
+			return;
+		}
+
+		INVARIANT(status);
+		INVARIANT(t);
+
+		IOBuffer buf = IOBuffer::Alloc(sizeof(Data));
+		buf.FillRandom();
+
+		Data data;
+		data.i16_.Set(55);
+		data.Encode(buf);
+
+		int ok = t->Write(buf, async_fn(this, &This::WriteDone, t));
+		if ((size_t) ok == buf.Size()) {
+			WriteDone(ok, t);
+		}
+	}
+
+	void WriteDone(int status, Transport * t)
+	{
+		INVARIANT(status == sizeof(Data));
+
+		IOBuffer buf = IOBuffer::Alloc(sizeof(Data));
+
+		bool ok = t->Read(buf, async_fn(this, &This::ReadDone, t));
+		if (ok) {
+			ReadDone(/*status=*/ buf.Size(), buf, t);
+		}
+	}
+
+	void ReadDone(int status, IOBuffer buf, Transport * t)
+	{
+		INVARIANT(status == (int) buf.Size());
+
+		Data data;
+		data.Decode(buf);
+
+		INVARIANT(data.i16_ == 55);
+
+		t->Stop(async_fn(this, &This::Stopped, t));
+	}
+
+	void Stopped(bool status, Transport * t)
+	{
+		INVARIANT(status);
+		delete t;
+		--ref_;
+	}
+
+private:
+
+	atomic<size_t> & ref_;
+};
+
+void Exec()
+{
+	const short port = 9999 + (rand() % 100);
+	SocketAddress laddr(SocketAddress::GetAddr("127.0.0.1", port),
+			    SocketAddress::GetAddr("0.0.0.0", port));
+	SocketAddress raddr(SocketAddress::GetAddr("127.0.0.1", port));
+
+	ThreadPool::Start();
+
+	atomic<size_t> ref(0);
+
+	Server s(laddr);
+
+	sleep(/*sec=*/ 1);
+
+	vector<shared_ptr<Client> > clients;
+	for (int i = 0; i < 2; ++i) {
+		clients.push_back(shared_ptr<Client>(new Client(raddr, ref)));
+	}
+
+	while (ref) {}
+
+	s.Stop();
+
+	ThreadPool::Shutdown();
+}
+
+}
+
+//........................................................................................ main ....
 
 int
 main(int argc, char ** argv)
@@ -170,8 +387,12 @@ main(int argc, char ** argv)
 
 	InitTestSetup();
 
-	TEST(test_datatypes);
-	TEST(test_rpcpacket);
+
+	if (0) {
+	    TEST(test_datatypes);
+	    TEST(test_rpcpacket);
+	}
+	TEST(test_rpc_transport::Exec);
 
 	TeardownTestSetup();
 

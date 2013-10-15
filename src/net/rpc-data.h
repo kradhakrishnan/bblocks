@@ -35,6 +35,7 @@ struct Int : RPCData
 
 	bool operator==(const Int<T> & rhs) const { return v_ == rhs.v_; }
 	bool operator==(const T & t) const { return t == v_; }
+	Int<T> & operator=(const T & v) { v_ = v; return *this; }
 	virtual size_t Size() const { return sizeof(v_); }
 	void Set(const uint32_t v) { v_ = v; }
 	const T & Get() const { return v_; }

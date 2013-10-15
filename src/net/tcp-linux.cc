@@ -232,12 +232,11 @@ TCPChannel::ReadDataFromSocket(const bool isasync)
         rctx_.bytesRead_ += status;
 
         if (rctx_.bytesRead_ == rctx_.buf_.Size()) {
-            auto rctx = rctx_;
-            rctx_.Reset();
             if (isasync) {
-                rctx.chandler_.Wakeup(this, (int) rctx.bytesRead_, rctx.buf_);
+                rctx_.chandler_.Wakeup(this, (int) rctx_.bytesRead_, rctx_.buf_);
             }
 
+            rctx_.Reset();
             return true;
         }
     }

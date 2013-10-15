@@ -43,7 +43,7 @@ TCPTransportChannel::Read(IOBuffer & buf, const ReadDoneHandle & h)
 	bool status = ch_->Read(buf, intr_fn(this, &This::ReadDone, ctx));
 
 	if (status) {
-		ReadDone(ch_.get(), status, buf, ctx);
+		ReadDone(ch_.get(), buf.Size(), buf, ctx);
 	}
 
 	return status;
@@ -52,6 +52,8 @@ TCPTransportChannel::Read(IOBuffer & buf, const ReadDoneHandle & h)
 void
 TCPTransportChannel::ReadDone(TCPChannel * ch, int status, IOBuffer buf, ReadDoneHandle * h)
 {
+	INVARIANT(status == (int) buf.Size());
+	ASSERT(buf);
 	ASSERT(ch_.get() == ch);
 
 	--pendingios_;
@@ -63,6 +65,8 @@ TCPTransportChannel::ReadDone(TCPChannel * ch, int status, IOBuffer buf, ReadDon
 bool
 TCPTransportChannel::Write(IOBuffer & buf, const WriteDoneHandle & h)
 {
+	++pendingios_;
+
 	auto ctx = new (BufferPool::Alloc<WriteDoneHandle>()) WriteDoneHandle(h);
 	int status = ch_->Write(buf, intr_fn(this, &This::WriteDone, ctx));
 
@@ -87,8 +91,18 @@ TCPTransportChannel::WriteDone(TCPChannel * ch, int status, WriteDoneHandle * h)
 bool
 TCPTransportChannel::Stop(const StopDoneHandle & h)
 {
+	stoph_ = h;
+	ch_->UnregisterHandle((CHandle *) this, (UnregisterDoneFn) &This::Unregistered);
+	return false;
+}
+
+void
+TCPTransportChannel::Unregistered(int status)
+{
+	INVARIANT(status == 0);
+
 	ch_->Close();
-	return true;
+	stoph_.Wakeup(/*status=*/ true);
 }
 
 // .......................................................................... TCPClientTransport ...
@@ -106,6 +120,8 @@ TCPClientTransport::ConnectDone(TCPConnector *, int status, TCPChannel * ch, Con
 		auto tch = shared_ptr<TCPChannel>(ch);
 		h->Wakeup(true,  new TCPTransportChannel(tch));
 	} else {
+		ERROR(log_) << "Error connecting to server. status=" << status;
+
 		h->Wakeup(false, /*transport=*/ NULL);
 	}
 
@@ -117,24 +133,30 @@ TCPClientTransport::ConnectDone(TCPConnector *, int status, TCPChannel * ch, Con
 void
 TCPServerTransport::Listen(const SocketAddress & addr, const ListenDoneHandle & h)
 {
-	auto fn = intr_fn(this, &This::ListenDone, new ListenDoneHandle(h));
-	tcpserver_.Listen(addr.LocalAddr(), fn);
+	listenDoneHandle_ = h;
+	tcpserver_.Listen(addr.LocalAddr(), async_fn(this, &This::ListenDone));
 }
 
 void
-TCPServerTransport::ListenDone(TCPServer * s, int status, TCPChannel * ch, ListenDoneHandle * h)
+TCPServerTransport::ListenDone(TCPServer * s, int status, TCPChannel * ch)
 {
 	if (status != 0) {
 		/*
 		 * Failed to accept incoming connection
 		 */
-		h->Wakeup(/*status=*/ false, /*transport=*/ NULL);
-		delete h;
+		listenDoneHandle_.Wakeup(/*status=*/ false, /*transport=*/ NULL);
 		return;
 	}
 
-
 	auto tch = shared_ptr<TCPChannel>(ch);
-	h->Wakeup(/*status=*/ true, new TCPTransportChannel(tch)); 
-	delete h;
+	listenDoneHandle_.Wakeup(/*status=*/ true, new TCPTransportChannel(tch)); 
+}
+
+void
+TCPServerTransport::Stop(const StopDoneHandle & h)
+{
+	Guard _(&lock_);
+
+	tcpserver_.Shutdown();
+	((StopDoneHandle &) h).Wakeup(/*status=*/ true);
 }

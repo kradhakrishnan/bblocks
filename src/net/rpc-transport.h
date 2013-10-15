@@ -17,6 +17,8 @@ class Transport
 {
 public:
 
+	virtual ~Transport() {}
+
 	typedef Fn<bool> StopDoneHandle;
 	typedef Fn2<int, IOBuffer> ReadDoneHandle;
 	typedef Fn<int> WriteDoneHandle;
@@ -53,9 +55,13 @@ public:
 
 protected:
 
+	void Unregistered(int status) __async_fn__;
+
 	TCPTransportChannel(const std::shared_ptr<TCPChannel> & ch)
 		: pendingios_(0), ch_(ch)
-	{}
+	{
+		ch_->RegisterHandle(this);
+	}
 
 	void ReadDone(TCPChannel *, int status, IOBuffer buf, ReadDoneHandle * h) __intr_fn__;
 	void WriteDone(TCPChannel *, int status, WriteDoneHandle * h) __intr_fn__;
@@ -63,6 +69,7 @@ protected:
 
 	std::atomic<size_t> pendingios_;
 	std::shared_ptr<TCPChannel> ch_;
+	StopDoneHandle stoph_;
 };
 
 // ............................................................................ TransportServer ....
@@ -91,13 +98,14 @@ public:
 	    , tcpserver_(epoll_)
 	{}
 
+	virtual ~TCPServerTransport() {}
+
 	virtual void Listen(const SocketAddress & addr, const ListenDoneHandle & h) override;
 	virtual void Stop(const StopDoneHandle & h) override;
 
 private:
 
-	void ListenDone(TCPServer * s, int status, TCPChannel * ch,
-		        ListenDoneHandle * h) __intr_fn__;
+	void ListenDone(TCPServer * s, int status, TCPChannel * ch) __intr_fn__;
 
 	const LogPath log_;
 
@@ -105,6 +113,7 @@ private:
 	std::vector<SocketAddress> addr_;
 	Epoll epoll_;
 	TCPServer tcpserver_;
+	ListenDoneHandle listenDoneHandle_;
 };
 
 // ............................................................................ TransportClient ....
@@ -126,13 +135,16 @@ public:
 
 	typedef TCPClientTransport This;
 
-	TCPClientTransport(Epoll & epoll)
-	    : log_("/rpc/transport/tcpclient")
-	    , epoll_(epoll)
-	    , tcpclient_(epoll)
+	TCPClientTransport(const std::string path = "/rpc/transport/tcpclient")
+	    : log_(path)
+	    , epoll_(path)
+	    , tcpclient_(epoll_)
 	{}
 
-	virtual ~TCPClientTransport() {}
+	virtual ~TCPClientTransport()
+	{
+		tcpclient_.Shutdown();
+	}
 
 	virtual void Connect(const SocketAddress & addr, const ConnectDoneHandle & h) override;
 
@@ -143,7 +155,7 @@ private:
 
 	const LogPath log_;
 
-	Epoll & epoll_;
+	Epoll epoll_;
 	TCPConnector tcpclient_;
 };
 
