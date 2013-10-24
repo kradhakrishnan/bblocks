@@ -16,6 +16,5 @@ TARGET +=
 SRCS += src/schd/thread-pool.cc	    \
 	src/net/epoll.cc	    \
 	src/net/rpc-data.cc	    \
-	src/net/rpc-transport.cc    \
 	src/net/tcp-linux.cc	    \
 	src/fs/aio-linux.cc	    \

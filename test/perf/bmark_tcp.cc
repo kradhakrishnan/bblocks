@@ -43,9 +43,6 @@ public:
 
 	typedef TCPServerBenchmark This;
 
-	/*
-	 * create/destroy
-	 */
 	TCPServerBenchmark(const size_t iosize)
 		: lock_("/server")
 		, epoll_(/*threads=*/ 2, "/server")
@@ -57,27 +54,30 @@ public:
 
 	virtual ~TCPServerBenchmark() {}
 
-	//
-	// Start listening
-	//
-	void Start(sockaddr_in addr)
+	void Start(sockaddr_in laddr)
 	{
 		INFO(_log) << "Starting to listen";
 
+		SocketAddress addr(SocketAddress::ServerSocketAddr(laddr));
 		auto fn = async_fn(this, &This::HandleServerConn);
-		const bool ok = server_.Listen(addr, fn);
-		INVARIANT(ok);
+		const int status = server_.Accept(addr, fn);
+		INVARIANT(status == 0);
 	}
 
 	/*
 	 * Completion handlers
+	 * ====================
+	 *
+	 * Start *-> HandleServerConn *-> ReadUntilBlocked(ch) *-> ReadDone(ch)
+	 *                                ^                        |
+	 *                                |                        |
+	 *                                -------------------------
 	 */
 
-	//
-	// Connection established callback
-	//
-	virtual void HandleServerConn(TCPServer *, int status, TCPChannel * ch) __async_fn__
+	virtual void HandleServerConn(int status, UnicastTransportChannel * uch) __async_fn__
 	{
+		TCPChannel * ch = dynamic_cast<TCPChannel *>(uch);
+
 		INFO(_log) << "Got ch " << ch;
 
 		/*
@@ -88,25 +88,23 @@ public:
 			chstats_.insert(make_pair(ch, ChStats()));
 		}
 
-		ch->RegisterHandle(this);
 		ThreadPool::Schedule(this, &This::ReadUntilBlocked, ch);
 	}
 
-	//
-	// Read data until blocked
-	//
-	void ReadUntilBlocked(TCPChannel * ch) __cqueue_fn__
+	void ReadUntilBlocked(TCPChannel * ch) __async_fn__
 	{
-		while (ch->Read(buf_, cqueue_fn(&rcqueue_))) {
-			UpdateStats(ch, buf_.Size());
+		while (true) {
+			int status = ch->Read(buf_, cqueue_fn(&rcqueue_, ch));
+			INVARIANT(status >= 0 && status <= (int) buf_.Size());
+			UpdateStats(ch, status);
+			if (status != (int) buf_.Size()) break;
 		}
 	}
 
-	//
-	// Read completion callback
-	//
-	virtual void ReadDone(TCPChannel * ch, int status, IOBuffer) __cqueue_fn__
+	virtual void ReadDone(int status, IOBuffer, uintptr_t ctx) __cqueue_fn__
 	{
+		TCPChannel * ch = reinterpret_cast<TCPChannel *>(ctx);
+
 		/*
 		 * Update stats
 		 */
@@ -149,7 +147,7 @@ private:
 	TCPServer server_;
 	chstats_map_t chstats_;
 	IOBuffer buf_;
-	CQueue3<TCPChannel *, int, IOBuffer> rcqueue_;
+	CQueueWithCtx2<int, IOBuffer, uintptr_t> rcqueue_;
 	CQueue<TCPChannel *> wakeupq_;
 };
 
@@ -165,8 +163,6 @@ class TCPClientBenchmark : public CompletionHandle
 public:
 
 	typedef TCPClientBenchmark This;
-
-	/*.... create/destroy ....*/
 
 	TCPClientBenchmark(const SocketAddress & addr, const size_t iosize,
 					   const size_t nconn, const size_t nsec)
@@ -194,12 +190,22 @@ public:
 
 		for (auto chstat : chstats_) {
 			TCPChannel * ch = chstat.first;
-			ch->Close();
 			delete ch;
 		}
 
 		chstats_.clear();
 	}
+
+	/*
+	 *                          WakeupSendData
+	 *                          ^   |
+	 *                          |   |
+	 *                          *   v
+	 * Start *--> Connected --> SendData(ch) *-> WriteDone(ch) --> Stop(ch) *--> StopDone
+	 *                          ^                *
+	 *                          |                |
+	 *                          +----------------+
+	 */
 
 	void Start(int)
 	{
@@ -211,8 +217,10 @@ public:
 		}
 	}
 
-	virtual void WriteDone(TCPChannel * ch, int status) __cqueue_fn__
+	virtual void WriteDone(int status, IOBuffer buf, uintptr_t ctx) __cqueue_fn__
 	{
+		TCPChannel * ch = reinterpret_cast<TCPChannel *>(ctx);
+
 		ASSERT(status);
 		UpdateStats(ch, status);
 
@@ -221,8 +229,10 @@ public:
 		SendData(ch);
 	}
 
-	void Connected(TCPConnector *, int status, TCPChannel * ch) __async_fn__
+	void Connected(int status, UnicastTransportChannel * uch) __async_fn__
 	{
+		TCPChannel * ch = dynamic_cast<TCPChannel *>(uch);
+
 		ASSERT(status == OK);
 		ASSERT(buf_.Size() == iosize_);
 
@@ -233,20 +243,20 @@ public:
 
 		INVARIANT(pendingConns_);
 
-		ch->RegisterHandle(this);
-
 		--pendingConns_;
 		++nactiveconn_;
 
 		SendData(ch);
 	}
 
-	void Unregistered(int status) __async_fn__
+	void StopDone(int status) __async_fn__
 	{
-		INFO(_log) << "Unregistered.";
+		INFO(_log) << "Stopped.";
 
 		if (!(--nactiveconn_)) {
-			// all clients disconnected
+			/*
+			 * all clients disconnected
+			 */
 			ThreadPool::Schedule(this, &This::Halt, /*val=*/ 0);
 		}
 	}
@@ -263,8 +273,7 @@ private:
 			Guard _(&lock_);
 			for (auto chstat : chstats_) {
 				TCPChannel * ch = chstat.first;
-				ch->UnregisterHandle(static_cast<CHandle *>(this),
-						     async_fn(&This::Unregistered));
+				ch->Stop(async_fn(this, &This::StopDone));
 			}
 		}
 	}
@@ -302,7 +311,7 @@ private:
 
 			++pendingios_;
 
-			status = ch->Write(buf_, cqueue_fn(&wcqueue_));
+			status = ch->Write(buf_, cqueue_fn(&wcqueue_, ch));
 
 			INVARIANT(size_t(status) <= buf_.Size());
 
@@ -341,14 +350,14 @@ private:
 	const size_t iosize_;
 	const size_t nconn_;
 	const size_t nsec_;
-	chstats_map_t chstats_;     //< Stats holder
+	chstats_map_t chstats_;
 	IOBuffer buf_;
 	Timer timer_;
 	atomic<size_t> nactiveconn_;
 	atomic<size_t> pendingios_;
 	atomic<size_t> pendingConns_;
 	atomic<size_t> pendingWakeups_;
-	CQueue2<TCPChannel *, int> wcqueue_;
+	CQueueWithCtx2<int, IOBuffer, uintptr_t> wcqueue_;
 	CQueue<TCPChannel *> wakeupq_;
 };
 
@@ -421,8 +430,7 @@ main(int argc, char ** argv)
 		ASSERT(!raddr.empty());
 		SocketAddress addr = SocketAddress::GetAddr(laddr, raddr);
 		TCPClientBenchmark c(addr, iosize, nconn, seconds);
-		ThreadPool::Schedule(&c, &TCPClientBenchmark::Start,
-				    /*status=*/ 0);
+		ThreadPool::Schedule(&c, &TCPClientBenchmark::Start, /*status=*/ 0);
 		ThreadPool::Wait();
 	} else {
 		INFO(_log) << "Running server at " << laddr
@@ -430,8 +438,7 @@ main(int argc, char ** argv)
 
 		ASSERT(!laddr.empty());
 		TCPServerBenchmark s(iosize);
-		ThreadPool::Schedule(&s, &TCPServerBenchmark::Start,
-			             SocketAddress::GetAddr(laddr));
+		ThreadPool::Schedule(&s, &TCPServerBenchmark::Start, SocketAddress::GetAddr(laddr));
 		ThreadPool::Wait();
 	}
 

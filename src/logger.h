@@ -19,14 +19,27 @@
 
 namespace dh_core {
 
-#if !defined(DISABLE_VERBOSE) && defined(DEBUG_BUILD)
+#if defined(DEBUG_BUILD)
+#define LOG_DEBUG LogMessage(Logger::LEVEL_DEBUG, fqn_)
 #define DEBUG(x) LogMessage(Logger::LEVEL_DEBUG, x.GetPath())
 #else
+#define LOG_DEBUG if (1) {} else LogMessage(Logger::LEVEL_DEBUG, fqn_)
 #define DEBUG(x) if (1) {} else LogMessage(Logger::LEVEL_DEBUG, x.GetPath())
 #endif
 
+#if !defined(DISABLE_VERBOSE)
+#define LOG_VERBOSE LogMessage(Logger::LEVEL_VERBOSE, fqn_)
+#define VERBOSE(x) LogMessage(Logger::LEVEL_VERBOSE, x.GetPath())
+#else
+#define LOG_VERBOSE if (1) {} else LogMessage(Logger::LEVEL_VERBOSE, fqn_)
+#define VERBOSE(x) if (1) {} else LogMessage(Logger::LEVEL_VERBOSE, x.GetPath())
+#endif
+
+#define LOG_ERROR LogMessage(Logger::LEVEL_ERROR, fqn_)
 #define ERROR(x) LogMessage(Logger::LEVEL_ERROR, x.GetPath())
+
 #define INFO(x) LogMessage(Logger::LEVEL_INFO, x.GetPath())
+#define LOG_INFO LogMessage(Logger::LEVEL_INFO, fqn_)
 
 //............................................................... LogWriter ....
 
@@ -62,12 +75,11 @@ public:
 
     enum LogType
     {
+	LEVEL_VERBOSE = 'v',
         LEVEL_DEBUG = 'd',
         LEVEL_INFO = 'i',
         LEVEL_WARNING = 'w',
         LEVEL_ERROR = 'e',
-        LEVEL_NOTICE = 'n',
-        LEVEL_FATAL = 'f'
     };
 
     void AttachWriter(const SharedPtr<LogWriter> & writer)
@@ -79,10 +91,8 @@ public:
     void Append(const LogType & type, const std::string & msg)
     {
         ASSERT(writer_);
-        const LogWriter::Priority p =
-            type & (LEVEL_ERROR | LEVEL_NOTICE
-                    | LEVEL_FATAL) ? LogWriter::HIGHPRIORITY
-                                   : LogWriter::DEFAULT;
+        const LogWriter::Priority p = type & (LEVEL_ERROR) ? LogWriter::HIGHPRIORITY
+							   : LogWriter::DEFAULT;
         writer_->Append(msg, p);
     }
 
@@ -179,16 +189,23 @@ private:
  */
 class ConsoleLogWriter : public LogWriter
 {
-    public:
+public:
 
-    void Append(const std::string & data, const LogWriter::Priority & priority)
-    {
-        if (priority == LogWriter::HIGHPRIORITY) {
-            std::cerr << data << std::endl;
-        } else {
-            std::cerr << data << std::endl;
-        }
-    }
+	ConsoleLogWriter()
+		: isopen_(true)
+	{}
+
+	void Append(const std::string & data, const LogWriter::Priority & priority)
+	{
+		bool expected = true;
+		while (!isopen_.compare_exchange_strong(expected, false));
+		std::cerr << data << std::endl;
+		isopen_ = true;
+	}
+
+private:
+
+	std::atomic<bool> isopen_;
 };
 
 //............................................................... LogHelper ....

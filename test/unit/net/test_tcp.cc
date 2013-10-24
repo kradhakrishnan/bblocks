@@ -24,7 +24,8 @@ public:
     static const uint32_t TIMEINTERVAL_MS = 1 * 1000;   // 1 s
 
     BasicTCPTest()
-        : log_("testtcp/")
+        : lock_("/tcptest/")
+	, log_("/testtcp/")
         , epoll_("/epoll")
 	, mpepoll_(/*nth=*/ 2)
         , tcpServer_(mpepoll_)
@@ -45,91 +46,114 @@ public:
 
     void Start(int nonce)
     {
-        bool ok = tcpServer_.Listen(addr_.RemoteAddr(), async_fn(this, &This::HandleServerConn));
-        INVARIANT(ok);
+	SocketAddress saddr = SocketAddress::ServerSocketAddr(addr_);
 
-        tcpClient_.Connect(addr_, async_fn(this, &This::HandleClientConn));
+	int status = tcpServer_.Accept(saddr, async_fn(this, &This::HandleServerConn));
+        INVARIANT(status == 0);
+
+        status = tcpClient_.Connect(SocketAddress(addr_), async_fn(this, &This::HandleClientConn));
+	INVARIANT(status == 0);
     }
 
     __completion_handler__
-    virtual void HandleServerConn(TCPServer *, int status, TCPChannel * ch)
+    virtual void HandleServerConn(int status, UnicastTransportChannel * uch)
     {
+	TCPChannel * ch = dynamic_cast<TCPChannel *>(uch);
+
         ASSERT(status == 0);
 
         INFO(log_) << "Accepted.";
 
         server_ch_ = ch;
-        server_ch_->RegisterHandle(this);
 
-        if (server_ch_->Read(rbuf_, async_fn(this, &This::ReadDone))) {
-            VerifyData(rbuf_);
-        }
+	ReadUntilBlocked();
     }
 
-    __completion_handler__
-    virtual void HandleClientConn(TCPConnector *, int status, TCPChannel * ch)
+    void ReadUntilBlocked()
+    {
+	int status = server_ch_->Read(rbuf_, async_fn(this, &This::ReadDone)); 
+	INVARIANT(status >= 0 && status <= (int) rbuf_.Size());
+
+        if (status == (int) rbuf_.Size()) {
+		ReadDone(status, rbuf_);
+	}
+    }
+
+    virtual void HandleClientConn(int status, UnicastTransportChannel * ch) __async_fn__
     {
         ASSERT(status == 0);
 
         INFO(log_) << "Connected.";
 
-        client_ch_ = ch;
-        client_ch_->RegisterHandle(this);
-        client_ch_->SetWriteDoneFn(async_fn(this, &This::WriteDone));
+        client_ch_ = dynamic_cast<TCPChannel *>(ch);
 
         SendData();
     }
 
     __completion_handler__
-    virtual void ReadDone(TCPChannel * ch, int status, IOBuffer buf)
+    virtual void ReadDone(int status, IOBuffer buf)
     {
+	INFO(log_) << "ReadDone. status=" << status;
+
+	if (status == -1) {
+		if (iter_ > MAX_ITERATION) {
+		    return;
+		}
+	}
+
         ASSERT((size_t) status == rbuf_.Size());
         ASSERT(buf == rbuf_);
 
         VerifyData(rbuf_);
-        while (ch->Read(rbuf_, async_fn(this, &This::ReadDone))) {
-            VerifyData(rbuf_);
-        }
+
+	ReadUntilBlocked();
    }
 
     __completion_handler__
-    virtual void WriteDone(TCPChannel *, int status)
+    virtual void WriteDone(int status, IOBuffer buf)
     {
-        ASSERT(status > 0 &&  ((size_t) status == wbuf_.Size()));
+        ASSERT(status == (int) wbuf_.Size());
 
-        INFO(log_) << "ClientWriteDone.";
+        INFO(log_) << "WriteDone. status=" << status;
 
         wbuf_.Trash();
         SendData();
     }
 
-    __interrupt__
-    virtual void ClientUnregistered(int status)
+    virtual void ClientStopped(int status) __async_fn__
     {
-        client_ch_->Close();
+	INFO(log_) << "ClientStopped";
+
         delete client_ch_;
         client_ch_ = NULL;
 
-        server_ch_->UnregisterHandle(this, async_fn(&This::ServerUnregistered));
+	server_ch_->Stop(async_fn(this, &This::ServerChannelStopped));
     }
 
-    __interrupt__
-    virtual void ServerUnregistered(int status)
+    void ServerChannelStopped(int)
     {
-        server_ch_->Close();
-        delete server_ch_;
-        server_ch_ = NULL;
+	delete server_ch_;
+	server_ch_ = NULL;
+	
+	tcpServer_.Stop(async_fn(this, &This::ServerStopped));
+    }
 
-        tcpServer_.Shutdown();
-        tcpClient_.Shutdown();
+    void ServerStopped(int)
+    {
+	tcpClient_.Stop(async_fn(this, &This::ConnectorStopped));
+    }
 
-        ThreadPool::Wakeup();
+    void ConnectorStopped(int)
+    {
+	ThreadPool::Wakeup();
     }
 
 private: 
 
     void VerifyData(IOBuffer & buf)
     {
+	Guard _(&lock_);
+
         const uint32_t cksum = Adler32::Calc(buf.Ptr(), buf.Size());
 
         INVARIANT(cksum_.front() == cksum);
@@ -139,8 +163,10 @@ private:
                     << " EMPTY:" << cksum_.empty();
 
         if (cksum_.empty() && iter_ > MAX_ITERATION) {
-            client_ch_->UnregisterHandle(this, async_fn(&This::ClientUnregistered));
-            return;
+	    INFO(log_) << "Stopping client";
+            int status = client_ch_->Stop(async_fn(this, &This::ClientStopped));
+            INVARIANT(status == 0);
+	    return;
         }
     }
 
@@ -151,37 +177,39 @@ private:
 
     void SendData()
     {
+	Guard _(&lock_);
+
         if (iter_ > MAX_ITERATION) {
             // we have reached our sending limit
             return;
         }
 
-        INFO(log_) << "SendData.";
+        INFO(log_) << "SendData. iter=" << iter_;
 
         ASSERT(!wbuf_);
         wbuf_ = IOBuffer::Alloc(WBUFFERSIZE);
         wbuf_.FillRandom();
 
         const uint32_t cksum = Adler32::Calc(wbuf_.Ptr(), wbuf_.Size());
-        DEBUG(log_) << "PUSH " << (uint32_t) cksum;
+        DEBUG(log_) << "PUSH " << cksum_.size();
         cksum_.push_back(cksum);
 
-        int status = client_ch_->EnqueueWrite(wbuf_);
-        if ((size_t) status == wbuf_.Size()) {
-            ThreadPool::Schedule(this, &BasicTCPTest::WriteDone, client_ch_, status);
-        } else {
-            INVARIANT(status == 0);
+        int status = client_ch_->Write(wbuf_, async_fn(this, &This::WriteDone));
+	INVARIANT(status >= 0 && status <= (int) wbuf_.Size());
+        if (status == (int) wbuf_.Size()) {
+            ThreadPool::Schedule(this, &BasicTCPTest::WriteDone, status, wbuf_);
         }
 
         ++iter_;
     }
 
+    SpinMutex lock_;
     LogPath log_;
     Epoll epoll_;
     MultiPathEpoll mpepoll_;
     TCPServer tcpServer_;
     TCPConnector tcpClient_;
-    SocketAddress addr_;
+    sockaddr_in addr_;
     TCPChannel * server_ch_;
     TCPChannel * client_ch_;
     list<uint32_t> cksum_;

@@ -117,26 +117,26 @@ public:
         return pthread_mutex_trylock(&mutex_) == 0;
     }
 
-    virtual void Lock()
+    virtual void Lock() override
     {
         int status = pthread_mutex_lock(&mutex_);
         (void) status;
         ASSERT(status == 0);
     }
 
-    virtual void Unlock()
+    virtual void Unlock() override
     {
         int status = pthread_mutex_unlock(&mutex_);
         (void) status;
         ASSERT(status == 0);
     }
 
-    virtual bool IsOwner()
+    virtual bool IsOwner() override
     {
         return pthread_mutex_lock(&mutex_) == EDEADLK;
     }
 
-    ~PThreadMutex()
+    virtual ~PThreadMutex()
     {
         pthread_mutex_destroy(&mutex_);
         // ASSERT(status == 0);
@@ -212,7 +212,7 @@ public:
 
     ~SpinMutex()
     {
-        INFO(LogPath("/SpinMutex")) << statSpinTime_;
+        VERBOSE(LogPath("/SpinMutex")) << statSpinTime_;
     }
 
     virtual void Lock()

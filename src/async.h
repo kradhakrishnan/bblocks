@@ -229,17 +229,16 @@ struct CompletionHandler##TSUFFIX								\
 	{}											\
 												\
 	CompletionHandler##TSUFFIX(CQueue##TSUFFIX<TENUM(T,n)> * q)				\
-	    : type_(Type::QUEUE)									\
+	    : type_(Type::QUEUE)								\
 	    , h_(NULL)										\
 	    , fn_(NULL), fnWithCtx_(NULL)							\
 	    , q_(q), qWithCtx_(NULL)								\
 	    , ctx_(0)										\
 	{}											\
 												\
-	CompletionHandler##TSUFFIX(Type type,							\
-				   CQueueWithCtx##TSUFFIX<TENUM(T,n), uintptr_t> * q,		\
+	CompletionHandler##TSUFFIX(CQueueWithCtx##TSUFFIX<TENUM(T,n), uintptr_t> * q,		\
 				   uintptr_t ctx)						\
-	    : type_(type_)									\
+	    : type_(Type::QUEUE)								\
 	    , h_(NULL)										\
 	    , fn_(NULL), fnWithCtx_(NULL)							\
 	    , q_(NULL), qWithCtx_(q)								\
@@ -298,6 +297,8 @@ struct CompletionHandler##TSUFFIX								\
 				DEADEND								\
 		}										\
 	}											\
+												\
+	operator bool() const { return h_; }							\
 												\
 	Type type_;										\
 	CHandle * h_;										\
@@ -363,6 +364,14 @@ CompletionHandler##TSUFFIX<TENUM(T,n)>								\
 cqueue_fn(CompletionQueue##TSUFFIX<TENUM(T,n)> * q)						\
 {												\
     CompletionHandler##TSUFFIX<TENUM(T,n)> ch(q);						\
+    return ch;											\
+}												\
+												\
+template<TDEF(T,n), class TCTX>									\
+CompletionHandler##TSUFFIX<TENUM(T,n)>								\
+cqueue_fn(CompletionQueueWithCtx##TSUFFIX<TENUM(T,n), uintptr_t> * q, TCTX ctx)			\
+{												\
+    CompletionHandler##TSUFFIX<TENUM(T,n)> ch(q, reinterpret_cast<uintptr_t>(ctx));		\
     return ch;											\
 }												\
 												\

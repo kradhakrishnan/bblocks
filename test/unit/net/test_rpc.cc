@@ -3,7 +3,6 @@
 
 #include "test/unit-test.h"
 #include "net/rpc-data.h"
-#include "net/rpc-transport.h"
 
 using namespace std;
 using namespace dh_core;
@@ -165,6 +164,8 @@ test_datatypes()
 
 //.......................................................................... test_rpc_transport ....
 
+#if 0
+
 namespace test_rpc_transport
 {
 
@@ -209,14 +210,13 @@ public:
 	typedef Server This;
 
 	Server(SocketAddress & addr)
-		: ref_(0)
 	{
 		Listen(addr, async_fn(this, &This::Connected));
 	}
 
 	void Connected(bool status, Transport * t)
 	{
-		++ref_;
+		chs_.push_back(shared_ptr<Transport>(t));
 
 		INVARIANT(status);
 		INVARIANT(t);
@@ -236,8 +236,8 @@ public:
 		data.Decode(buf);
 		INVARIANT(data.i16_ == 55);
 
-		int ok = t->Write(buf, async_fn(this, &This::WriteDone, t));
-		if (ok == (int) buf.Size()) {
+		bool ok = t->Write(buf, async_fn(this, &This::WriteDone, t));
+		if (ok) {
 			WriteDone(ok, t);
 		}
 	}
@@ -245,26 +245,24 @@ public:
 	void WriteDone(int status, Transport * t)
 	{
 		INVARIANT(status > 0);
-		t->Stop(async_fn(this, &This::Stopped, t));
-	}
-
-	void Stopped(bool status, Transport * t)
-	{
-		INVARIANT(status);
-		delete t;
-
-		--ref_;
 	}
 
 	void Stop()
 	{
-		AsyncWait<bool> waiter;
+		/*
+		 * Close all channels
+		 */
+		for (auto ch : chs_) {
+			AsyncWait<bool> waiter;
+			ch->Stop(async_fn(&waiter, &AsyncWait<bool>::Done));
+			bool status = waiter.Wait();
+			INVARIANT(status);
+		}
 
 		/*
-		 * Wait for ref to come down
+		 * Shutdown server
 		 */
-		while (ref_) {}
-
+		AsyncWait<bool> waiter;
 		TCPServerTransport::Stop(async_fn(&waiter, &AsyncWait<bool>::Done));
 		bool status = waiter.Wait();
 		INVARIANT(status);
@@ -272,7 +270,7 @@ public:
 
 private:
 
-	atomic<size_t> ref_;
+	list<shared_ptr<Transport> > chs_;
 };
 
 class Client : public TCPClientTransport
@@ -282,21 +280,18 @@ public:
 	typedef Client This;
 
 	Client(const SocketAddress & addr, atomic<size_t> & ref)
-		: ref_(ref)
+		: addr_(addr), ref_(ref)
+	{
+	}
+
+	void Connect()
 	{
 		++ref_;
-		Connect(addr, intr_fn(this, &This::Connected));
+		TCPClientTransport::Connect(addr_, intr_fn(this, &This::Connected));
 	}
 
 	void Connected(bool status, Transport * t)
 	{
-		if (!ref_ && !status) {
-			/*
-			 * The test is done, server is shutdown
-			 */
-			return;
-		}
-
 		INVARIANT(status);
 		INVARIANT(t);
 
@@ -307,15 +302,15 @@ public:
 		data.i16_.Set(55);
 		data.Encode(buf);
 
-		int ok = t->Write(buf, async_fn(this, &This::WriteDone, t));
-		if ((size_t) ok == buf.Size()) {
+		bool ok = t->Write(buf, async_fn(this, &This::WriteDone, t));
+		if (ok) {
 			WriteDone(ok, t);
 		}
 	}
 
 	void WriteDone(int status, Transport * t)
 	{
-		INVARIANT(status == sizeof(Data));
+		INVARIANT(status > 0);
 
 		IOBuffer buf = IOBuffer::Alloc(sizeof(Data));
 
@@ -346,6 +341,7 @@ public:
 
 private:
 
+	SocketAddress addr_;
 	atomic<size_t> & ref_;
 };
 
@@ -361,12 +357,12 @@ void Exec()
 	atomic<size_t> ref(0);
 
 	Server s(laddr);
+	Client c(raddr, ref);
 
 	sleep(/*sec=*/ 1);
 
-	vector<shared_ptr<Client> > clients;
-	for (int i = 0; i < 2; ++i) {
-		clients.push_back(shared_ptr<Client>(new Client(raddr, ref)));
+	for (int i = 0; i < 10; ++i) {
+		c.Connect();
 	}
 
 	while (ref) {}
@@ -378,6 +374,7 @@ void Exec()
 
 }
 
+#endif
 //........................................................................................ main ....
 
 int
@@ -392,7 +389,7 @@ main(int argc, char ** argv)
 	    TEST(test_datatypes);
 	    TEST(test_rpcpacket);
 	}
-	TEST(test_rpc_transport::Exec);
+	// TEST(test_rpc_transport::Exec);
 
 	TeardownTestSetup();
 

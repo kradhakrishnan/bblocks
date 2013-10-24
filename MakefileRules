@@ -45,7 +45,7 @@ endif
 #
 ifdef VERBOSE
     ifeq ($(shell echo $(VERBOSE)), disable)
-        # optimized build
+        $(info ** VERBOSE disabled **)
         BUILD_CCFLAGS += -DDISABLE_VERBOSE
     else
         $(error Unknown value for VERBOSE)

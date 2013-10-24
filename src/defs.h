@@ -17,6 +17,14 @@
 #define ALIGNED(x) __attribute__((aligned(sizeof(x))))
 
 /*
+ * Compile helpers
+ */
+#define __DISABLE_ASSIGN_AND_COPY__(X) \
+    X(); \
+    X(const X &); \
+    X & operator=(const X &); \
+
+/*
  * Computation helpers
  */
 #define ROUNDUP(x,y) ((x / y) + (x % y ? 1 : 0)) * y
