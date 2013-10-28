@@ -1,9 +1,13 @@
 #pragma once
 
-#include <string>
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <netdb.h>
+
+#include <string>
+#include <boost/algorithm/string.hpp>
 
 namespace dh_core {
 

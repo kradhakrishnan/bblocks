@@ -5,7 +5,10 @@
 #include "atomic.h"
 #include "util.hpp"
 
-#define TEST(x) cout << #x << endl; x();
+#define TEST(x) { \
+	cout << "-----------------------------" << endl; \
+	cout << #x << endl; x(); \
+}
 
 using namespace dh_core;
 using namespace std;

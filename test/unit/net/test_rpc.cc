@@ -2,7 +2,9 @@
 #include <memory>
 
 #include "test/unit-test.h"
+#include "net/tcp-linux.h"
 #include "net/rpc-data.h"
+#include "net/rpc.h"
 
 using namespace std;
 using namespace dh_core;
@@ -152,26 +154,19 @@ test_datatypes()
 
 	INFO(_log) << "Checking data";
 
-	INVARIANT(data.i16_ == 257);
-	INVARIANT(data.i32_ == 55);
-	INVARIANT(data.i64_ == 555);
-	INVARIANT(data.str_ == "5555");
-	INVARIANT(data.lu32_ == lu32);
-	INVARIANT(data.lu64_ == lu64);
-	INVARIANT(data.lstr_ == lstr);
-	INVARIANT(data.raw_ == rawdata);
+	INVARIANT(data2.i16_ == 257);
+	INVARIANT(data2.i32_ == 55);
+	INVARIANT(data2.i64_ == 555);
+	INVARIANT(data2.str_ == "5555");
+	INVARIANT(data2.lu32_ == lu32);
+	INVARIANT(data2.lu64_ == lu64);
+	INVARIANT(data2.lstr_ == lstr);
+	INVARIANT(data2.raw_ == rawdata);
 }
 
-//.......................................................................... test_rpc_transport ....
+//.............................................................................. basic_rpc_test ....
 
-#if 0
-
-namespace test_rpc_transport
-{
-
-using namespace dh_core::rpc;
-
-struct Data : RPCData
+struct TestData : RPCData
 {
 	void Encode(IOBuffer & buf)
 	{
@@ -203,178 +198,81 @@ struct Data : RPCData
 	UInt16 i16_;
 };
 
-class Server : public TCPServerTransport
+class BasicRpcTest
 {
 public:
 
-	typedef Server This;
-
-	Server(SocketAddress & addr)
+	enum
 	{
-		Listen(addr, async_fn(this, &This::Connected));
+		MYCMD0 = 0,
+		MYCMD1 = 1
+	};
+
+	using This = BasicRpcTest;
+
+	BasicRpcTest()
+		: epoll_("/epoll")
+		, tcpServer_(epoll_)
+		, rpcServer_(tcpServer_)
+		, tcpConnector_(epoll_)
+		, rpcClient_(RpcEndpoint("/rpcclient", /*uid=*/ 0xde), tcpConnector_)
+	{}
+
+	void HandleServerError(int status)
+	{
+		DEADEND
 	}
 
-	void Connected(bool status, Transport * t)
+	void Run(int)
 	{
-		chs_.push_back(shared_ptr<Transport>(t));
+		const short port = 9999 + (rand() % 100);
+		SocketAddress laddr(SocketAddress::GetAddr("127.0.0.1", port),
+				    SocketAddress::GetAddr("0.0.0.0", port));
+		SocketAddress raddr(SocketAddress::GetAddr("127.0.0.1", port));
 
-		INVARIANT(status);
-		INVARIANT(t);
+		rpcServer_.Register(MYCMD0, async_fn(this, &This::Cmd0));
+		rpcServer_.Register(MYCMD1, async_fn(this, &This::Cmd1));
 
-		IOBuffer buf = IOBuffer::Alloc(sizeof(Data));
-		if (t->Read(buf, async_fn(this, &This::ReadDone, t))) {
-			ReadDone(/*status=*/ buf.Size(), buf, t);
-		}
+		rpcServer_.Start(laddr, async_fn(this, &This::HandleServerError));
+		rpcClient_.Connect(raddr, async_fn(this, &This::ConnectDone));
 	}
 
-	void ReadDone(int status, IOBuffer buf, Transport * t)
+	void ConnectDone(int status)
 	{
-		INVARIANT(status == (int) buf.Size());
-		INVARIANT(t);
-
-		Data data;
-		data.Decode(buf);
-		INVARIANT(data.i16_ == 55);
-
-		bool ok = t->Write(buf, async_fn(this, &This::WriteDone, t));
-		if (ok) {
-			WriteDone(ok, t);
-		}
+		INVARIANT(status == 0);
+		DEADEND;
 	}
 
-	void WriteDone(int status, Transport * t)
+	void Cmd0(RpcRequest packet)
 	{
-		INVARIANT(status > 0);
 	}
 
-	void Stop()
+	void Cmd1(RpcRequest packet)
 	{
-		/*
-		 * Close all channels
-		 */
-		for (auto ch : chs_) {
-			AsyncWait<bool> waiter;
-			ch->Stop(async_fn(&waiter, &AsyncWait<bool>::Done));
-			bool status = waiter.Wait();
-			INVARIANT(status);
-		}
-
-		/*
-		 * Shutdown server
-		 */
-		AsyncWait<bool> waiter;
-		TCPServerTransport::Stop(async_fn(&waiter, &AsyncWait<bool>::Done));
-		bool status = waiter.Wait();
-		INVARIANT(status);
 	}
 
 private:
 
-	list<shared_ptr<Transport> > chs_;
+	Epoll epoll_;
+	TCPServer tcpServer_;
+	RpcServer rpcServer_;
+	TCPConnector tcpConnector_;
+	RpcClient rpcClient_;
+
 };
 
-class Client : public TCPClientTransport
+void
+test_basic_rpc()
 {
-public:
-
-	typedef Client This;
-
-	Client(const SocketAddress & addr, atomic<size_t> & ref)
-		: addr_(addr), ref_(ref)
-	{
-	}
-
-	void Connect()
-	{
-		++ref_;
-		TCPClientTransport::Connect(addr_, intr_fn(this, &This::Connected));
-	}
-
-	void Connected(bool status, Transport * t)
-	{
-		INVARIANT(status);
-		INVARIANT(t);
-
-		IOBuffer buf = IOBuffer::Alloc(sizeof(Data));
-		buf.FillRandom();
-
-		Data data;
-		data.i16_.Set(55);
-		data.Encode(buf);
-
-		bool ok = t->Write(buf, async_fn(this, &This::WriteDone, t));
-		if (ok) {
-			WriteDone(ok, t);
-		}
-	}
-
-	void WriteDone(int status, Transport * t)
-	{
-		INVARIANT(status > 0);
-
-		IOBuffer buf = IOBuffer::Alloc(sizeof(Data));
-
-		bool ok = t->Read(buf, async_fn(this, &This::ReadDone, t));
-		if (ok) {
-			ReadDone(/*status=*/ buf.Size(), buf, t);
-		}
-	}
-
-	void ReadDone(int status, IOBuffer buf, Transport * t)
-	{
-		INVARIANT(status == (int) buf.Size());
-
-		Data data;
-		data.Decode(buf);
-
-		INVARIANT(data.i16_ == 55);
-
-		t->Stop(async_fn(this, &This::Stopped, t));
-	}
-
-	void Stopped(bool status, Transport * t)
-	{
-		INVARIANT(status);
-		delete t;
-		--ref_;
-	}
-
-private:
-
-	SocketAddress addr_;
-	atomic<size_t> & ref_;
-};
-
-void Exec()
-{
-	const short port = 9999 + (rand() % 100);
-	SocketAddress laddr(SocketAddress::GetAddr("127.0.0.1", port),
-			    SocketAddress::GetAddr("0.0.0.0", port));
-	SocketAddress raddr(SocketAddress::GetAddr("127.0.0.1", port));
-
 	ThreadPool::Start();
 
-	atomic<size_t> ref(0);
+	BasicRpcTest t;
+	ThreadPool::Schedule(&t, &BasicRpcTest::Run, /*nonce=*/ 0);
 
-	Server s(laddr);
-	Client c(raddr, ref);
-
-	sleep(/*sec=*/ 1);
-
-	for (int i = 0; i < 10; ++i) {
-		c.Connect();
-	}
-
-	while (ref) {}
-
-	s.Stop();
-
+	ThreadPool::Wait();
 	ThreadPool::Shutdown();
 }
 
-}
-
-#endif
 //........................................................................................ main ....
 
 int
@@ -384,12 +282,9 @@ main(int argc, char ** argv)
 
 	InitTestSetup();
 
-
-	if (0) {
-	    TEST(test_datatypes);
-	    TEST(test_rpcpacket);
-	}
-	// TEST(test_rpc_transport::Exec);
+	TEST(test_datatypes);
+	TEST(test_rpcpacket);
+	TEST(test_basic_rpc);
 
 	TeardownTestSetup();
 

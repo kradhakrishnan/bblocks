@@ -1,9 +1,7 @@
 #ifndef _TCPSERVER_H_
 #define _TCPSERVER_H_
 
-#include <boost/algorithm/string.hpp>
 #include <sys/types.h> 
-#include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <fcntl.h>

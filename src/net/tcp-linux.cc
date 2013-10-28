@@ -362,8 +362,8 @@ TCPServer::Accept(const SocketAddress & addr, const AcceptDoneHandle & h)
 	    return -1;
 	}
 
-#if 0
 	SocketOptions::SetTcpNoDelay(sockfd_, /*enable=*/ true);
+#if 0
 	SocketOptions::SetTcpWindow(sockfd_, /*size=*/ 85 * 1024);
 #endif
 

@@ -11,8 +11,29 @@ namespace dh_core
 
 struct RPCData
 {
+	virtual ~RPCData() {}
+
+	/**
+	 *
+	 */
 	virtual void Encode(IOBuffer & buf, size_t & pos) = 0;
+
+	virtual void Encode(IOBuffer & buf)
+	{
+		size_t pos = 0;
+		Encode(buf, pos);
+	}
+
+	/**
+	 *
+	 */
 	virtual void Decode(IOBuffer & buf, size_t & pos) = 0;
+	virtual void Decode(IOBuffer & buf)
+	{
+		size_t pos = 0;
+		Decode(buf, pos);
+	}
+
 	virtual size_t Size() const = 0;
 };
 

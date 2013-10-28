@@ -193,6 +193,27 @@ public:
 		ReadInt(t, tmp);
 	}
 
+	std::string Dump() const
+	{
+		if (!data_) return std::string();
+
+		std::ostringstream ss;
+
+		ss << "[";
+		for (size_t i = 0; i < size_; i++) {
+			char ch = data_.get()[off_ + i];
+			if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
+			    || (ch >= '0' && ch <= '9')) {
+				ss << ch << ".";
+			} else {
+				ss << (int) ch << ".";
+			}
+		}
+		ss << "]";
+
+		return ss.str();
+	}
+
 protected:
 
 	IOBuffer(const boost::shared_ptr<uint8_t> & data, const size_t size, const size_t off = 0)
