@@ -2,7 +2,7 @@
 #define _DH_CORE_BUFFER_H_
 
 #include <malloc.h>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <arpa/inet.h>
 
 #include "assert.h"
@@ -45,7 +45,7 @@ public:
 		void * ptr;
 		int status = posix_memalign(&ptr, 512, size);
 		INVARIANT(status != -1);
-		return IOBuffer(boost::shared_ptr<uint8_t>((uint8_t *) ptr, Dalloc()), size);
+		return IOBuffer(std::shared_ptr<uint8_t>((uint8_t *) ptr, Dalloc()), size);
 	}
 
 	/*
@@ -216,11 +216,11 @@ public:
 
 protected:
 
-	IOBuffer(const boost::shared_ptr<uint8_t> & data, const size_t size, const size_t off = 0)
+	IOBuffer(const std::shared_ptr<uint8_t> & data, const size_t size, const size_t off = 0)
 		: data_(data), size_(size), off_(off)
 	{}
 
-	boost::shared_ptr<uint8_t> data_;
+	std::shared_ptr<uint8_t> data_;
 	size_t size_;
 	size_t off_;
 };

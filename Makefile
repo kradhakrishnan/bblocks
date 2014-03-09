@@ -10,7 +10,11 @@ SUBDIR = src/			\
 
 clean: build-teardown build-setup
 
-libsrc: all modules
+#
+# Disabled compiling kernel modules temporarily. Need to enable them.
+#
+
+libsrc: all
 
 modules:
 	@echo '  KMOD		'
@@ -42,7 +46,8 @@ ubuntu-setup:
                         libboost-dev libboost-doc libboost-dbg \
                         libboost-program-options-dev zlibc zlib1g-dev \
                         libtcmalloc-minimal0 libtcmalloc-minimal0-dbg \
-                        valgrind \
+                        valgrind fakeroot build-essential crash kexec-tools \
+			makedumpfile kernel-wedge
 
 	ln /usr/lib/libtcmalloc_minimal.so.4 /usr/lib/libtcmalloc_minimal.so
 
