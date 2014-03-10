@@ -3,7 +3,7 @@
 #include <iostream>
 
 #include "fs/aio-linux.h"
-#include "test/unit-test.h"
+#include "test/unit/unit-test.h"
 
 using namespace std;
 using namespace dh_core;

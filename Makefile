@@ -8,7 +8,7 @@ SUBDIR = src/			\
 	 src/kmod	 	\
 	 test			\
 
-clean: build-teardown build-setup
+clean: build-teardown
 
 #
 # Disabled compiling kernel modules temporarily. Need to enable them.

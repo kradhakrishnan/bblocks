@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "test/unit-test.h"
+#include "test/unit/unit-test.h"
 
 using namespace dh_core;
 using namespace std;

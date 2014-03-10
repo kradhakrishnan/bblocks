@@ -2,7 +2,7 @@
 #include <boost/pointer_cast.hpp>
 #include <sys/time.h>
 
-#include "test/unit-test.h"
+#include "test/unit/unit-test.h"
 #include "util.hpp"
 #include "net/transport/tcp-linux.h"
 #include "net/epoll/mpio-epoll.h"
