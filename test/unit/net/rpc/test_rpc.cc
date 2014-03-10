@@ -2,9 +2,9 @@
 #include <memory>
 
 #include "test/unit-test.h"
-#include "net/tcp-linux.h"
-#include "net/rpc-data.h"
-#include "net/rpc.h"
+#include "net/transport/tcp-linux.h"
+#include "net/rpc/bblocks/rpc-data.h"
+#include "net/rpc/rpc.h"
 
 using namespace std;
 using namespace dh_core;

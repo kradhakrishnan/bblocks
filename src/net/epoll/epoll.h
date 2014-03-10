@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <tr1/unordered_map>
 
-#include "fdpoll.h"
+#include "net/fdpoll.h"
 #include "util.hpp"
 #include "lock.h"
 #include "async.h"

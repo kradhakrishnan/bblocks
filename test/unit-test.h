@@ -1,5 +1,4 @@
-#ifndef _DH_CORE_TEST_UNIT_TEST_H_
-#define _DH_CORE_TEST_UNIT_TEST_H_
+#pragma once
 
 #include "schd/thread-pool.h"
 #include "atomic.h"
@@ -72,4 +71,3 @@ void TeardownTestSetup()
     LogHelper::DestroyLogger();
 }
 
-#endif // _DH_CORE_TEST_UNIT_TEST_H_

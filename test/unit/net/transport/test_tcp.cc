@@ -4,8 +4,8 @@
 
 #include "test/unit-test.h"
 #include "util.hpp"
-#include "net/tcp-linux.h"
-#include "net/mpio-epoll.h"
+#include "net/transport/tcp-linux.h"
+#include "net/epoll/mpio-epoll.h"
 #include "async.h"
 
 using namespace std;

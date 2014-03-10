@@ -85,6 +85,8 @@ endif
 
 CC = g++
 AR = $(shell which ar)
+MKDIR_P = mkdir -p
+
 
 CCFLAGS += -Wall -std=c++11 -Werror -D__STDC_LIMIT_MACROS $(BUILD_CCFLAGS)
 LDFLAGS += -L$(OBJDIR)  -L/usr/lib
@@ -130,6 +132,7 @@ endif
 
 $(OBJDIR)/%.o: %.cc
 	@echo ' CC	' $@
+	@${MKDIR_P} $(dir $@)
 	@${CC} ${INCLUDE} ${CCFLAGS} -o $@ -c $< 
 	@${CC} ${INCLUDE} ${CCFLAGS} -MT '$@' -MM $< > ${OBJDIR}/$*.dep
 

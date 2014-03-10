@@ -24,14 +24,11 @@ modules:
 
 build-setup:
 	@echo ' SETUP		' $(OBJDIR)
-	@mkdir -p $(OBJDIR)/ar
-	@mkdir -p $(OBJDIR)/src/net
-	@mkdir -p $(OBJDIR)/src/fs
-	@mkdir -p $(OBJDIR)/src/schd
-	@mkdir -p $(OBJDIR)/test/unit/fs
-	@mkdir -p $(OBJDIR)/test/unit/net
-	@mkdir -p $(OBJDIR)/test/unit/schd
-	@mkdir -p $(OBJDIR)/test/perf
+	@mkdir -p $(OBJDIR)
+
+build-teardown:
+	@echo ' CLEAN		' $(OBJDIR)
+	@rm -r -f $(OBJDIR)
 
 build-doc:
 	@echo ' DOC		' $(OBJDIR)/doc
@@ -50,10 +47,6 @@ ubuntu-setup:
 			makedumpfile kernel-wedge
 
 	ln /usr/lib/libtcmalloc_minimal.so.4 /usr/lib/libtcmalloc_minimal.so
-
-build-teardown:
-	@echo ' CLEAN		' $(OBJDIR)
-	@rm -r -f $(OBJDIR)
 
 .DEFAULT_GOAL := libsrc
 

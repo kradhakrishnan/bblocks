@@ -12,7 +12,7 @@
 #include "util.hpp"
 #include "async.h"
 #include "schd/thread-pool.h"
-#include "net/epoll.h"
+#include "net/epoll/epoll.h"
 #include "net/fdpoll.h"
 #include "buf/buffer.h"
 #include "perf/perf-counter.h"

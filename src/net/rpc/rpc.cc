@@ -1,6 +1,6 @@
 #include <memory>
 
-#include "net/rpc.h"
+#include "net/rpc/rpc.h"
 
 using namespace dh_core;
 using namespace std;

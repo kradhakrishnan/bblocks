@@ -1,7 +1,7 @@
 #pragma once
 
 #include "async.h"
-#include "net/rpc-data.h"
+#include "net/rpc/bblocks/rpc-data.h"
 #include "net/transport.h"
 #include "net/socket.h"
 

@@ -3,8 +3,8 @@
 #include <iostream>
 #include <atomic>
 
-#include "net/mpio-epoll.h"
-#include "net/tcp-linux.h"
+#include "net/epoll/mpio-epoll.h"
+#include "net/transport/tcp-linux.h"
 #include "test/unit-test.h"
 
 using namespace std;
