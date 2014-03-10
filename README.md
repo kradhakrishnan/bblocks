@@ -48,3 +48,7 @@ The code is avaiable for community consumption under LGPL v3. I am pretty open i
 ##### 6. Is there an official build ? Is it available for use via apt-get or yum ?
 
 Soon. I will have a public alpha build once I get the unit testing framework done, and more parts of the framework completed for meaningful adoption.
+
+##### 7. Is bblocks available for other languages ?
+
+Work is in progress for python and java. I will open up the repositories when they are ready.
