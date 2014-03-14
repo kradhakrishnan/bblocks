@@ -116,14 +116,15 @@ public:
         , path_(path)
     {}
 
-    virtual ~LogMessage()
+    ~LogMessage()
     {
         std::ostringstream tmp;
         tmp << (char) type_ << " " << Timestamp() << " [" << path_ << "] ";
-        for (StringListType::const_iterator it = msg_.begin();
-             it != msg_.end(); ++it) {
+
+	for (auto it = msg_.begin(); it != msg_.end(); ++it) {
             tmp << *it;
         }
+
         Logger::Instance().Append(type_, tmp.str());
     }
 

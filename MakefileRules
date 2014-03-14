@@ -1,7 +1,5 @@
 include ${SUBDIR:%=%/Makefile}
 
-STDCPP = /usr/include/c++/4.6.3/
-
 #
 # LCOV=enable
 #
@@ -18,13 +16,27 @@ endif
 ifdef OPT
     ifeq ($(shell echo $(OPT)), enable)
         # optimized build
-        BUILD_CCFLAGS += -O2
+        BUILD_CCFLAGS += -O2 -g
     else
         $(error Unknown value for OPT)
     endif
 else
+    BUILD_CCFLAGS += -DDEBUG_BUILD
+endif
+
+#
+# DEBUG=disable
+#
+ifdef DEBUG
+    # Disable debug
+    ifeq ($(shell echo $(DEBUG)), disable)
+        BUILD_CCFLAGS +=
+    else
+        $(error Unknown value for DEBUG)
+    endif
+else
     # debug build
-    BUILD_CCFLAGS += -g3  -DDEBUG_BUILD
+    BUILD_CCFLAGS += -g3
 endif
 
 #
@@ -83,14 +95,14 @@ ifdef TCMALLOC
     endif
 endif
 
-CC = g++
+CC = g++-4.7
 AR = $(shell which ar)
 MKDIR_P = mkdir -p
 
 
 CCFLAGS += -Wall -std=c++11 -Werror -D__STDC_LIMIT_MACROS $(BUILD_CCFLAGS)
 LDFLAGS += -L$(OBJDIR)  -L/usr/lib
-INCLUDE += -I. -I./src -Ipublic -I/usr/include/boost -I$(STDCPP)
+INCLUDE += -I. -I./src -Ipublic -I/usr/include/boost 
 LIBS    += -lrt -lpthread  -lz -lboost_program_options
 
 ifndef OBJDIR
