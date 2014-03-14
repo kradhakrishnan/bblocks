@@ -1,12 +1,21 @@
 include ${SUBDIR:%=%/Makefile}
 
+$(info CONFIG	LCOV = $(LCOV))
+$(info CONFIG	OPT = $(OPT))
+$(info CONFIG	DEBUG = $(DEBUG))
+$(info CONFIG	PROFILE = $(PROFILE))
+$(info CONFIG	VERBOSE = $(VERBOSE))
+$(info CONFIG	VALGRIND = $(VALGRIND))
+$(info CONFIG	ERRCHECK = $(ERRCHECK))
+$(info CONFIG	TCMALLOC   $(TCMALLOC))
+
 #
 # LCOV=enable
 #
 ifdef LCOV
     ifeq ($(shell echo $(LCOV)), enable)
-        BUILD_CCFLAGS += --coverage
-        LDFLAGS += --coverage
+        BUILD_CCFLAGS += -g -fprofile-arcs -ftest-coverage
+        LDFLAGS += -fprofile-arcs
     endif
 endif
 
@@ -46,7 +55,7 @@ ifdef PROFILE
     ifeq ($(shell echo $(PROFILE)), enable)
         # optimized build
         BUILD_CCFLAGS += -pg
-        LDFLAGS = -pg
+        LDFLAGS += -pg
     else
         $(error Unknown value for PROFILE)
     endif

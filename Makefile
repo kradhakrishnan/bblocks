@@ -45,7 +45,7 @@ ubuntu-setup:
                         libtcmalloc-minimal0 libtcmalloc-minimal0-dbg \
                         valgrind fakeroot build-essential crash kexec-tools \
 			makedumpfile kernel-wedge tree bmon pyflakes sshpass \
-			exuberant-catgs
+			exuberant-ctags lcov
 
 	ln /usr/lib/libtcmalloc_minimal.so.4 /usr/lib/libtcmalloc_minimal.so
 
@@ -62,7 +62,13 @@ run-valgrind-test:
 					  -o ../build/unit-test.log
 
 run-flamebox:
-	$(shell cd test/flamebox; python run-flamebox.py --config flamebox.config --output ../../..)
+	$(shell cd test/flamebox; \
+	        python run-flamebox.py --config flamebox.config --output ../../..)
+
+calc-lcov:
+	$(shell cd ../build; \
+		lcov -q --capture --directory . --output-file lcov.dat -b ../bblocks; \
+		genhtml lcov.dat --output-directory lcov-html -q)
 
 #
 # Misc
