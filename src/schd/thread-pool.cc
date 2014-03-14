@@ -28,13 +28,11 @@ NonBlockingThread::ThreadMain()
 {
 	DisableThreadCancellation();
 
-	while (!exitMain_)
+	while (true)
 	{
 		ThreadRoutine * r = q_.Pop();
 		r->Run();
 	}
-
-	INVARIANT(q_.IsEmpty());
 
 	return NULL;
 }

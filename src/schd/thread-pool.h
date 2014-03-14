@@ -75,23 +75,35 @@ public:
 		return q_.IsEmpty();
 	}
 
-	virtual void Stop()
+	virtual void Stop() override
 	{
 		INVARIANT(!exitMain_);
 		exitMain_ = true;
-		Push(new WakeupRoutine());
 
+		INVARIANT(q_.IsEmpty());
+
+		/*
+		 * Push a message so, we can wakeup the main thread and exit it
+		 */
+		Push(new ThreadExitRoutine());
+    
 		int status = pthread_join(tid_, NULL);
 		INVARIANT(!status);
 	}
 
 private:
 
-	struct WakeupRoutine : ThreadRoutine
+	struct ThreadExitRoutine : ThreadRoutine
 	{
 		virtual void Run()
 		{
 			delete this;
+
+			/*
+			 * The intention of scheduling this routine is to destroy the thread which
+			 * is process the requests. Kill the thread.
+			 */
+			pthread_exit(/*ret=*/ NULL);
 		}
 	};
 
@@ -236,7 +248,7 @@ private:
 
 	void DestroyThreads()
 	{
-		for (threads_t::iterator it = threads_.begin(); it != threads_.end(); ++it) {
+		for (auto it = threads_.begin(); it != threads_.end(); ++it) {
 			NonBlockingThread * th = *it;
 			/*
 			 * Stop and destroy the thread

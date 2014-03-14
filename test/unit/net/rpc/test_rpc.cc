@@ -284,7 +284,7 @@ main(int argc, char ** argv)
 
 	TEST(test_datatypes);
 	TEST(test_rpcpacket);
-	TEST(test_basic_rpc);
+	// TEST(test_basic_rpc);
 
 	TeardownTestSetup();
 

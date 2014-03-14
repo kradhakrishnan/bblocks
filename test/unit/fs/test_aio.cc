@@ -1,6 +1,7 @@
 #include <iostream>
 #include <boost/pointer_cast.hpp>
 #include <sys/time.h>
+#include <atomic>
 
 #include "test/unit/unit-test.h"
 #include "util.hpp"
@@ -34,6 +35,7 @@ public:
         : log_("testaio/")
         , iter_(0)
         , dev_("../build/test.out", /*size=*/ 10 * 1024 * 1024, &aio_)
+	, count_(0)
     {
     }
 
@@ -49,7 +51,7 @@ public:
 
         // start writing data to device
         for (int i = 0; i < 1000; ++i) {
-            count_.Add(/*val=*/ 1);
+            count_ += 1;
 
             IOBuffer buf = IOBuffer::Alloc(WBUFFERSIZE);
             IOCtx * ctx = new IOCtx(i, buf);
@@ -60,7 +62,6 @@ public:
         }
     }
 
-    __completion_handler__
     void WriteDone(int status, IOCtx * ctx)
     {
         ASSERT(ctx);
@@ -73,13 +74,12 @@ public:
                   async_fn(this, &BasicAioTest::ReadDone, ctx));
     }
 
-    __completion_handler__
     void ReadDone(int status, IOCtx * ctx)
     {
         ASSERT(ctx);
         ASSERT(status != -1 && size_t(status) == ctx->buf_.Size());
 
-        DEBUG(log_) << "Read done(" << status << ", " << ctx->off_ << ")";
+        DEBUG(log_) << "Read done(" << status << ", " << ctx->off_ << ")" << count_;
 
         for (size_t i = 0; i < ctx->buf_.Size(); ++i) {
             ASSERT(ctx->buf_.Ptr()[i] == uint8_t('a' + (ctx->off_ % 26)));
@@ -90,7 +90,7 @@ public:
 
         // TODO: Unregister and then shutdown
 
-        if (count_.Add(/*val=*/ -1) == 1) {
+        if (--count_ == 0) {
             ThreadPool::Wakeup();
         }
     }
@@ -101,7 +101,7 @@ private:
     LinuxAioProcessor aio_;
     uint32_t iter_;
     SpinningDevice dev_;
-    AtomicCounter count_;
+    atomic<int> count_;
 };
 
 void
