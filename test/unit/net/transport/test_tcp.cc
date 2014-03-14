@@ -28,7 +28,7 @@ public:
 	, log_("/testtcp/")
         , epoll_("/epoll")
 	, mpepoll_(/*nth=*/ 2)
-        , tcpServer_(mpepoll_)
+        , tcpServer_(epoll_)
         , tcpClient_(epoll_)
         , addr_(SocketAddress::GetAddr("127.0.0.1", 9999 + (rand() % 100)))
         , server_ch_(NULL)

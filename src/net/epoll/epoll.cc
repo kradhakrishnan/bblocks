@@ -34,14 +34,15 @@ Epoll::~Epoll()
 	INFO(log_) << "Stopping epoll.";
 
 	/*
-	 * Stop the polling thread
-	 */
-	Thread::Stop();
-
-	/*
 	 * Close fd
 	 */
 	::close(fd_);
+
+	/*
+	 * Stop the polling thread
+	 */
+	Thread::Cancel();
+	Thread::Stop();
 
 	{
 		/*

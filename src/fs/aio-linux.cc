@@ -194,8 +194,8 @@ LinuxAioProcessor::PollThread::ThreadMain()
 	DisableThreadCancellation();
 
 	while (true) {
-		long status = io_getevents(ctx_, /*min_nr=*/ 1, sizeof(events), events,
-					   /*timeout=*/ NULL);
+		long status = io_getevents(ctx_, /*min_nr=*/ 1, sizeof(events) / sizeof(io_event),
+					   events, /*timeout=*/ NULL);
 
 		if (status == 0) {
 			// no events returned
@@ -206,7 +206,8 @@ LinuxAioProcessor::PollThread::ThreadMain()
 				continue;
 			} else if (errno == EINVAL) {
 				// the ctx has been closed
-				return NULL;
+				INFO(log_) << "Exiting poll loop.";
+				break;
 			}
 
 			/*

@@ -82,20 +82,19 @@ public:
 	public:
 
 		PollThread(SpinMutex & lock, aio_context_t & ctx, InList<Op> & ops)
-		    : Thread("/linuxaioprocessor/th/?")
+		    : Thread("/linuxaioprocessor/th/" + STR(this))
 		    , lock_(lock), ctx_(ctx), ops_(ops)
 		{
-			StartBlockingThread();
 		}
 
-		virtual void Stop()
+		virtual void Stop() override
 		{
 			void * ret;
 			int status = pthread_join(tid_, &ret);
 			INVARIANT(!status || ret == PTHREAD_CANCELED);
 		}
 
-		virtual void * ThreadMain();
+		virtual void * ThreadMain() override;
 
 	private:
 

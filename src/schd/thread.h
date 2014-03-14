@@ -25,7 +25,7 @@ public:
 		int ok = pthread_create(&tid_, /*attr=*/ NULL, ThFn, (void *)this);
 		INVARIANT(!ok);
 
-		INFO(log_) << "Thread " << tid_ << " created.";
+		INFO(log_) << "Thread " << tid_ << " created. (instance " << (long) this << ")";
 	}
 
 	void StartNonBlockingThread()
@@ -55,13 +55,22 @@ public:
 		ASSERT(!status);
 	}
 
-	virtual void Stop()
+	void Cancel()
 	{
 		int status = pthread_cancel(tid_);
 		INVARIANT(!status);
+	}
 
+	void Detach()
+	{
+		int status = pthread_detach(tid_);
+		INVARIANT(!status);
+	}
+
+	virtual void Stop()
+	{
 		void * ret;
-		status = pthread_join(tid_, &ret);
+		int status = pthread_join(tid_, &ret);
 		INVARIANT(!status || ret == PTHREAD_CANCELED);
 	}
 
@@ -85,12 +94,13 @@ public:
 
 		Thread * th = (Thread *) args;
 
-		ThreadCtx::Init(++nextThId_, th);
+		ThreadCtx::Init(th);
 
 		void * thstatus = th->ThreadMain();
 
 		ThreadCtx::Cleanup();
-		pthread_exit(thstatus);
+
+		return thstatus;
 	}
 
 protected:
@@ -108,8 +118,6 @@ protected:
 
 	LogPath log_;
 	pthread_t tid_;
-
-	static std::atomic<uint32_t> nextThId_;
 };
 
 }

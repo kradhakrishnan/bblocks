@@ -1,0 +1,10 @@
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   fun:_Znam
+   fun:_ZN7dh_core9ThreadCtx4InitEPNS_6ThreadE
+   fun:_ZN7dh_core6Thread4ThFnEPv
+   fun:start_thread
+   fun:clone
+}
+

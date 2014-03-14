@@ -1,6 +1,8 @@
 #ifndef _DH_CORE_THREADPOOL_H_
 #define _DH_CORE_THREADPOOL_H_
 
+#include <stdexcept>
+
 #include "defs.h"
 #include "buf/bufpool.h"
 #include "schd/thread.h"
@@ -93,6 +95,15 @@ public:
 
 private:
 
+	class ThreadExitException : public std::runtime_error
+	{
+	public:
+
+		ThreadExitException(const std::string & error)
+		    : std::runtime_error(error)
+		{}
+	};
+
 	struct ThreadExitRoutine : ThreadRoutine
 	{
 		virtual void Run()
@@ -103,7 +114,7 @@ private:
 			 * The intention of scheduling this routine is to destroy the thread which
 			 * is process the requests. Kill the thread.
 			 */
-			pthread_exit(/*ret=*/ NULL);
+			throw ThreadExitException("pthread_exit proxy");
 		}
 	};
 
@@ -275,27 +286,27 @@ public:
 
 	static void Start(const uint32_t ncores = SysConf::NumCores())
 	{
-		ThreadCtx::Init(/*id=*/ 0xFFFFFFFF, /*tinst=*/ NULL);
+		/*
+		 * We need to init the current thread context to enable buffering to schedule
+		 */
+		ThreadCtx::Init(/*tinst=*/ NULL);
+
 		NonBlockingThreadPool::Instance().Start(ncores);
 	}
 
 	static void Shutdown()
 	{
-		INVARIANT(ThreadCtx::tid_ == 0xFFFFFFFF);
-
 		NonBlockingThreadPool::Instance().Shutdown();
 		ThreadCtx::Cleanup();
 	}
 
 	static void Wait()
 	{
-		INVARIANT(ThreadCtx::tid_ == 0xFFFFFFFF);
 		NonBlockingThreadPool::Instance().Wait();
 	}
 
 	static void Wakeup()
 	{
-		INVARIANT(ThreadCtx::tid_ != 0xFFFFFFFF);
 		NonBlockingThreadPool::Instance().Wakeup();
 	}
 

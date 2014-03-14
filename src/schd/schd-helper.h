@@ -20,8 +20,6 @@ class Thread;
 
 struct ThreadCtx
 {
-	static __thread uint32_t tid_;
-
 	/*
 	 * Per thread pool
 	 *
@@ -36,9 +34,8 @@ struct ThreadCtx
 	/* Thread instance */
 	static __thread Thread * tinst_;
 
-	static void Init(const uint32_t tid, Thread * tinst)
+	static void Init(Thread * tinst)
 	{
-		tid_ = tid;
 		tinst_ = tinst;
 		pool_ = new std::list<uint8_t *>[SLAB_DEPTH];
 	}

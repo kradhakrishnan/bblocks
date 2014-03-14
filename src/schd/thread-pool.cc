@@ -9,15 +9,8 @@ using namespace dh_core;
 // ThreadCtx
 //
 
-__thread uint32_t ThreadCtx::tid_;
 __thread Thread * ThreadCtx::tinst_;
 __thread std::list<uint8_t *> * ThreadCtx::pool_;
-
-//
-// Thread
-//
-
-atomic<uint32_t> Thread::nextThId_(0);
 
 //
 // NonBlockingThread
@@ -28,11 +21,19 @@ NonBlockingThread::ThreadMain()
 {
 	DisableThreadCancellation();
 
-	while (true)
-	{
-		ThreadRoutine * r = q_.Pop();
-		r->Run();
+	try {
+		while (true)
+		{
+			ThreadRoutine * r = q_.Pop();
+			r->Run();
+		}
+	} catch (ThreadExitException & e) {
+	    /*
+	     * This is ok. This is a little trick we used to exit the thread gracefully
+	     */
 	}
+
+	INVARIANT(q_.IsEmpty());
 
 	return NULL;
 }
