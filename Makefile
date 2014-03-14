@@ -53,7 +53,7 @@ ubuntu-setup:
 # Tests
 #
 
-run-test:
+run-unit-test:
 	python test/unit/run-unit-test.py -b ../build -u test/unit/default-unit-tests -o ../build/unit-test.out
 	cat ../build/unit-test.out | egrep '^e '
 

@@ -2,4 +2,4 @@ make clean
 make build-setup
 make VALGRIND=enable
 ulimit -c unlimited
-test/unit/run-unit-test.py -v -b ../build -u test/unit/default-unit-tests -o ../build/unit-test.log
+make run-valgrind-test
