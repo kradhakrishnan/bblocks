@@ -223,7 +223,7 @@ private:
 void
 test_tcp_basic()
 {
-    ThreadPool::Start(/*ncores=*/ 4);
+    ThreadPool::Start();
 
     BasicTCPTest test;
 

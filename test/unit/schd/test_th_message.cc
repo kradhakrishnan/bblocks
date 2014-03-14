@@ -53,7 +53,7 @@ public:
 void
 test_handler()
 {
-    ThreadPool::Start(/*maxCores=*/ 4);
+    ThreadPool::Start();
 
     Callee callee;
     Caller caller(&callee);

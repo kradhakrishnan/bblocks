@@ -44,9 +44,20 @@ ubuntu-setup:
                         libboost-program-options-dev zlibc zlib1g-dev \
                         libtcmalloc-minimal0 libtcmalloc-minimal0-dbg \
                         valgrind fakeroot build-essential crash kexec-tools \
-			makedumpfile kernel-wedge
+			makedumpfile kernel-wedge tree bmon pyflakes sshpass
 
 	ln /usr/lib/libtcmalloc_minimal.so.4 /usr/lib/libtcmalloc_minimal.so
+
+#
+# Tests
+#
+
+run-unit-test:
+	python test/unit/run-unit-test.py -b ../build -u test/unit/default-unit-tests -o ../build/unit-test.out
+	cat ../build/unit-test.out | egrep -v '^d '
+
+run-flamebox:
+	$(shell cd test/flamebox; python run-flamebox.py --config flamebox.config --output ../../..)
 
 .DEFAULT_GOAL := libsrc
 

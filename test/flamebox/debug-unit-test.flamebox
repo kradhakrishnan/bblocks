@@ -1,0 +1,5 @@
+make clean
+make build-setup
+make
+ulimit -c unlimited
+test/unit/run-unit-test.py -b ../build -u test/unit/default-unit-tests -o ../build/unit-test.log

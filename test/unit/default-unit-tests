@@ -2,6 +2,6 @@
 	<test name="test_th_pool" cmd="test/unit/schd/test_th_pool" timeout="60" />
 	<test name="test_th_message" cmd="test/unit/schd/test_th_message" timeout="60" />
 	<test name="test_aio" cmd="test/unit/fs/test_aio" timeout="60" />
-	<test name="test_rpc" cmd="test/unit/net/test_rpc" timeout="60" />
-	<test name="test_tcp" cmd="test/unit/net/test_tcp" timeout="60" />
+	<test name="test_tcp" cmd="test/unit/net/transport/test_tcp" timeout="60" />
+	<test name="test_rpc" cmd="test/unit/net/rpc/test_rpc" timeout="60" />
 </unit-tests>
