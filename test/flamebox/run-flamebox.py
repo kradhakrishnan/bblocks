@@ -183,16 +183,13 @@ def runJob(jobname, machine, password, remotePath, output):
     runCmd("mkdir -p %s/%s" % (output, jobpath))
     runCmd("touch %s/%s" % (output, cmdfile))
 
-    cmds = [	"cd %s" % jobpath,
-		"git clone -v https://github.com/kradhakrishnan/bblocks.cc.git",
-		"cd bblocks.cc",
-		"echo flamebox | sudo -S make ubuntu-setup",
-		"~/%s/%s" % (jobpath, jobname)	]
+    cmds = [	"cd %s \n" % jobpath,
+		"git clone -v https://github.com/kradhakrishnan/bblocks.cc.git \n",
+		"cd bblocks.cc \n",
+		"echo flamebox | sudo -S make ubuntu-setup \n",
+		"~/%s/%s \n" % (jobpath, jobname)	]
 
-    rcmd = None
-    for cmd in cmds:
-	if rcmd == None: rcmd = cmd
-	else: rcmd = "%s\n%s" % (rcmd, cmd)
+    rcmd = ''.join(cmds)
 
     with open("%s/%s" % (output, cmdfile), 'w+') as f:
 	f.write(rcmd)
