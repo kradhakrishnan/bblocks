@@ -1,7 +1,6 @@
 #ifndef _CORE_LOCK_H_
 #define _CORE_LOCK_H_
 
-#include <boost/shared_ptr.hpp>
 #include <inttypes.h>
 
 #include "perf/perf-counter.h"

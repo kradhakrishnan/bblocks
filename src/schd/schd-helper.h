@@ -4,7 +4,6 @@
 #include <inttypes.h>
 #include <sys/resource.h>
 #include <pthread.h>
-#include <boost/shared_ptr.hpp>
 #include <signal.h>
 
 #include "logger.h"

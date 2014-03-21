@@ -62,7 +62,6 @@ public:
 		: Thread(path)
 		, exitMain_(false)
 		, q_(path)
-		, id_(id)
 	{}
 
 	virtual void * ThreadMain();
@@ -125,7 +124,6 @@ private:
 
 	bool exitMain_;
 	InQueue<ThreadRoutine> q_;
-	const uint32_t id_;
 };
 
 //....................................................................... NonBlockingThreadPool ....

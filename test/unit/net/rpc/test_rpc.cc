@@ -105,7 +105,7 @@ struct Data : RPCData
 			+ str_.Size()
 			+ lu32_.Size()
 			+ lu64_.Size()
-			+ lstr_.Size();
+			+ lstr_.Size()
 			+ raw_.Size();
 	}
 

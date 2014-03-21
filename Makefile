@@ -2,8 +2,6 @@ ifndef OBJDIR
 OBJDIR = $(PWD)/../build
 endif
 
-STDCPP = /usr/include/c++/4.6.3/
-
 SUBDIR = src/			\
 	 src/kmod	 	\
 	 test			\
@@ -38,16 +36,7 @@ build-doc:
 	@doxygen doc/doxygen/Doxyfile
 
 ubuntu-setup:
-	@echo ' UBUNTU-SETUP	'
-	apt-get install build-essential libaio-dev libaio1 libaio1-dbg \
-                        libboost-dev libboost-doc libboost-dbg \
-                        libboost-program-options-dev zlibc zlib1g-dev \
-                        libtcmalloc-minimal0 libtcmalloc-minimal0-dbg \
-                        valgrind fakeroot build-essential crash kexec-tools \
-			makedumpfile kernel-wedge tree bmon pyflakes sshpass \
-			exuberant-ctags lcov
-
-	ln /usr/lib/libtcmalloc_minimal.so.4 /usr/lib/libtcmalloc_minimal.so
+	$(shell scripts/setup-dev-machine)
 
 #
 # Tests

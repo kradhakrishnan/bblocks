@@ -1,6 +1,7 @@
 #include <boost/program_options.hpp>
 #include <string>
 #include <iostream>
+#include <memory>
 
 #include "fs/aio-linux.h"
 #include "test/unit/unit-test.h"

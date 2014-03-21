@@ -12,12 +12,7 @@ class TestObject
 {
 public:
 
-    TestObject(int i) : i_(i) {}
-
-private:
-
-    const int i_;
-
+    TestObject() {}
 };
 
 struct BufferPoolTest
@@ -28,7 +23,7 @@ struct BufferPoolTest
 
 	void Alloc(int count)
 	{
-		TestObject * o = new (BufferPool::Alloc<TestObject>()) TestObject(5);
+		TestObject * o = new (BufferPool::Alloc<TestObject>()) TestObject();
 		ThreadPool::Schedule(this, &This::Dalloc, o);
 	}
 
@@ -95,7 +90,7 @@ simple_test()
 
 //................................................................................ ParallelTest ....
 
-class ThMaster;
+struct ThMaster;
 
 struct ThSlave
 {

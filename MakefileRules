@@ -1,36 +1,63 @@
 include ${SUBDIR:%=%/Makefile}
 
-$(info CONFIG	LCOV = $(LCOV))
-$(info CONFIG	OPT = $(OPT))
-$(info CONFIG	DEBUG = $(DEBUG))
-$(info CONFIG	PROFILE = $(PROFILE))
-$(info CONFIG	VERBOSE = $(VERBOSE))
-$(info CONFIG	VALGRIND = $(VALGRIND))
-$(info CONFIG	ERRCHECK = $(ERRCHECK))
-$(info CONFIG	TCMALLOC   $(TCMALLOC))
+#
+# tsan=enable
+# 
+ifdef tsan
+    ifeq ($(tsan), enable)
+	BUILD_CCFLAGS += -fsanitize=thread -fPIE
+	LDFLAGS += -ltsan -pie
+    else
+	$(error unkown tsan option)
+    endif
+
+    $(info ** tsan enabled)
+endif
+
+#
+# asan=enable
+# 
+ifdef asan
+    ifeq ($(asan), enable)
+	BUILD_CCFLAGS += -fsanitize=address -fno-omit-frame-pointer
+	LDFLAGS += -fsanitize=address -lasan
+    else
+	$(error unknown option for asan)
+    endif
+
+    $(info ** asan enabled)
+endif
+
 
 #
 # LCOV=enable
 #
 ifdef LCOV
-    ifeq ($(shell echo $(LCOV)), enable)
+    ifeq ($(LCOV), enable)
         BUILD_CCFLAGS += -g -fprofile-arcs -ftest-coverage
         LDFLAGS += -fprofile-arcs
+    else
+	$(error Unknown lcov option)
     endif
+
+    $(info ** lcov enabled)
 endif
 
 #
 # OPT=enable
 #
 ifdef OPT
-    ifeq ($(shell echo $(OPT)), enable)
+    ifeq ($(OPT), enable)
         # optimized build
         BUILD_CCFLAGS += -O2 -g
     else
         $(error Unknown value for OPT)
     endif
+
+    $(info ** opt enabled)
 else
     BUILD_CCFLAGS += -DDEBUG_BUILD
+    $(info ** opt disabled)
 endif
 
 #
@@ -38,50 +65,59 @@ endif
 #
 ifdef DEBUG
     # Disable debug
-    ifeq ($(shell echo $(DEBUG)), disable)
+    ifeq ($(DEBUG), disable)
         BUILD_CCFLAGS +=
     else
         $(error Unknown value for DEBUG)
     endif
+
+    $(info ** debug disabled)
 else
-    # debug build
     BUILD_CCFLAGS += -g3
+
+    $(info ** debug enabled)
 endif
 
 #
 # PROFILE=enable
 #
 ifdef PROFILE
-    ifeq ($(shell echo $(PROFILE)), enable)
+    ifeq ($(PROFILE), enable)
         # optimized build
         BUILD_CCFLAGS += -pg
         LDFLAGS += -pg
     else
         $(error Unknown value for PROFILE)
     endif
+
+    $(info ** profile enabled)
 endif
 
 #
 # VERBOSE=disable
 #
 ifdef VERBOSE
-    ifeq ($(shell echo $(VERBOSE)), disable)
+    ifeq ($(VERBOSE), disable)
         $(info ** VERBOSE disabled **)
         BUILD_CCFLAGS += -DDISABLE_VERBOSE
     else
         $(error Unknown value for VERBOSE)
     endif
+
+    $(info ** verbose enabled)
 endif
 
 #
 # VALGRIND=enable
 #
 ifdef VALGRIND
-    ifeq ($(shell echo $(VALGRIND)), enable)
+    ifeq ($(VALGRIND), enable)
         CCFLAGS += -DVALGRIND_BUILD
     else
         $(error Unknown value for VALGRIND)
     endif
+
+    $(info ** valgrind enabled)
 endif
 
 #
@@ -93,21 +129,34 @@ ifdef ERRCHK
     else
         $(error Unknown value for ERRCHK)
     endif
+
+    $(info ** errcheck enabled)
 endif
 
 #
 # TCMALLOC
 #
 ifdef TCMALLOC
-    ifeq ($(shell echo $(TCMALLOC)), enable)
+    ifeq ($(TCMALLOC), enable)
         LIBS += -ltcmalloc_minimal
+    else
+	$(error unknown tcmalloc option)
     endif
+
+    $(info tcmalloc enabled)
 endif
 
-CC = g++-4.7
+#
+# CC
+#
+ifndef $(CC)
+    CC = g++-4.8
+endif
+
+$(info ** Using compiler $(CC))
+
 AR = $(shell which ar)
 MKDIR_P = mkdir -p
-
 
 CCFLAGS += -Wall -std=c++11 -Werror -D__STDC_LIMIT_MACROS $(BUILD_CCFLAGS)
 LDFLAGS += -L$(OBJDIR)  -L/usr/lib

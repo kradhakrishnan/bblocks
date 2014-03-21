@@ -33,7 +33,6 @@ public:
         , addr_(SocketAddress::GetAddr("127.0.0.1", 9999 + (rand() % 100)))
         , server_ch_(NULL)
         , client_ch_(NULL)
-        , count_(0)
         , iter_(0)
         , rbuf_(IOBuffer::Alloc(WBUFFERSIZE))
     {
@@ -213,7 +212,6 @@ private:
     TCPChannel * server_ch_;
     TCPChannel * client_ch_;
     list<uint32_t> cksum_;
-    uint32_t count_;
     uint32_t iter_;
     Adler32 adler32_;
     IOBuffer wbuf_;

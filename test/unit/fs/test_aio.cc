@@ -33,7 +33,6 @@ public:
 
     BasicAioTest()
         : log_("testaio/")
-        , iter_(0)
         , dev_("../build/test.out", /*size=*/ 10 * 1024 * 1024, &aio_)
 	, count_(0)
     {
@@ -99,7 +98,6 @@ private:
 
     LogPath log_;
     LinuxAioProcessor aio_;
-    uint32_t iter_;
     SpinningDevice dev_;
     atomic<int> count_;
 };

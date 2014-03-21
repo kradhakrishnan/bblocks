@@ -5,6 +5,6 @@ sudo apt-get install libboost1.49-all-dev libboost1.49-dev build-essential libai
                      valgrind fakeroot build-essential crash kexec-tools \
 		     makedumpfile kernel-wedge tree bmon pyflakes sshpass \
 		     libtsan0 libtsan0-dbg libasan0 libasan0-dbg \
-		     clang
+		     clang doxygen
 
 sudo ln /usr/lib/libtcmalloc_minimal.so.4 /usr/lib/libtcmalloc_minimal.so

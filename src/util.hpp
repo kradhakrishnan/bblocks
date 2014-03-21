@@ -4,8 +4,7 @@
 #include <list>
 #include <queue>
 #include <sstream>
-#include <boost/shared_ptr.hpp>
-#include <boost/enable_shared_from_this.hpp>
+#include <memory>
 #include <inttypes.h>
 #include <rpc/xdr.h>
 #include <zlib.h>
@@ -43,7 +42,7 @@ static inline unsigned long long rdtsc(void)
 #endif
 
 
-template<class T> using SharedPtr = std::tr1::shared_ptr<T>;
+template<class T> using SharedPtr = std::shared_ptr<T>;
 
 template<class T>
 SharedPtr<T>
