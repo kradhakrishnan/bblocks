@@ -36,7 +36,7 @@ build-doc:
 	@doxygen doc/doxygen/Doxyfile
 
 ubuntu-setup:
-	$(shell scripts/setup-dev-machine)
+	scripts/setup-dev-machine
 
 #
 # Tests
