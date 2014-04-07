@@ -18,3 +18,8 @@ TARGET += test/unit/schd/test_th_pool.cc		\
 # .cc
 #
 SRCS += 
+
+#
+# .pyx
+#
+PYX += test/unit/py/basic_test.pyx

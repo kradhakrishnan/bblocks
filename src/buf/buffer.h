@@ -4,6 +4,7 @@
 #include <malloc.h>
 #include <memory>
 #include <arpa/inet.h>
+#include <sstream>
 
 #include "assert.h"
 #include "atomic.h"

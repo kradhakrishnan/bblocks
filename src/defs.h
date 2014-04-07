@@ -1,18 +1,9 @@
-#ifndef _DH_CORE_DEFS_H_
-#define _DH_CORE_DEFS_H_
+#pragma once
 
 #include <inttypes.h>
 #include <boost/lexical_cast.hpp>
 
 #define STR(x) boost::lexical_cast<std::string>(x)
-
-#ifdef __GNUC__
-#define likely(x)       __builtin_expect((x),1)
-#define unlikely(x)     __builtin_expect((x),0)
-#else
-#define likely(x)       (x)
-#define unlikely(x)     (x)
-#endif
 
 #define ALIGNED(x) __attribute__((aligned(sizeof(x))))
 
@@ -93,4 +84,3 @@ typedef int fd_t;
 typedef uint64_t diskoff_t;
 typedef uint64_t disksize_t;
 
-#endif /* _DH_CORE_DEFS_H_ */

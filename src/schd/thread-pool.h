@@ -1,9 +1,7 @@
-#ifndef _DH_CORE_THREADPOOL_H_
-#define _DH_CORE_THREADPOOL_H_
+#pragma once
 
 #include <stdexcept>
 
-#include "defs.h"
 #include "buf/bufpool.h"
 #include "schd/thread.h"
 
@@ -20,6 +18,36 @@ public:
 	virtual void Run() = 0;
 	virtual ~ThreadRoutine() {}
 };
+
+//................................................................................... FnPtr*<*> ....
+
+#define FNPTR(n)										\
+template<TDEF(T,n)>             								\
+class FnPtr##n : public ThreadRoutine,	        						\
+		 public BufferPoolObject<FnPtr##n<TENUM(T,n)> >					\
+{												\
+public:												\
+												\
+	FnPtr##n(void (*fn)(TENUM(T,n)), TPARAM(T,t,n))						\
+		: fn_(fn), TASSIGN(t,n)								\
+	{}											\
+												\
+	virtual void Run()									\
+	{											\
+		(*fn_)(TARGEX(t,_,n));							        \
+		delete this;									\
+	}											\
+												\
+private:											\
+												\
+	void (*fn_)(TENUM(T,n));								\
+	TMEMBERDEF(T,t,n);									\
+};												\
+
+FNPTR(1)  // FnPtr1<T1>
+FNPTR(2)  // FnPtr2<T1, T2>
+FNPTR(3)  // FnPtr3<T1, T2, T3>
+FNPTR(4)  // FnPtr4<T1, T2, T3, T4>
 
 //............................................................................. MemberFnPtr*<*> ....
 
@@ -211,6 +239,15 @@ public:
 		r = new (buf) MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));		\
 		threads_[nextTh_++ % threads_.size()]->Push(r);					\
 	}											\
+												\
+	template<TDEF(T,n)>									\
+	void Schedule(void (*fn)(TENUM(T,n)), TPARAM(T,t,n))					\
+	{											\
+		ThreadRoutine * r;								\
+		void * buf = BufferPool::Alloc<FnPtr##n<TENUM(T,n)> >();			\
+		r = new (buf) FnPtr##n<TENUM(T,n)>(fn, TARG(t,n));				\
+		threads_[nextTh_++ % threads_.size()]->Push(r);					\
+	}											\
 
 	NBTP_SCHEDULE(1) // void Schedule<T1>(...)
 	NBTP_SCHEDULE(2) // void Schedule<T1,T2>(...)
@@ -356,4 +393,3 @@ public:
 
 } // namespace dh_core
 
-#endif

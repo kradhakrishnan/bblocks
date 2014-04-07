@@ -180,7 +180,7 @@ RpcServer::ReadDataDone(int status, IOBuffer buf, RpcChannel * ch)
 	 */
 	uint32_t expected = ch->hdr_.cksum_.Get(); 
 	uint32_t cksum = Adler32::Calc(buf.Ptr(), buf.Size());
-	if (unlikely(cksum != expected)) {
+	if (cksum != expected) {
 		LOG_ERROR << "Checksum did not match. ch=" << ch
 			  << " expected=" << cksum << " actual=" << cksum;
 		errh_.Wakeup(/*status=*/ -1);
@@ -190,7 +190,7 @@ RpcServer::ReadDataDone(int status, IOBuffer buf, RpcChannel * ch)
 	/*
 	 * Handle if it is HELLO packet explicitly
 	 */
-	if (unlikely(!ch->isActive_)) {
+	if (!ch->isActive_) {
 		HandleHello(ch, buf);
 		return;
 	}

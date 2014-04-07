@@ -191,7 +191,7 @@ public:
 	{
 		ASSERT(!Singleton<T>::instance_);
 		Singleton<T>::instance_ = new T();
-	}
+        }
 
 	static T & Instance()
 	{

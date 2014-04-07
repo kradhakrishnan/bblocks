@@ -155,12 +155,16 @@ endif
 
 $(info ** Using compiler $(CC))
 
+CY = $(shell which cython)
 AR = $(shell which ar)
+CP = $(shell which cp)
 MKDIR_P = mkdir -p
 
-CCFLAGS += -Wall -std=c++11 -Werror -D__STDC_LIMIT_MACROS $(BUILD_CCFLAGS)
+PYINCLUDE := -I/usr/include/python2.7/
+
+CCFLAGS += -fPIC -Wall -std=c++11 -Werror -D__STDC_LIMIT_MACROS $(BUILD_CCFLAGS)
 LDFLAGS += -L$(OBJDIR)  -L/usr/lib
-INCLUDE += -I. -I./src -Ipublic -I/usr/include/boost 
+INCLUDE += -I. -I./src -Ipublic -I/usr/include/boost $(PYINCLUDE) 
 LIBS    += -lrt -lpthread  -lz -lboost_program_options
 
 ifndef OBJDIR
@@ -173,18 +177,21 @@ TOBJS	:= ${TARGET:%.cc=$(OBJDIR)/%.o}
 TDEPS	:= ${TOBJS:%.o=%.dep}
 TEXE	:= ${TARGET:%.cc=$(OBJDIR)/%}
 STATIC	:= ${LIBRARY:%=${OBJDIR}/%/library.a}
-
-all: lib exe
-	@echo $(UNAME)
+PYX	:= ${PYX:%.pyx=$(OBJDIR)/%.pyx}
+DYNAMIC := ${SHARED:%.so=$(OBJDIR)/%.so}
 
 -include $(DEPS)
 -include $(TDEPS)
 
-all: lib exe
-lib: ${OBJS} $(LIBRARY)
-exe: $(TOBJ) $(TEXE)
+all: ${OBJS} ${PYX} ${LIBRARY} ${SHARED} ${TOBJ} ${TEXE}
+	@rm -r -f $(OBJDIR)/lib $(OBJDIR)/bin
+	@${MKDIR_P} $(OBJDIR)/lib $(OBJDIR)/bin
+	@echo ' CP	.so => $(OBJDIR)/lib'
+	@${CP} -f `find $(OBJDIR) | egrep "\.so$$"` $(OBJDIR)/lib
+	@echo ' CP	binaries => $(OBJDIR)/bin'
+	@${CP} -f ${TEXE} $(OBJDIR)/bin
 
-${TEXE}: ${STATIC} ${TOBJS}
+${TEXE}: ${STATIC} ${TOBJS} ${DYNAMIC}
 	@echo ' LD	' $@ $(ARDIR)
 ifdef ARDIR
 	@${CC} ${LDFLAGS} $@.o ${STATIC} `find $(ARDIR)/*.a` -o $@ ${LIBS}
@@ -199,6 +206,18 @@ ifdef ARDIR
 	@echo ' CP	$(OBJDIR)/$@/library.a => $(ARDIR)/$(notdir $@.a)'
 	@cp $(OBJDIR)/$@/library.a $(ARDIR)/$(notdir $@).a
 endif
+
+${SHARED}: ${OBJ} ${PYX}
+	@echo ' SO	' ${OBJDIR}/$@
+	@${MKDIR_P} $(dir $(OBJDIR)/$@)
+	@${CC} -shared -o ${OBJDIR}/$@ `find $(dir $(OBJDIR)/$@) | egrep "\.o$$"`
+
+$(OBJDIR)/%.pyx: %.pyx
+	@echo ' PYX	' $@
+	@${MKDIR_P} $(dir $@)
+	@${CY} $< -o $(OBJDIR)/$*.cc --cplus
+	@${CC} -w -fPIC -shared ${INCLUDE} ${CCFLAGS} -o $(OBJDIR)/$*.o -c $(OBJDIR)/$*.cc
+	@${CC} -shared -o $(OBJDIR)/$*.so $(OBJDIR)/$*.o `find $(OBJDIR) | egrep "\.a$$"`
 
 $(OBJDIR)/%.o: %.cc
 	@echo ' CC	' $@
