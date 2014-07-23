@@ -2,6 +2,7 @@
 
 #include <inttypes.h>
 #include <boost/lexical_cast.hpp>
+#include <cassert>
 
 #define STR(x) boost::lexical_cast<std::string>(x)
 

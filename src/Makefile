@@ -23,9 +23,9 @@ TARGET +=
 #
 # .pyx
 #
-PYX += src/pyx/buffer.pyx               \
-       src/pyx/thread_pool.pyx          \
-       src/pyx/logger.pyx               \
+# PYX += src/pyx/buffer.pyx               \
+#        src/pyx/thread_pool.pyx          \
+#        src/pyx/logger.pyx               \
 
 #
 # Py module

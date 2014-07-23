@@ -1,7 +1,7 @@
 #
 # Install packages
 #
-sudo apt-get install build-essential zlibc zlib1g-dev \
+sudo apt-get install build-essential libboost-program-options-dev libboost-dev libaio-dev zlibc zlib1g-dev \
                      libtcmalloc-minimal4 libtcmalloc-minimal4-dbg \
                      valgrind fakeroot build-essential crash kexec-tools \
 		     makedumpfile kernel-wedge tree bmon pyflakes sshpass \
@@ -10,43 +10,6 @@ sudo apt-get install build-essential zlibc zlib1g-dev \
 
 if [ $? -ne 0 ]; then
     echo 'Error ! Failed to install packages'
-    exit 1
-fi
-
-#
-# Copy libs
-#
-
-echo '** Copying libs'
-
-cp libs/* ../build/libs &&
-cd ../build/libs &&
-gunzip *.gz || exit 1
-
-for f in `ls *.tar`;
-do
-    echo '** untar $f'
-    tar -xvf $f || exit 1
-done
-
-rm -f *.tar || exit 1
-
-#
-# Setup symlinks
-#
-
-echo '** Creating symlinks'
-ln -s `ls -d boost*` boost
-
-#
-# Setup libaio
-#
-
-cd `ls -d libaio*`
-sudo make install
-
-if [ $? -ne 0 ]; then
-    echo 'Error setting up libaio'
     exit 1
 fi
 

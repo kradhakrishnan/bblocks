@@ -8,7 +8,7 @@ SUBDIR = src/			\
 
 clean: build-teardown
 
-INCLUDE += -I$(OBJDIR)/libs/boost
+CCFLAGS += -fpermissive
 
 #
 # Disabled compiling kernel modules temporarily. Need to enable them.
@@ -38,8 +38,6 @@ build-doc:
 	@doxygen doc/doxygen/Doxyfile
 
 ubuntu-setup: build-setup
-	@mkdir -p $(OBJDIR)/libs
-	@echo ' SETUP UBUNTU' $(OBJDIR)/libs
 	scripts/setup-dev-machine
 
 #

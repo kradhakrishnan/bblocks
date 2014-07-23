@@ -22,4 +22,4 @@ SRCS +=
 #
 # .pyx
 #
-PYX += test/unit/py/basic_test.pyx
+# PYX += test/unit/py/basic_test.pyx

@@ -1,3 +1,5 @@
+#include <boost/assert.hpp>
+#include <cassert>
 #include <boost/program_options.hpp>
 #include <string>
 #include <iostream>
