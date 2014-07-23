@@ -1,11 +1,56 @@
-echo 'Setting up machine'
-sudo apt-get install libboost1.49-all-dev libboost1.49-dev build-essential \
-		     libaio-dev libaio1 libaio1-dbg \
-		     libboost-program-options1.49-dev zlibc zlib1g-dev \
+#
+# Install packages
+#
+sudo apt-get install build-essential zlibc zlib1g-dev \
                      libtcmalloc-minimal4 libtcmalloc-minimal4-dbg \
                      valgrind fakeroot build-essential crash kexec-tools \
 		     makedumpfile kernel-wedge tree bmon pyflakes sshpass \
 		     libtsan0 libtsan0-dbg libasan0 libasan0-dbg \
 		     clang doxygen cython
 
+if [ $? -ne 0 ]; then
+    echo 'Error ! Failed to install packages'
+    exit 1
+fi
+
+#
+# Copy libs
+#
+
+echo '** Copying libs'
+
+cp libs/* ../build/libs &&
+cd ../build/libs &&
+gunzip *.gz || exit 1
+
+for f in `ls *.tar`;
+do
+    echo '** untar $f'
+    tar -xvf $f || exit 1
+done
+
+rm -f *.tar || exit 1
+
+#
+# Setup symlinks
+#
+
+echo '** Creating symlinks'
+ln -s `ls -d boost*` boost
+
+#
+# Setup libaio
+#
+
+cd `ls -d libaio*`
+sudo make install
+
+if [ $? -ne 0 ]; then
+    echo 'Error setting up libaio'
+    exit 1
+fi
+
+#
+# Creating symlinks
+#
 sudo ln /usr/lib/libtcmalloc_minimal.so.4 /usr/lib/libtcmalloc_minimal.so

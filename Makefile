@@ -8,6 +8,8 @@ SUBDIR = src/			\
 
 clean: build-teardown
 
+INCLUDE += -I$(OBJDIR)/libs/boost
+
 #
 # Disabled compiling kernel modules temporarily. Need to enable them.
 #
@@ -35,7 +37,9 @@ build-doc:
 	@mkdir $(OBJDIR)/doc
 	@doxygen doc/doxygen/Doxyfile
 
-ubuntu-setup:
+ubuntu-setup: build-setup
+	@mkdir -p $(OBJDIR)/libs
+	@echo ' SETUP UBUNTU' $(OBJDIR)/libs
 	scripts/setup-dev-machine
 
 #
