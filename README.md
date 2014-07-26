@@ -6,7 +6,7 @@ Building blocks project aims to provide building blocks for the development of m
 
 ### Motivation for the project
 
-C++ is stedily on the decline as the top choice for distributed systems. Languages like scala and libraries like akka make distributed development quite easy by providing language level support and library level ease. My intention for spending so much of my spare time on this library is to provide a 'akka' like library for c++ distributed system programming leveraging some of my experience building demanding file system and database applications in C++.
+C++ is steadily on the decline as the top choice for distributed systems. Languages like scala and libraries like akka make distributed development quite easy by providing language level support and library level ease. My intention for spending so much of my spare time on this library is to provide a 'akka' like library for c++ distributed system programming leveraging some of my experience building demanding file system and database applications in C++.
 
 ### FAQ
 
