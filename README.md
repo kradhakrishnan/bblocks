@@ -2,21 +2,11 @@
 
 ### About the project
 
-Building blocks project aims to provide building blocks for the development of modern high performance system programming with C++. The project is at the intersection of high performance, extreme scalability, and modern system programming methodologies. The gernal components include proactor based asynchronous handler, networking infrastructure -- tcp, udp, multicasting, storage access abstractions, paxos, buffer management etc. The library is built using well established design patterns and/or based on popular research papers.
-
+Building blocks project aims to provide building blocks for the development of modern high performance system programming with C++. Idea is to make writing highly concurrent/scalable distributed applications in C++ extremely easy by leveraging and standardizing on well known design approach like event-based programming, async IO, actor based programming like pro-actor, re-actor, remote-actor etc. 
 
 ### Motivation for the project
 
-I spent most of my professional life writing infrastructure for computing ranging from messaging service for
-enterprise clusters, to web scale distributed platform for prominent web services, to building cloud (public and private).
-In all these projects, I was often tasked with the challenge to build extremely scalable fundamental components over
-and over again. Almost, on every occasion we had to reuse an existing framework, write immense amount of logic and find
-the code not to scale to very high levels (please note I am not talking about shallow scalability) and work our way
-backwards to fixing the problem. The problem is more pronounced when you build clusters.
-
-I would like to experiment with the idea of developing a general purpose library for high performance systems based on
-modern system programming with c++, and provide genrealized solutions for clusters like leader election, consensus
-protocol like paxos etc.
+C++ is steadily on the decline as the top choice for distributed systems. Languages like scala and libraries like akka make distributed development quite easy by providing language level support and library level ease. My intention for spending so much of my spare time on this library is to provide a 'akka' like library for c++ distributed system programming leveraging some of my experience building demanding file system and database applications in C++.
 
 ### FAQ
 
@@ -45,10 +35,6 @@ Yes. There is no time frame for it though.
 
 The code is avaiable for community consumption under LGPL v3. I am pretty open in the license, please mail me or leave a comment if you need other license arrangement for your computing needs.
 
-###### 6. Is there an official build ? Is it available for use via apt-get or yum ?
-
-Soon. I will have a public alpha build once I get the unit testing framework done, and more parts of the framework completed for meaningful adoption.
-
 ###### 7. Is bblocks available for other languages ?
 
-Work is in progress for python and java. I will open up the repositories when they are ready.
+I would like to wrapper functionality for python. 
