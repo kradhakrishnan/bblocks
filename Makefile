@@ -8,6 +8,11 @@ SUBDIR = src/			\
 
 clean: build-teardown
 
+
+#
+# Unfortunately, I need this flag to pass compilation of boost library
+# TODO: Get rid of this please
+#
 CCFLAGS += -fpermissive
 
 #

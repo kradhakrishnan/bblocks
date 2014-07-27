@@ -60,7 +60,6 @@ def Exec(test, timeout):
 		    "--kill-after=%d" % timeout,
 		    "%ds" % timeout,
 		    "valgrind",
-		    "--tool=tsan",
 		    "--leak-check=full",
 		    "--trace-children=yes",
 		    "--trace-children-skip=timeout",
