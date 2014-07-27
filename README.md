@@ -30,11 +30,21 @@ Yes. There is no time frame for it though.
 ~> make clean
 ~> make OPT=enable
 ```
+###### 5. How do I run tests ?
 
-###### 5. Under what license is the code distributed ?
+To run basic unit tests,
+```
+~> make run-unit-test
+```
+To run valgrind monitored unit tests,
+```
+~> make run-valgrind-test
+```
+
+###### 6. Under what license is the code distributed ?
 
 The code is avaiable for community consumption under LGPL v3. I am pretty open in the license, please mail me or leave a comment if you need other license arrangement for your computing needs.
 
 ###### 7. Is bblocks available for other languages ?
 
-I would like to wrapper functionality for python. 
+I would like to implement wrapper for cython.
