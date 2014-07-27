@@ -33,14 +33,13 @@ Yes. There is no time frame for it though.
 ###### 5. How do I run tests ?
 
 To run basic unit tests,
-...
+```
 ~> make run-unit-test
-...
-
+```
 To run valgrind monitored unit tests,
-...
+```
 ~> make run-valgrind-test
-...
+```
 
 ###### 6. Under what license is the code distributed ?
 
