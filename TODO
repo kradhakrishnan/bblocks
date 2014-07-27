@@ -11,8 +11,15 @@ Network
 - Get rpc working on proto-buf
 - Get rpc working on custom data parser (optional)
 
-Testing
-=======
+Actor
+=====
 
-- Write cpython wrapper for all classes
+- Define actor interfaces
+- Design and implement local actor -- Synchronized aka re-actor and concurrent aka pro-actor
+- Design and implement remote actor
+- Design and implement actor management (read about it first)
 
+Documentation
+=============
+
+- API level doc - doxygen
