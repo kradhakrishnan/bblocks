@@ -1,4 +1,4 @@
-#include "net/rpc/bblocks/rpc-data.h"
+#include "net/rpc/rpc-data.h"
 
 using namespace dh_core;
 

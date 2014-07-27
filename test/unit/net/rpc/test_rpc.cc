@@ -3,7 +3,7 @@
 
 #include "test/unit/unit-test.h"
 #include "net/transport/tcp-linux.h"
-#include "net/rpc/bblocks/rpc-data.h"
+#include "net/rpc/rpc-data.h"
 #include "net/rpc/rpc.h"
 
 using namespace std;
