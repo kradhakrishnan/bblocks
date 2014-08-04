@@ -274,6 +274,61 @@ private:
 	std::vector<T> q_;
 };
 
+// .................................................................................... AutoPtr ....
+
+template<class T>
+class AutoPtr
+{
+public:
+
+	AutoPtr(T * ptr = NULL)
+	    : ptr_(ptr)
+	{}
+
+	~AutoPtr()
+	{
+		if (ptr_) {
+			delete ptr_;
+			ptr_ = NULL;
+		}
+	}
+
+	T * operator->()
+	{
+		ASSERT(ptr_);
+		return ptr_;
+	}
+
+	T operator*()
+	{
+		ASSERT(ptr_);
+		return *ptr_;
+	}
+
+	void operator=(AutoPtr<T> & rhs)
+	{
+		ASSERT(!ptr_);
+		ptr_ = rhs.ptr_;
+		rhs.ptr_ = NULL;
+	}
+
+	operator bool()
+	{
+		return ptr_;
+	}
+
+	bool operator==(AutoPtr & rhs)
+	{
+		return ptr_ == rhs.ptr_;
+	}
+
+private:
+
+	AutoPtr(AutoPtr &);
+
+	T * ptr_;
+};
+
 };
 
 #endif
