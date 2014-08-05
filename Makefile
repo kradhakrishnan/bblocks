@@ -36,10 +36,7 @@ build-teardown:
 	@rm -r -f $(OBJDIR)
 
 build-doc:
-	@echo ' DOC		' $(OBJDIR)/doc
-	@echo SETUP $(OBJDIR)/doc
-	@rm -f -r ../build/doc
-	@mkdir $(OBJDIR)/doc
+	@echo ' DOC		' $(PWD)/doc/doxygen
 	@doxygen doc/doxygen/Doxyfile
 
 ubuntu-setup: build-setup
