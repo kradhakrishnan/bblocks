@@ -5,7 +5,7 @@
 #include "buf/bufpool.h"
 #include "schd/thread.h"
 
-namespace dh_core {
+namespace bblocks {
 
 class NonBlockingThread;
 
@@ -391,5 +391,5 @@ public:
 };
 
 
-} // namespace dh_core
+} // namespace bblocks
 

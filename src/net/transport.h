@@ -6,7 +6,7 @@
 #include "async.h"
 #include "net/socket.h"
 
-namespace dh_core {
+namespace bblocks {
 
 // .................................................................................. Transport ....
 
@@ -130,4 +130,4 @@ private:
 	__STATELESS_ASYNC_PROCESSOR__
 };
 
-} // namespace dh_core::rpc
+} // namespace bblocks::rpc

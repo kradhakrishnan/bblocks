@@ -6,7 +6,7 @@
 #include <iomanip>
 #include <map>
 
-namespace dh_core {
+namespace bblocks {
 
 // ................................................................................ PerfCounter ....
 

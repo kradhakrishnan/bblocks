@@ -7,7 +7,7 @@
 #include "util.hpp"
 #include "lock.h"
 
-namespace dh_core {
+namespace bblocks {
 
 //.................................................................................. BufferPool ....
 

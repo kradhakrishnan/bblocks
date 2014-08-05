@@ -6,7 +6,7 @@
 #include "perf/perf-counter.h"
 #include "logger.h"
 
-namespace dh_core {
+namespace bblocks {
 
 #define ENTER_CRITICAL_SECTION(x) { AutoLock _(&x);
 #define LEAVE_CRITICAL_SECTION }

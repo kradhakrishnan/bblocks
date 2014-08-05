@@ -4,7 +4,7 @@
 #include "fs/aio-linux.h"
 #include "schd/thread-pool.h"
 
-using namespace dh_core;
+using namespace bblocks;
 
 //......................................................................... aio syscall wrapper ....
 

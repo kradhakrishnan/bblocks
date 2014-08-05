@@ -7,7 +7,7 @@
 namespace bblocks {
 
 using namespace std;
-using namespace dh_core;
+using namespace bblocks;
 
 class Serializable : public RpcData
 {

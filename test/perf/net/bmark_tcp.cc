@@ -8,7 +8,7 @@
 #include "test/unit/unit-test.h"
 
 using namespace std;
-using namespace dh_core;
+using namespace bblocks;
 
 namespace po = boost::program_options;
 

@@ -9,7 +9,7 @@
 #include "assert.h"
 #include "atomic.h"
 
-namespace dh_core {
+namespace bblocks {
 
 //..................................................................................... IOBuffer ...
 

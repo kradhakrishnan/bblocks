@@ -17,7 +17,7 @@
  manipulations.
  **/
 
-namespace dh_core {
+namespace bblocks {
 
 #if defined(DEBUG_BUILD)
 #define LOG_DEBUG LogMessage(Logger::LEVEL_DEBUG, fqn_)

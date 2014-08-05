@@ -5,7 +5,7 @@
 #include "lock.h"
 
 
-namespace dh_core {
+namespace bblocks {
 
 //............................................................................ InListElement<T> ....
 

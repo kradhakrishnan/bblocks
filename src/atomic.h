@@ -6,7 +6,7 @@
 
 #include "assert.h"
 
-namespace dh_core {
+namespace bblocks {
 
 //............................................................................... AtomicCounter ....
 

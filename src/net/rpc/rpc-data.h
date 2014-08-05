@@ -4,7 +4,7 @@
 #include "util.hpp"
 #include "buf/buffer.h"
 
-namespace dh_core
+namespace bblocks
 {
 
 // .................................................................................... RPCData ....

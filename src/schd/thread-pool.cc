@@ -3,7 +3,7 @@
 
 using namespace std;
 
-using namespace dh_core;
+using namespace bblocks;
 
 //
 // ThreadCtx

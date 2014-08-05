@@ -4,7 +4,7 @@
 #include "schd/thread-pool.h"
 
 using namespace std;
-using namespace dh_core;
+using namespace bblocks;
 
 //....................................................................................... Epoll ....
 

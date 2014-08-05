@@ -5,7 +5,7 @@
 #include "net/transport.h"
 #include "net/socket.h"
 
-namespace dh_core {
+namespace bblocks {
 
 enum
 {

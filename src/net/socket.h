@@ -9,7 +9,7 @@
 #include <string>
 #include <boost/algorithm/string.hpp>
 
-namespace dh_core {
+namespace bblocks {
 
 //............................................................................... SocketOptions ....
 

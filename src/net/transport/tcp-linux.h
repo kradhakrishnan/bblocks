@@ -18,7 +18,7 @@
 #include "perf/perf-counter.h"
 #include "net/transport.h"
 
-namespace dh_core {
+namespace bblocks {
 
 //.................................................................................. TCPChannel ....
 

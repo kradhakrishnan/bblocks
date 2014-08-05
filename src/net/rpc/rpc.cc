@@ -2,7 +2,7 @@
 
 #include "net/rpc/rpc.h"
 
-using namespace dh_core;
+using namespace bblocks;
 using namespace std;
 
 

@@ -2,7 +2,7 @@
 
 #include "async.h"
 
-namespace dh_core {
+namespace bblocks {
 
 class FdPoll
 {

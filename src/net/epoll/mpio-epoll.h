@@ -6,7 +6,7 @@
 #include "net/fdpoll.h"
 #include "net/epoll/epoll.h"
 
-namespace dh_core {
+namespace bblocks {
 
 class MultiPathEpoll : public FdPoll
 {

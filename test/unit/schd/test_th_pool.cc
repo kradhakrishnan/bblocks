@@ -3,7 +3,7 @@
 #include "buf/bufpool.h"
 #include "test/unit/unit-test.h"
 
-using namespace dh_core;
+using namespace bblocks;
 using namespace std;
 
 //.............................................................................. BufferPoolTest ....

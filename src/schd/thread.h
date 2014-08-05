@@ -6,7 +6,7 @@
 #include "util.hpp"
 #include "schd/schd-helper.h"
 
-namespace dh_core {
+namespace bblocks {
 
 //...................................................................................... Thread ....
 

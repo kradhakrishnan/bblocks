@@ -9,7 +9,7 @@
 #include "logger.h"
 #include "inlist.hpp"
 
-namespace dh_core {
+namespace bblocks {
 
 class Thread;
 

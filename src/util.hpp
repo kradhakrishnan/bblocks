@@ -14,7 +14,7 @@
 #include "defs.h"
 #include "atomic.h"
 
-namespace dh_core {
+namespace bblocks {
 
 typedef int fd_t;
 typedef int status_t;

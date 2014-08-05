@@ -1,6 +1,6 @@
 #include "net/rpc/rpc-data.h"
 
-using namespace dh_core;
+using namespace bblocks;
 
 void
 String::Encode(IOBuffer & buf, size_t & pos)

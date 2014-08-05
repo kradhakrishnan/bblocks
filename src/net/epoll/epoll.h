@@ -11,7 +11,7 @@
 #include "async.h"
 #include "schd/thread.h"
 
-namespace dh_core {
+namespace bblocks {
 
 //....................................................................................... Epoll ....
 

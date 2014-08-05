@@ -4,7 +4,7 @@
 #include "defs.h"
 #include "schd/thread-pool.h"
 
-namespace dh_core {
+namespace bblocks {
 
 /**
  * Our async design is an adaptation of Proactor design pattern. Most of the

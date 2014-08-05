@@ -9,7 +9,7 @@
 #include "buf/buffer.h"
 #include "schd/thread.h"
 
-namespace dh_core {
+namespace bblocks {
 
 //................................................................................. BlockDevice ....
 
@@ -194,6 +194,6 @@ private:
 };
 
 
-} // namespace dh_core {
+} // namespace bblocks {
 
 #endif /*define _DH_CORE_FS_AIO_LINUX_H_ */
