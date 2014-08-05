@@ -5,6 +5,7 @@
 
 #include "async.h"
 #include "net/socket.h"
+#include "buf/buffer.h"
 
 namespace dh_core {
 

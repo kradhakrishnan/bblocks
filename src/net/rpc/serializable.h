@@ -4,16 +4,15 @@
 
 #include "net/rpc/rpc-data.h"
 
-namespace bblocks {
+namespace dh_core {
 
 using namespace std;
-using namespace dh_core;
 
-class Serializable : public RpcData
+class Serializable : public RPCData
 {
 public:
 
-	void Add(const RpcData & var)
+	void Add(RPCData * var)
 	{
 		vars_.push_back(var);
 	}
@@ -21,14 +20,16 @@ public:
 	virtual void Encode(IOBuffer & buf, size_t & pos) override
 	{
 		for (auto it = vars_.begin(); it != vars_.end(); ++it) {
-			it->Encode(buf, pos);
+			auto rpcdata = *it;
+			rpcdata->Encode(buf, pos);
 		}
 	}
 
 	virtual void Decode(IOBuffer & buf, size_t & pos) override
 	{
-		for (auto it = vars_.beging(); it != vars_.end(); ++it) {
-			it->Decode(buf, pos);
+		for (auto it = vars_.begin(); it != vars_.end(); ++it) {
+			auto rpcdata = *it;
+			rpcdata->Decode(buf, pos);
 		}
 	}
 
@@ -36,7 +37,8 @@ public:
 	{
 		size_t size = 0;
 		for (auto it = vars_.begin(); it != vars_.end(); ++it) {
-			size += it->Size();
+			auto rpcdata = *it;
+			size += rpcdata->Size();
 		}
 
 		return size;
@@ -44,7 +46,7 @@ public:
 
 private:
 
-    vector<RpcData &> vars_;
+    vector<RPCData *> vars_;
 };
 
 }

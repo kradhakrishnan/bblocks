@@ -299,7 +299,7 @@ public:
 		return ptr_;
 	}
 
-	T operator*()
+	T & operator*()
 	{
 		ASSERT(ptr_);
 		return *ptr_;
