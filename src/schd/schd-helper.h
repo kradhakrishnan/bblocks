@@ -1,5 +1,4 @@
-#ifndef _IOCORE_SCHEDULER_H_
-#define _IOCORE_SCHEDULER_H_
+#pragma once
 
 #include <inttypes.h>
 #include <sys/resource.h>
@@ -11,50 +10,7 @@
 
 namespace bblocks {
 
-class Thread;
-
-//............................................................................... ThreadContext ....
-
-#define SLAB_DEPTH 4
-
-struct ThreadCtx
-{
-	/*
-	 * Per thread pool
-	 *
-	 * The slab sizes are
-	 * 0 : 0    - 512
-	 * 1 : 512  - 1024
-	 * 2 : 1024 - 2048
-	 * 3 : 2048 - 5196
-	 */
-	static __thread std::list<uint8_t *> * pool_;
-
-	/* Thread instance */
-	static __thread Thread * tinst_;
-
-	static void Init(Thread * tinst)
-	{
-		tinst_ = tinst;
-		pool_ = new std::list<uint8_t *>[SLAB_DEPTH];
-	}
-
-	static void Cleanup()
-	{
-		for (int i = 0; i < SLAB_DEPTH; ++i) {
-			auto l = ThreadCtx::pool_[i];
-			for (auto it = l.begin(); it != l.end(); ++it) {
-				::free(*it);
-			}
-
-			l.clear();
-		}
-
-		delete[] ThreadCtx::pool_;
-		ThreadCtx::pool_ = NULL;
-	}
-
-};
+using namespace std;
 
 //..................................................................................... SysConf ....
 
@@ -106,5 +62,3 @@ private:
 };
 
 }
-
-#endif

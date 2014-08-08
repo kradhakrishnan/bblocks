@@ -3,7 +3,7 @@
 #include <inttypes.h>
 #include <list>
 
-#include "schd/schd-helper.h"
+#include "schd/thread-ctx.h"
 #include "util.hpp"
 #include "lock.h"
 
@@ -18,6 +18,8 @@ public:
 	template<class T>
 	static void * Alloc()
 	{
+		INVARIANT(ThreadCtx::pool_);
+
 		void * ptr = NULL;
 		const size_t size = Math::Roundup(sizeof(T), 512);
 		const size_t id = (size / 512) - 1;
@@ -36,6 +38,8 @@ public:
 	template<class T>
 	static void Dalloc(T * t)
 	{
+		INVARIANT(ThreadCtx::pool_);
+
 		const size_t size = Math::Roundup(sizeof(T), 512);
 		const size_t id = (size / 512) - 1;
 
