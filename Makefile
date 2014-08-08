@@ -46,6 +46,8 @@ ubuntu-setup: build-setup
 # Tests
 #
 
+run-test: all run-unit-test run-valgrind-test
+
 run-unit-test:
 	python test/unit/run-unit-test.py -b ../build -u test/unit/default-unit-tests \
 					  -o ../build/unit-test.log
