@@ -70,4 +70,4 @@ The code is avaiable for community consumption under LGPL v3. I am pretty open i
 
 ###### 8. Is bblocks available for other languages ?
 
-I would like to implement wrapper for cython.
+I would like to implement wrapper for cython. I would love to port it to Windows, but I don't see the usecase nor do I have the time for it.
