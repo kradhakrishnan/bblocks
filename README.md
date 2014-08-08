@@ -27,30 +27,24 @@ Yes. There is no time frame for it though.
 ```
 ~> make ubuntu-setup
 ~> make clean
-```
 
 For debug build,
-```
 ~> make
-```
 
 For opt build,
-```
 ~> make OPT=enable
 ```
 
 ###### 5. How do I run tests ?
 
+```
 To run all tests,
-```
 ~> make run-test
-```
+
 To run basic unit tests,
-```
 ~> make run-unit-test
-```
+
 To run valgrind monitored unit tests,
-```
 ~> make run-valgrind-test
 ```
 
