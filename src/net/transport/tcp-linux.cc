@@ -91,7 +91,7 @@ TCPChannel::Stop(const StopDoneHandle & h)
 	INVARIANT(!stoph_);
 	stoph_ = h;
 
-	ThreadPool::ScheduleBarrier(this, &TCPChannel::BarrierDone, /*nonce=*/ 0);
+	BBlocks::ScheduleBarrier(this, &TCPChannel::BarrierDone, /*nonce=*/ 0);
 
 	return 0;
 }
@@ -442,7 +442,7 @@ TCPServer::Stop(const StopDoneHandle & h)
 	/*
 	 * Drain pending notifictions
 	 */
-	ThreadPool::Schedule(this, &This::BarrierDone, h);
+	BBlocks::Schedule(this, &This::BarrierDone, h);
 	return 0;
 }
 
@@ -568,7 +568,7 @@ TCPConnector::Stop(const StopDoneHandle & h)
 	/*
 	 * Schedule a barrier event
 	 */
-	 ThreadPool::Schedule(this, &This::BarrierDone, h);
+	 BBlocks::Schedule(this, &This::BarrierDone, h);
 
 	return 0;
 }

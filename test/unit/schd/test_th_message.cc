@@ -26,7 +26,7 @@ public:
         cout << "Got handle " << count_ << endl;
         ASSERT(val == 0xfeaf);
         if (++count_ == 100) {
-            ThreadPool::Wakeup();
+            BBlocks::Wakeup();
         }
     }
 
@@ -44,7 +44,7 @@ public:
     void Start(int val)
     {
         ASSERT(h_);
-        ThreadPool::Schedule(h_, &ICallee::Handle, val);
+        BBlocks::Schedule(h_, &ICallee::Handle, val);
     }
 
     ICallee *h_;
@@ -53,16 +53,16 @@ public:
 void
 test_handler()
 {
-    ThreadPool::Start();
+    BBlocks::Start();
 
     Callee callee;
     Caller caller(&callee);
     for (int i = 0; i < 100; ++i) {
-        ThreadPool::Schedule(&caller, &Caller::Start, /*val=*/ (int) 0xfeaf);
+        BBlocks::Schedule(&caller, &Caller::Start, /*val=*/ (int) 0xfeaf);
     }
 
-    ThreadPool::Wait();
-    ThreadPool::Shutdown();
+    BBlocks::Wait();
+    BBlocks::Shutdown();
 }
 
 //........................................................................................ main ....
