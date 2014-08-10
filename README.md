@@ -46,6 +46,9 @@ To run basic unit tests,
 
 To run valgrind monitored unit tests,
 ~> make run-valgrind-test
+
+To run pre-checkin test,
+~> make run-checkin-test
 ```
 
 ### 6. What are some of the makefile options ?
