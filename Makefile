@@ -19,7 +19,7 @@ CCFLAGS += -fpermissive
 # Disabled compiling kernel modules temporarily. Need to enable them.
 #
 
-libsrc: all
+default: all
 	@echo '** Copying .sh files'
 	@${MKDIR_P} $(OBJDIR)/test/unit/perf
 	@${CP} test/unit/perf/*.sh $(OBJDIR)/test/unit/perf
@@ -52,24 +52,24 @@ ubuntu-setup: build-setup
 
 run-test: all run-unit-test run-valgrind-test
 
-run-unit-test: all
+run-unit-test: default
 	python test/unit/run-unit-test.py -b ../build -u test/unit/default-unit-tests \
 					  -o ../build/unit-test.log
 
-run-valgrind-test: all
+run-valgrind-test: ibsrc
 	python test/unit/run-unit-test.py -v -b ../build -u test/unit/default-unit-tests \
 					  -o ../build/unit-test.log
 
-run-flamebox: all
+run-flamebox: default
 	$(shell cd test/flamebox; \
 	        python run-flamebox.py --config flamebox.config --output ../../..)
 
-calc-lcov: all
+calc-lcov: default
 	$(shell cd ../build; \
 		lcov -q --capture --directory . --output-file lcov.dat -b ../bblocks; \
 		genhtml lcov.dat --output-directory lcov-html -q)
 
-run-checkin-test:
+run-checkin-test: default
 	@scripts/run-checkin-test.sh
 
 #
@@ -79,6 +79,6 @@ run-checkin-test:
 tags:
 	$(shell cd ..; rm -f tags; ctags -R .)
 
-.DEFAULT_GOAL := libsrc
+.DEFAULT_GOAL := default
 
 include MakefileRules
