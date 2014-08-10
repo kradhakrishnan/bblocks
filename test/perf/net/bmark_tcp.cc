@@ -50,7 +50,9 @@ public:
 		, buf_(IOBuffer::Alloc(iosize))
 		, rcqueue_(this, &This::ReadDone)
 		, wakeupq_(this, &This::ReadUntilBlocked)
-	{}
+	{
+		buf_.FillRandom();
+	}
 
 	virtual ~TCPServerBenchmark() {}
 
@@ -180,7 +182,9 @@ public:
 		, pendingWakeups_(0)
 		, wcqueue_(this, &This::WriteDone)
 		, wakeupq_(this, &This::WakeupSendData)
-	{}
+	{
+		buf_.FillRandom();
+	}
 
 	virtual ~TCPClientBenchmark()
 	{
@@ -373,8 +377,6 @@ main(int argc, char ** argv)
 	int nconn = 1;
 	int seconds = 60;
 	int ncpu = SysConf::NumCores();
-
-	SysConf::SetMaxOpenFds(100000);
 
 	po::options_description desc("Options:");
 	desc.add_options()

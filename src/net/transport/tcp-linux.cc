@@ -68,7 +68,6 @@ TCPChannel::Peek(IOBuffer & data, const ReadDoneHandle & h)
 int
 TCPChannel::Read(const IOBuffer & data, const ReadDoneHandle & h, const bool peek)
 {
-	ASSERT(h);
 	ASSERT(data);
 
 	Guard _(&lock_);
@@ -252,6 +251,7 @@ TCPChannel::WriteDataToSocket(const bool isasync)
 
 		unsigned int iovlen = wpending_.size() > IOV_MAX ? IOV_MAX : wpending_.size();
 		iovec iovecs[iovlen];
+
 		unsigned int i = 0;
 		for (auto it = wpending_.begin(); it != wpending_.end(); ++it) {
 			IOBuffer & data = it->buf_;
