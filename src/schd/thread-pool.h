@@ -313,6 +313,7 @@ private:
 	uint32_t nextTh_;
 };
 
+<<<<<<< HEAD
 // .................................................................................... BBlocks ....
 
 class BBlocks
@@ -391,5 +392,7 @@ public:
 };
 
 
+=======
+>>>>>>> 12bdbbd6e2c2bf9731758bceac71c8c4b13c1cd3
 } // namespace bblocks
 

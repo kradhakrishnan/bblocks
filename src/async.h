@@ -2,6 +2,7 @@
 #define _DH_CORE_ASYNC_H_
 
 #include "defs.h"
+#include "bblocks.hpp"
 #include "schd/thread-pool.h"
 
 namespace bblocks {
