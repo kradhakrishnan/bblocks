@@ -168,7 +168,7 @@ private:
     void Stop()
     {
         PrintStats();
-        ThreadPool::Shutdown();
+        BBlocks::Shutdown();
     }
 
     void PrintStats()
@@ -253,7 +253,7 @@ main(int argc, char ** argv)
 
     // run benchamark
     InitTestSetup();
-    ThreadPool::Start(ncpu);
+    BBlocks::Start(ncpu);
 
     cout << "Running benchmark for"
          << " devname " << devname << endl
@@ -269,8 +269,8 @@ main(int argc, char ** argv)
                        iopattern == "random" ? AIOBenchmark::RANDOM
                                              : AIOBenchmark::SEQUENTIAL, qdepth);
 
-    ThreadPool::Schedule(&bmark, &AIOBenchmark::Start, /*status=*/ 0);
-    ThreadPool::Wait();
+    BBlocks::Schedule(&bmark, &AIOBenchmark::Start, /*status=*/ 0);
+    BBlocks::Wait();
 
     TeardownTestSetup();
     return 0;

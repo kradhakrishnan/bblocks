@@ -264,13 +264,13 @@ private:
 void
 test_basic_rpc()
 {
-	ThreadPool::Start();
+	BBlocks::Start();
 
 	BasicRpcTest t;
-	ThreadPool::Schedule(&t, &BasicRpcTest::Run, /*nonce=*/ 0);
+	BBlocks::Schedule(&t, &BasicRpcTest::Run, /*nonce=*/ 0);
 
-	ThreadPool::Wait();
-	ThreadPool::Shutdown();
+	BBlocks::Wait();
+	BBlocks::Shutdown();
 }
 
 //........................................................................................ main ....

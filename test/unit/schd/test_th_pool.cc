@@ -24,7 +24,7 @@ struct BufferPoolTest
 	void Alloc(int count)
 	{
 		TestObject * o = new (BufferPool::Alloc<TestObject>()) TestObject();
-		ThreadPool::Schedule(this, &This::Dalloc, o);
+		BBlocks::Schedule(this, &This::Dalloc, o);
 	}
 
 	void Dalloc(TestObject * o)
@@ -32,7 +32,7 @@ struct BufferPoolTest
 		BufferPool::Dalloc(o);
 
 		if (++count_ == 99) {
-			ThreadPool::Wakeup();
+			BBlocks::Wakeup();
 		}
 	}
 
@@ -42,15 +42,15 @@ struct BufferPoolTest
 void
 bufferpool_test()
 {
-    ThreadPool::Start();
+    BBlocks::Start();
 
     BufferPoolTest test;
     for (int i = 0; i < 100; ++i) {
-		ThreadPool::Schedule(&test, &BufferPoolTest::Alloc, i);
+		BBlocks::Schedule(&test, &BufferPoolTest::Alloc, i);
     }
 
-    ThreadPool::Wait();
-    ThreadPool::Shutdown();
+    BBlocks::Wait();
+    BBlocks::Shutdown();
 }
 
 //.................................................................................. SimpleTest ....
@@ -63,10 +63,10 @@ struct Th
     {
         i_++;
         if (i_ > 1000) {
-            ThreadPool::Wakeup();
+            BBlocks::Wakeup();
             return;
         } else {
-            ThreadPool::Schedule(th, &Th::Run, this);
+            BBlocks::Schedule(th, &Th::Run, this);
         }
     }
 
@@ -77,15 +77,15 @@ struct Th
 void
 simple_test()
 {
-    ThreadPool::Start();
+    BBlocks::Start();
 
     Th th1;
     Th th2;
 
     th1.Run(&th2);
 
-    ThreadPool::Wait();
-    ThreadPool::Shutdown();
+    BBlocks::Wait();
+    BBlocks::Shutdown();
 }
 
 //................................................................................ ParallelTest ....
@@ -109,7 +109,7 @@ struct ThMaster
     void Start(ThSlave * th)
     {
         ++out_;
-        ThreadPool::Schedule(this, &ThMaster::Run, th);
+        BBlocks::Schedule(this, &ThMaster::Run, th);
     }
 
     virtual void Run(ThSlave * th)
@@ -118,12 +118,12 @@ struct ThMaster
 	--out_;
 
         if (i_ > 1000) {
-            if (!out_) ThreadPool::Wakeup();
+            if (!out_) BBlocks::Wakeup();
             return;
         }
 
         ++out_;
-        ThreadPool::Schedule(th, &ThSlave::Run, this);
+        BBlocks::Schedule(th, &ThSlave::Run, this);
     }
 
     std::atomic<int> i_;
@@ -132,13 +132,13 @@ struct ThMaster
 
 void ThSlave::Run(ThMaster * th)
 {
-    ThreadPool::Schedule(th, &ThMaster::Run, this);
+    BBlocks::Schedule(th, &ThMaster::Run, this);
 }
 
 void
 parallel_test()
 {
-    ThreadPool::Start();
+    BBlocks::Start();
 
     ThMaster m;
     std::vector<ThSlave *> ss;
@@ -148,8 +148,8 @@ parallel_test()
         ss.push_back(s);
     }
 
-    ThreadPool::Wait();
-    ThreadPool::Shutdown();
+    BBlocks::Wait();
+    BBlocks::Shutdown();
 
     for (unsigned int i = 0; i < ss.size(); ++i) {
         delete ss[i];

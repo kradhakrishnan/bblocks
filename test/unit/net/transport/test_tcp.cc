@@ -144,7 +144,7 @@ public:
 
     void ConnectorStopped(int)
     {
-	ThreadPool::Wakeup();
+	BBlocks::Wakeup();
     }
 
 private: 
@@ -196,7 +196,7 @@ private:
         int status = client_ch_->Write(wbuf_, async_fn(this, &This::WriteDone));
 	INVARIANT(status >= 0 && status <= (int) wbuf_.Size());
         if (status == (int) wbuf_.Size()) {
-            ThreadPool::Schedule(this, &BasicTCPTest::WriteDone, status, wbuf_);
+            BBlocks::Schedule(this, &BasicTCPTest::WriteDone, status, wbuf_);
         }
 
         ++iter_;
@@ -221,14 +221,14 @@ private:
 void
 test_tcp_basic()
 {
-    ThreadPool::Start();
+    BBlocks::Start();
 
     BasicTCPTest test;
 
-    ThreadPool::Schedule(&test, &BasicTCPTest::Start, /*nonce=*/ 0);
+    BBlocks::Schedule(&test, &BasicTCPTest::Start, /*nonce=*/ 0);
 
-    ThreadPool::Wait();
-    ThreadPool::Shutdown();
+    BBlocks::Wait();
+    BBlocks::Shutdown();
 }
 
 //.................................................................... main ....

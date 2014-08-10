@@ -90,7 +90,7 @@ public:
 			chstats_.insert(make_pair(ch, ChStats()));
 		}
 
-		ThreadPool::Schedule(this, &This::ReadUntilBlocked, ch);
+		BBlocks::Schedule(this, &This::ReadUntilBlocked, ch);
 	}
 
 	void ReadUntilBlocked(TCPChannel * ch) __async_fn__
@@ -261,7 +261,7 @@ public:
 			/*
 			 * all clients disconnected
 			 */
-			ThreadPool::Schedule(this, &This::Halt, /*val=*/ 0);
+			BBlocks::Schedule(this, &This::Halt, /*val=*/ 0);
 		}
 	}
 
@@ -285,7 +285,7 @@ private:
 	void Halt(int)
 	{
 		PrintStats();
-		ThreadPool::Wakeup();
+		BBlocks::Wakeup();
 	}
 
 	void UpdateStats(TCPChannel * ch, const int bytes_written)
@@ -419,7 +419,7 @@ main(int argc, char ** argv)
 	const bool isClientBenchmark = parg.count("client");
 
 	InitTestSetup();
-	ThreadPool::Start(ncpu);
+	BBlocks::Start(ncpu);
 
 	if (isClientBenchmark) {
 		INFO(_log) << "Running benchmark for"
@@ -432,19 +432,19 @@ main(int argc, char ** argv)
 		ASSERT(!raddr.empty());
 		SocketAddress addr = SocketAddress::GetAddr(laddr, raddr);
 		TCPClientBenchmark c(addr, iosize, nconn, seconds);
-		ThreadPool::Schedule(&c, &TCPClientBenchmark::Start, /*status=*/ 0);
-		ThreadPool::Wait();
+		BBlocks::Schedule(&c, &TCPClientBenchmark::Start, /*status=*/ 0);
+		BBlocks::Wait();
 	} else {
 		INFO(_log) << "Running server at " << laddr
 			   << " ncpu " << ncpu;
 
 		ASSERT(!laddr.empty());
 		TCPServerBenchmark s(iosize);
-		ThreadPool::Schedule(&s, &TCPServerBenchmark::Start, SocketAddress::GetAddr(laddr));
-		ThreadPool::Wait();
+		BBlocks::Schedule(&s, &TCPServerBenchmark::Start, SocketAddress::GetAddr(laddr));
+		BBlocks::Wait();
 	}
 
-	ThreadPool::Shutdown();
+	BBlocks::Shutdown();
 
 	TeardownTestSetup();
 	return 0;

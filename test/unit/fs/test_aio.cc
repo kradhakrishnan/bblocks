@@ -90,7 +90,7 @@ public:
         // TODO: Unregister and then shutdown
 
         if (--count_ == 0) {
-            ThreadPool::Wakeup();
+            BBlocks::Wakeup();
         }
     }
 
@@ -105,13 +105,13 @@ private:
 void
 test_aio_basic()
 {
-    ThreadPool::Start();
+    BBlocks::Start();
 
     BasicAioTest test;
-    ThreadPool::Schedule(&test, &BasicAioTest::Start, /*nonce=*/ 0);
+    BBlocks::Schedule(&test, &BasicAioTest::Start, /*nonce=*/ 0);
 
-    ThreadPool::Wait();
-    ThreadPool::Shutdown();
+    BBlocks::Wait();
+    BBlocks::Shutdown();
 }
 
 //.................................................................... main ....

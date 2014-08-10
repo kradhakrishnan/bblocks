@@ -1,6 +1,5 @@
 #pragma once
 
-#include "async.h"
 #include "schd/thread-pool.h"
 
 namespace bblocks {
