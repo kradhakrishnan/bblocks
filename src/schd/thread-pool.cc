@@ -12,6 +12,8 @@ using namespace bblocks;
 __thread Thread * ThreadCtx::tinst_;
 __thread std::list<uint8_t *> * ThreadCtx::pool_;
 
+LogPath ThreadCtx::log_("/threadctx");
+
 //
 // NonBlockingThread
 //

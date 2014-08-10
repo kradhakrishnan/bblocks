@@ -26,25 +26,51 @@ Yes. There is no time frame for it though.
 
 ```
 ~> make ubuntu-setup
-[ Please resolve any package version errors ]
 ~> make clean
+
+For debug build,
+~> make
+
+For opt build,
 ~> make OPT=enable
 ```
+
 ###### 5. How do I run tests ?
 
+```
+To run all tests,
+~> make run-test
+
 To run basic unit tests,
-```
 ~> make run-unit-test
-```
+
 To run valgrind monitored unit tests,
-```
 ~> make run-valgrind-test
+
+To run pre-checkin test,
+~> make run-checkin-test
 ```
 
-###### 6. Under what license is the code distributed ?
+### 6. What are some of the makefile options ?
+
+```
+** release flags **
+OPT = enable          Enable optimized build
+DEBUG = disable       Disable debug information built into the binary
+ERRCHK = enable       Enable error checking
+TCMALLOC = enable     Use tcmalloc as memory manager
+
+** test related **
+LCOV = enable         Provides code coverage information for the test runs
+VALGRIND = enable     Enable code provisions for valgrind testing
+tsan = enable         Enable thread sanitizer
+asan = enable         Enable address sanitizer
+```
+
+###### 7. Under what license is the code distributed ?
 
 The code is avaiable for community consumption under LGPL v3. I am pretty open in the license, please mail me or leave a comment if you need other license arrangement for your computing needs.
 
-###### 7. Is bblocks available for other languages ?
+###### 8. Is bblocks available for other languages ?
 
-I would like to implement wrapper for cython.
+I would like to implement wrapper for cython. I would love to port it to Windows, but I don't see the usecase nor do I have the time for it.

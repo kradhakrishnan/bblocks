@@ -4,4 +4,5 @@
 	<test name="test_aio" cmd="test/unit/fs/test_aio" timeout="60" />
 	<test name="test_tcp" cmd="test/unit/net/transport/test_tcp" timeout="60" />
 	<test name="test_rpc" cmd="test/unit/net/rpc/test_rpc" timeout="60" />
+	<test name="test_tcp_bmark" cmd="test/unit/perf/test_tcp_bmark.sh" timeout="240" />
 </unit-tests>

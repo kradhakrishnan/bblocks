@@ -1,5 +1,6 @@
 #pragma once
 
+#include <list>
 #include <atomic>
 
 #include "logger.h"
@@ -8,6 +9,8 @@
 
 namespace bblocks {
 
+using namespace std;
+
 //...................................................................................... Thread ....
 
 class Thread
@@ -15,10 +18,14 @@ class Thread
 public:
 
 	friend class NonBlockingThreadPool;
+	friend class ThreadCtx;
 
 	Thread(const std::string & logPath)
 		: log_(logPath)
+		, ctx_pool_(NULL)
 	{}
+
+	virtual ~Thread();
 
 	void StartBlockingThread()
 	{
@@ -34,11 +41,6 @@ public:
 		INVARIANT(!ok);
 
 		INFO(log_) << "Thread " << tid_ << " created.";
-	}
-
-	virtual ~Thread()
-	{
-		INFO(log_) << "Thread " << tid_ << " destroyed.";
 	}
 
 	void EnableThreadCancellation()
@@ -88,20 +90,7 @@ public:
 		INVARIANT(!status);
 	}
 
-	static void * ThFn(void * args)
-	{
-		INVARIANT(args);
-
-		Thread * th = (Thread *) args;
-
-		ThreadCtx::Init(th);
-
-		void * thstatus = th->ThreadMain();
-
-		ThreadCtx::Cleanup();
-
-		return thstatus;
-	}
+	static void * ThFn(void * args);
 
 protected:
 
@@ -116,8 +105,11 @@ protected:
 
 	virtual void * ThreadMain() = 0;
 
+	typedef list<uint8_t *> pool_t;
+
 	LogPath log_;
 	pthread_t tid_;
+	pool_t * ctx_pool_;
 };
 
 }
