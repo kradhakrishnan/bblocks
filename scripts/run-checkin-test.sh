@@ -20,15 +20,12 @@ function run_tests()
 
 	echo "** Running tests [ $args ] **"
 
-	make clean >> $log 2>&1 &&
-	make $args run-unit-test >> $log 2>&1 &&
-	make $args run-valgrind-test >> /tmp/log 2>&1
+	make clean &&
+	make $args run-unit-test &&
+	make $args run-valgrind-test
 
 	[ $? -eq 0 ] || quit -1
 }
-
-log=/tmp/log
-rm -f $log
 
 run_tests ""
 run_tests "ERRCHECK=enable"
