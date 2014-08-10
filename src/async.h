@@ -2,6 +2,7 @@
 #define _DH_CORE_ASYNC_H_
 
 #include "defs.h"
+#include "bblocks.hpp"
 #include "schd/thread-pool.h"
 
 namespace bblocks {
@@ -133,7 +134,7 @@ struct CompletionQueue##TSUFFIX : CHandle							\
 		if (!inprogress_) {								\
 			ASSERT(q_.size() == 1);							\
 			inprogress_ = true;							\
-			ThreadPool::Schedule(this, &This::ProcessEvents, /*nonce=*/ 0);		\
+			BBlocks::Schedule(this, &This::ProcessEvents, /*nonce=*/ 0);		\
 		}										\
 	}											\
 												\
@@ -262,8 +263,8 @@ struct CompletionHandler##TSUFFIX								\
 			fn_ ? (h_->*fn_)(TARG(t,n))						\
 			    : (h_->*fnWithCtx_)(TARG(t,n), ctx_);				\
 		} else if (type_ == Type::ASYNCSCHEDULE) {					\
-			fn_ ? ThreadPool::Schedule(h_, fn_, TARG(t,n))				\
-			    : ThreadPool::Schedule(h_, fnWithCtx_, TARG(t,n), ctx_);		\
+			fn_ ? BBlocks::Schedule(h_, fn_, TARG(t,n))				\
+			    : BBlocks::Schedule(h_, fnWithCtx_, TARG(t,n), ctx_);		\
 		} else if (type_ == Type::QUEUE) {						\
 			q_ ? q_->Wakeup(TARG(t,n))						\
 			   : qWithCtx_->Wakeup(TARG(t,n), ctx_);				\
