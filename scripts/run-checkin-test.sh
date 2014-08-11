@@ -18,6 +18,7 @@ function run_tests()
 {
 	args=$1
 
+	echo '-------------------------------------------------------------'
 	echo "** Running tests [ $args ] **"
 
 	make clean &&

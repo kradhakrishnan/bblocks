@@ -30,7 +30,7 @@ public:
         }
     }
 
-    int count_;
+    atomic<int> count_;
 };
 
 class Caller

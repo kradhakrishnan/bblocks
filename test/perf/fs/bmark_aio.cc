@@ -63,12 +63,14 @@ public:
         , iopattern_(iopattern)
         , qdepth_(qdepth)
         , aio_(new LinuxAioProcessor())
-        , dev_(devname_, devsize_ / 512, aio_)
+        , dev_(devname_, devsize_ / 512, aio_.Ptr())
         , buf_(IOBuffer::Alloc(iosize_))
         , nextOff_(UINT64_MAX) 
     {
         INVARIANT(!(iosize_ % 512));
         INVARIANT(!(devsize_ % 512));
+
+	buf_.FillRandom();
     }
 
     virtual ~AIOBenchmark() {}
@@ -168,7 +170,7 @@ private:
     void Stop()
     {
         PrintStats();
-        BBlocks::Shutdown();
+        BBlocks::Wakeup();
     }
 
     void PrintStats()
@@ -192,7 +194,7 @@ private:
     const IOType iotype_;
     const IOPattern iopattern_;
     const size_t qdepth_;
-    AioProcessor * aio_;
+    AutoPtr<AioProcessor> aio_;
     SpinningDevice dev_;
     IOBuffer buf_;
     diskoff_t nextOff_;
@@ -211,7 +213,7 @@ main(int argc, char ** argv)
     string iotype;
     string iopattern;
     size_t qdepth;
-    size_t ncpu;
+    size_t ncpu = SysConf::NumCores();
 
     po::options_description desc("Options:");
     desc.add_options()
@@ -223,19 +225,13 @@ main(int argc, char ** argv)
         ("iotype", po::value<string>(&iotype)->required(), "read/write")
         ("iopattern", po::value<string>(&iopattern)->required(), "seq/random")
         ("qdepth", po::value<size_t>(&qdepth)->required(), "Queue depth")
-        ("ncpu", po::value<size_t>(&ncpu)->required(), "Number of cores")
+        ("ncpu", po::value<size_t>(&ncpu), "Number of cores")
         ("s", po::value<size_t>(&_time_s), "Test time in s");
 
     po::variables_map parg;
 
-    try {
-        po::store(po::parse_command_line(argc, argv, desc), parg);
-        po::notify(parg);
-    } catch(...) {
-        cerr << "Both -c and -s are provided." << endl;
-        cout << desc << endl;
-        return -1;
-    }
+    po::store(po::parse_command_line(argc, argv, desc), parg);
+    po::notify(parg);
 
     // help command
     if (parg.count("help")) {
@@ -263,15 +259,19 @@ main(int argc, char ** argv)
          << " iopattern " << iopattern << endl
          << " qdepth " << qdepth << endl;
 
-    AIOBenchmark bmark(devname, devsize * 1024 * 1024 * 1024, iosize,
+    {
+	AIOBenchmark bmark(devname, devsize * 1024 * 1024 * 1024, iosize,
                        iotype == "read" ? AIOBenchmark::READ
                                         : AIOBenchmark::WRITE,
                        iopattern == "random" ? AIOBenchmark::RANDOM
                                              : AIOBenchmark::SEQUENTIAL, qdepth);
 
-    BBlocks::Schedule(&bmark, &AIOBenchmark::Start, /*status=*/ 0);
-    BBlocks::Wait();
+	BBlocks::Schedule(&bmark, &AIOBenchmark::Start, /*status=*/ 0);
+	BBlocks::Wait();
+    }
 
+    BBlocks::Shutdown();
     TeardownTestSetup();
+
     return 0;
 }

@@ -293,13 +293,19 @@ public:
 		}
 	}
 
+	T * Ptr()
+	{
+		ASSERT(ptr_);
+		return ptr_;
+	}
+
 	T * operator->()
 	{
 		ASSERT(ptr_);
 		return ptr_;
 	}
 
-	T operator*()
+	T & operator*()
 	{
 		ASSERT(ptr_);
 		return *ptr_;

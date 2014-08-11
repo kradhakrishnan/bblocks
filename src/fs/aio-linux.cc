@@ -254,6 +254,7 @@ SpinningDevice::SpinningDevice(const std::string & devPath,
 	, log_(STR("/spinningDevice") + devPath)
 	, nsectors_(nsectors)
 	, aio_(aio)
+	, fd_(-1)
 {
 	ASSERT(aio);
 	ASSERT(nsectors);
@@ -265,6 +266,7 @@ SpinningDevice::SpinningDevice(const std::string & devPath,
 SpinningDevice::~SpinningDevice()
 {
 	aio_ = NULL;
+	close(fd_);
 }
 
 int

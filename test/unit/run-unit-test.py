@@ -166,3 +166,6 @@ Debug("Failure : %d" % failed)
 Debug("Failed tests: %s" % failedTests)
 
 _debug.close()
+
+retcode = (total != success)
+sys.exit(retcode)
