@@ -69,7 +69,7 @@ calc-lcov: default
 		lcov -q --capture --directory . --output-file lcov.dat -b ../bblocks; \
 		genhtml lcov.dat --output-directory lcov-html -q)
 
-run-checkin-test: default
+run-all-test: default
 	@scripts/run-checkin-test.sh
 
 #
