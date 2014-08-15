@@ -73,6 +73,25 @@ run-all-test: default
 	@scripts/run-checkin-test.sh
 
 #
+# Install
+#
+
+install: default uninstall
+	@echo ' INSTALL	' .h
+	@${RM} -r -f $(OBJDIR)/tmp
+	@${MKDIR_P} $(OBJDIR)/tmp
+	@${CP} --parent `find src -name '*.h'` $(OBJDIR)/tmp
+	@sudo ${MV} -f $(OBJDIR)/tmp/src /usr/include/bblocks
+	@echo ' INSTALL	' libbblocks.so
+	@sudo ${CP} $(OBJDIR)/src/libbblocks.so /usr/lib
+
+uninstall:
+	@echo ' UNINSTALL	' .h
+	@sudo ${RM} -r -f /usr/include/bblocks
+	@echo ' UNINSTALL	' libbblocks.so
+	@sudo ${RM} -f /usr/lib/libbblocks.so
+
+#
 # Misc
 #
 

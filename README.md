@@ -35,7 +35,21 @@ For opt build,
 ~> make OPT=enable
 ```
 
-###### 5. How do I run tests ?
+###### 5. How do I install and use the library ?
+
+```
+To install optimized build, (typically advised)
+make clean
+make OPT=enable DEBUG=disable install
+
+To install debug build,
+make clean
+make install
+```
+
+Added -I/usr/lib/bblocks while compiling and -lbblocks -L/usr/lib while linking.
+
+###### 6. How do I run tests ?
 
 ```
 To run all tests,
@@ -51,7 +65,7 @@ To run all test suite across all build type,
 ~> make run-all-test
 ```
 
-### 6. What are some of the makefile options ?
+###### 7. What are some of the makefile options ?
 
 ```
 ** release flags **
@@ -67,10 +81,10 @@ tsan = enable         Enable thread sanitizer
 asan = enable         Enable address sanitizer
 ```
 
-###### 7. Under what license is the code distributed ?
+###### 8. Under what license is the code distributed ?
 
 The code is avaiable for community consumption under LGPL v3. I am pretty open in the license, please mail me or leave a comment if you need other license arrangement for your computing needs.
 
-###### 8. Is bblocks available for other languages ?
+###### 9. Is bblocks available for other languages ?
 
 I would like to implement wrapper for cython. I would love to port it to Windows, but I don't see the usecase nor do I have the time for it.

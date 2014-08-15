@@ -159,6 +159,8 @@ CY = $(shell which cython)
 AR = $(shell which ar)
 CP = $(shell which cp)
 MKDIR_P = mkdir -p
+MV = mv
+RM = rm
 
 PYINCLUDE := -I/usr/include/python2.7/
 
