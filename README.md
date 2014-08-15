@@ -25,6 +25,7 @@ Yes. There is no time frame for it though.
 ###### 4. How do I compile the code on Ubuntu ?
 
 ```
+~> git clone https://github.com/kradhakrishnan/bblocks.cc.git
 ~> make ubuntu-setup
 ~> make clean
 
