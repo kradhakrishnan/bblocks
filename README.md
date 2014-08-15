@@ -54,9 +54,6 @@ Add -I/usr/lib/bblocks while compiling and -lbblocks -L/usr/lib while linking.
 ###### 6. How do I run tests ?
 
 ```
-To run all tests,
-$ make run-test
-
 To run basic unit tests,
 $ make run-unit-test
 
