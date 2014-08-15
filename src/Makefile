@@ -8,7 +8,8 @@ LIBRARY +=  src			            \
 #
 # .cc
 #
-SRCS += src/schd/thread.cc		    \
+SRCS += src/bblocks.cc			    \
+	src/schd/thread.cc		    \
 	src/schd/thread-pool.cc	            \
 	src/net/epoll/epoll.cc	            \
 	src/net/rpc/rpc-data.cc	            \

@@ -20,7 +20,7 @@ public:
 	friend class NonBlockingThreadPool;
 	friend class ThreadCtx;
 
-	Thread(const std::string & logPath)
+	Thread(const string & logPath)
 		: log_(logPath)
 		, ctx_pool_(NULL)
 	{}
@@ -107,7 +107,7 @@ protected:
 
 	typedef list<uint8_t *> pool_t;
 
-	LogPath log_;
+	string log_;
 	pthread_t tid_;
 	pool_t * ctx_pool_;
 };

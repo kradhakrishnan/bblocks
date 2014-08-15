@@ -19,27 +19,7 @@
 
 namespace bblocks {
 
-#if defined(DEBUG_BUILD)
-#define LOG_DEBUG LogMessage(Logger::LEVEL_DEBUG, fqn_)
-#define DEBUG(x) LogMessage(Logger::LEVEL_DEBUG, x.GetPath())
-#else
-#define LOG_DEBUG if (1) {} else LogMessage(Logger::LEVEL_DEBUG, fqn_)
-#define DEBUG(x) if (1) {} else LogMessage(Logger::LEVEL_DEBUG, x.GetPath())
-#endif
-
-#if !defined(DISABLE_VERBOSE)
-#define LOG_VERBOSE LogMessage(Logger::LEVEL_VERBOSE, fqn_)
-#define VERBOSE(x) LogMessage(Logger::LEVEL_VERBOSE, x.GetPath())
-#else
-#define LOG_VERBOSE if (1) {} else LogMessage(Logger::LEVEL_VERBOSE, fqn_)
-#define VERBOSE(x) if (1) {} else LogMessage(Logger::LEVEL_VERBOSE, x.GetPath())
-#endif
-
-#define LOG_ERROR LogMessage(Logger::LEVEL_ERROR, fqn_)
-#define ERROR(x) LogMessage(Logger::LEVEL_ERROR, x.GetPath())
-
-#define INFO(x) LogMessage(Logger::LEVEL_INFO, x.GetPath())
-#define LOG_INFO LogMessage(Logger::LEVEL_INFO, fqn_)
+using namespace std;
 
 //............................................................... LogWriter ....
 
@@ -60,7 +40,7 @@ class LogWriter
     {
     }
 
-    virtual void Append(const std::string & data, const Priority & priority) = 0;
+    virtual void Append(const string & data, const Priority & priority) = 0;
 };
 
 //.................................................................. Logger ....
@@ -84,13 +64,11 @@ public:
 
     void AttachWriter(const SharedPtr<LogWriter> & writer)
     {
-        ASSERT(!writer_);
         writer_ = writer;
     }
 
-    void Append(const LogType & type, const std::string & msg)
+    void Append(const LogType & type, const string & msg)
     {
-        ASSERT(writer_);
         const LogWriter::Priority p = type & (LEVEL_ERROR) ? LogWriter::HIGHPRIORITY
 							   : LogWriter::DEFAULT;
         writer_->Append(msg, p);
@@ -111,14 +89,14 @@ class LogMessage
 {
 public:
 
-    LogMessage(const Logger::LogType & type, const std::string & path)
+    LogMessage(const Logger::LogType & type, const string & path)
         : type_(type)
         , path_(path)
     {}
 
     ~LogMessage()
     {
-        std::ostringstream tmp;
+        ostringstream tmp;
         tmp << (char) type_ << " " << Timestamp() << " [" << path_ << "] ";
 
 	for (auto it = msg_.begin(); it != msg_.end(); ++it) {
@@ -128,7 +106,7 @@ public:
         Logger::Instance().Append(type_, tmp.str());
     }
 
-    LogMessage & operator<<(const std::string & t)
+    LogMessage & operator<<(const string & t)
     {
         msg_.push_back(t);
         return *this;
@@ -137,7 +115,7 @@ public:
     template<class T>
     LogMessage & operator<<(const T & t)
     {
-        std::ostringstream ss;
+        ostringstream ss;
         ss << t;
         msg_.push_back(ss.str());
         return *this;
@@ -145,43 +123,20 @@ public:
 
 protected:
 
-    const std::string Timestamp()
+    const string Timestamp()
     {
         time_t secondsSinceEpoch = time(NULL);
         tm* brokenTime = localtime(&secondsSinceEpoch);
         char buf[80];
         strftime(buf, sizeof(buf), " %d/%m/%y %T ", brokenTime);
-        return std::string(buf);
+        return string(buf);
     }
 
-    typedef std::list<std::string> StringListType;
+    typedef list<string> StringListType;
 
     const Logger::LogType type_;
-    const std::string path_;
+    const string path_;
     StringListType msg_;
-};
-
-//................................................................. LogPath ....
-
-/**
- */
-class LogPath
-{
-public:
-
-    LogPath(const std::string & path)
-        : path_(path)
-    {
-    }
-
-    const std::string & GetPath() const
-    {
-        return path_;
-    }
-
-private:
-
-    std::string path_;
 };
 
 //........................................................... ConsoleWriter ....
@@ -196,17 +151,17 @@ public:
 		: isopen_(true)
 	{}
 
-	void Append(const std::string & data, const LogWriter::Priority & priority)
+	void Append(const string & data, const LogWriter::Priority & priority)
 	{
 		bool expected = true;
 		while (!isopen_.compare_exchange_strong(expected, false));
-		std::cerr << data << std::endl;
+		cerr << data << endl;
 		isopen_ = true;
 	}
 
 private:
 
-	std::atomic<bool> isopen_;
+	atomic<bool> isopen_;
 };
 
 //............................................................... LogHelper ....

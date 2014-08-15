@@ -4,9 +4,71 @@
 #include <boost/lexical_cast.hpp>
 #include <cassert>
 
-#define STR(x) boost::lexical_cast<std::string>(x)
+#define STR(x) boost::lexical_cast<string>(x)
 
 #define ALIGNED(x) __attribute__((aligned(sizeof(x))))
+
+#if defined(DEBUG_BUILD)
+#define DEBUG(path) LogMessage(Logger::LEVEL_DEBUG, path)
+#else
+#define DEBUG(path) if (1) {} else LogMessage(Logger::LEVEL_DEBUG, path)
+#endif
+
+#if !defined(DISABLE_VERBOSE)
+#define VERBOSE(path) LogMessage(Logger::LEVEL_VERBOSE, path)
+#else
+#define VERBOSE(path) if (1) {} else LogMessage(Logger::LEVEL_VERBOSE, path)
+#endif
+
+#define ERROR(path) LogMessage(Logger::LEVEL_ERROR, path)
+#define INFO(path) LogMessage(Logger::LEVEL_INFO, path)
+
+#define STD_ERROR std::cerr
+#define STD_INFO std::cout
+#define ENDL std::endl
+
+#define DEADEND {\
+	STD_ERROR << "Unexpected code path reached. "\
+		  << __FILE__ << " : " << __LINE__\
+		  << ENDL;\
+	abort();\
+}
+
+#define NOTIMPLEMENTED {\
+	STD_ERROR << "Not implemented. "\
+		  << __FILE__ << " : " << __LINE__\
+		  << ENDL;\
+	abort();\
+}
+
+#ifdef DEBUG_BUILD
+#define ASSERT(x) {\
+	if (!bool(x)) {\
+		STD_ERROR << "ASSERT: " << #x << " . "\
+			  << __FILE__ << " : " << __LINE__\
+			  << " system-error: " << strerror(errno)\
+			  << ENDL;\
+		abort();\
+	}\
+}
+#else
+#define ASSERT(x)
+#endif
+
+#define DEFENSIVE_CHECK(x) ASSERT(x)
+
+#define INVARIANT(x) {										\
+	if (! bool(x)) {									\
+		STD_ERROR << "Invariant condition violated."					\
+			  << #x << " " << __FILE__ << ":" << __LINE__				\
+			  << " syserror: " << strerror(errno)					\
+			  << ENDL;								\
+		CompilerHelper::PrintBackTrace();						\
+		abort();									\
+	}											\
+}
+
+
 
 /*
  * Compile helpers

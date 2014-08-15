@@ -86,7 +86,7 @@ class NonBlockingThread : public Thread
 {
 public:
 
-	NonBlockingThread(const std::string & path, const uint32_t id)
+	NonBlockingThread(const string & path, const uint32_t id)
 		: Thread(path)
 		, exitMain_(false)
 		, q_(path)
@@ -122,12 +122,12 @@ public:
 
 private:
 
-	class ThreadExitException : public std::runtime_error
+	class ThreadExitException : public runtime_error
 	{
 	public:
 
-		ThreadExitException(const std::string & error)
-		    : std::runtime_error(error)
+		ThreadExitException(const string & error)
+		    : runtime_error(error)
 		{}
 	};
 
@@ -290,7 +290,7 @@ public:
 
 private:
 
-	typedef std::vector<NonBlockingThread *> threads_t;
+	typedef vector<NonBlockingThread *> threads_t;
 
 	void DestroyThreads()
 	{

@@ -6,9 +6,9 @@ using namespace bblocks;
 
 //.................................................................................. TCPChannel ....
 
-TCPChannel::TCPChannel(const std::string & fqn, int fd, FdPoll & epoll)
-	: fqn_(fqn)
-	, lock_(fqn_)
+TCPChannel::TCPChannel(const string & name, int fd, FdPoll & epoll)
+	: name_(name)
+	, lock_(name_)
 	, fd_(fd)
 	, epoll_(epoll)
 	/* Perf Counters */
@@ -24,8 +24,8 @@ TCPChannel::TCPChannel(const std::string & fqn, int fd, FdPoll & epoll)
 
 TCPChannel::~TCPChannel()
 {
-    LOG_VERBOSE << statReadSize_;
-    LOG_VERBOSE << statWriteSize_;
+    VERBOSE(name_) << statReadSize_;
+    VERBOSE(name_) << statWriteSize_;
 }
 
 int
@@ -115,7 +115,7 @@ TCPChannel::BarrierDone(int)
 void
 TCPChannel::Close()
 {
-	LOG_DEBUG << "Closing channel " << fd_;
+	DEBUG(name_) << "Closing channel " << fd_;
 
 	::shutdown(fd_, SHUT_RDWR);
 	::close(fd_);
@@ -127,7 +127,7 @@ TCPChannel::HandleFdEvent(int fd, uint32_t events)
 	ASSERT(fd == fd_);
 	ASSERT(!(events & ~(EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR)));
 
-	LOG_DEBUG << "Epoll Notification: fd=" << fd_ << " events:" << events;
+	DEBUG(name_) << "Epoll Notification: fd=" << fd_ << " events:" << events;
 
 	Guard _(&lock_);
 
@@ -190,7 +190,7 @@ TCPChannel::ReadDataFromSocket(const bool isasync)
 				return false;
 			}
 
-			LOG_ERROR << "Error reading from socket. " << strerror(errno);
+			ERROR(name_) << "Error reading from socket. " << strerror(errno);
 
 			/*
 			 * notify error and return
@@ -278,7 +278,7 @@ TCPChannel::WriteDataToSocket(const bool isasync)
 				continue;
 			}
 
-			LOG_ERROR << "Error writing. " << strerror(errno);
+			ERROR(name_) << "Error writing. " << strerror(errno);
 
 			/*
 			 * notify error to client
@@ -344,21 +344,21 @@ TCPServer::Accept(const SocketAddress & addr, const AcceptDoneHandle & h)
 	sockfd_ = socket(AF_INET, SOCK_STREAM, 0);
 
 	if (sockfd_ < 0) {
-		LOG_ERROR << "Socket error." << strerror(errno);
+		ERROR(name_) << "Socket error." << strerror(errno);
 		return -1;
 	}
 
 	int status = fcntl(sockfd_, F_SETFL, O_NONBLOCK);
 
 	if (status != 0) {
-	    LOG_ERROR << "Socket error." << strerror(errno);
+	    ERROR(name_) << "Socket error." << strerror(errno);
 	    return -1;
 	}
 
 	status = ::bind(sockfd_, (struct sockaddr *) &saddr, sizeof(sockaddr_in));
 
 	if (status != 0) {
-	    LOG_ERROR << "Error binding socket. " << strerror(errno);
+	    ERROR(name_) << "Error binding socket. " << strerror(errno);
 	    return -1;
 	}
 
@@ -370,7 +370,7 @@ TCPServer::Accept(const SocketAddress & addr, const AcceptDoneHandle & h)
 	status = listen(sockfd_, MAXBACKLOG);
 
 	if (status != 0) {
-		LOG_ERROR << "Error listening. " << strerror(errno);
+		ERROR(name_) << "Error listening. " << strerror(errno);
 		return -1;
 	}
 
@@ -378,11 +378,11 @@ TCPServer::Accept(const SocketAddress & addr, const AcceptDoneHandle & h)
 				   intr_fn(this, &TCPServer::HandleFdEvent));
 
 	if (!ok) {
-		LOG_ERROR << "Error registering socket with epoll.";
+		ERROR(name_) << "Error registering socket with epoll.";
 		return -1;
 	}
 
-	LOG_INFO << "TCP Server started. ";
+	INFO(name_) << "TCP Server started. ";
 
 	return 0;
 }
@@ -404,7 +404,7 @@ TCPServer::HandleFdEvent(int fd, uint32_t events)
 		/*
 		 * error accepting connection, return error to client
 		 */
-		LOG_ERROR << "Error accepting client connection. " << strerror(errno);
+		ERROR(name_) << "Error accepting client connection. " << strerror(errno);
 		h_.Wakeup(/*status=*/ -1, static_cast<UnicastTransportChannel *>(NULL));
 		return;
 	}
@@ -414,12 +414,12 @@ TCPServer::HandleFdEvent(int fd, uint32_t events)
 	/*
 	 * Accepted. Create a channel object and return to client
 	 */
-	UnicastTransportChannel * ch = new TCPChannel(fqn(clientfd), clientfd, epoll_);
+	UnicastTransportChannel * ch = new TCPChannel(name(clientfd), clientfd, epoll_);
 	INVARIANT(ch);
 
 	h_.Wakeup(/*status=*/ 0, ch);
 
-	LOG_DEBUG << "Accepted. clientfd=" << clientfd;
+	DEBUG(name_) << "Accepted. clientfd=" << clientfd;
 }
 
 int
@@ -495,7 +495,7 @@ TCPConnector::Connect(const SocketAddress & addr, const ConnectDoneHandle & h)
 void
 TCPConnector::HandleFdEvent(int fd, uint32_t events)
 {
-	LOG_INFO << "connected: events=" << events << " fd=" << fd;
+	INFO(name_) << "connected: events=" << events << " fd=" << fd;
 
 	/*
 	 * Remove the connector from polling list
@@ -524,7 +524,7 @@ TCPConnector::HandleFdEvent(int fd, uint32_t events)
 		/*
 		 * Channel was established
 		 */
-		LOG_DEBUG << "TCP Client connected. fd=" << fd;
+		DEBUG(name_) << "TCP Client connected. fd=" << fd;
 
 		TCPChannel * ch = new TCPChannel("/tcp/ch/" + STR(fd), fd, epoll_);
 		h.Wakeup(/*status=*/ 0, ch); 
@@ -536,7 +536,7 @@ TCPConnector::HandleFdEvent(int fd, uint32_t events)
 	 */
 	INVARIANT(events & EPOLLERR);
 
-	LOG_ERROR << "Failed to connect. fd=" << fd << " errno=" << errno;
+	ERROR(name_) << "Failed to connect. fd=" << fd << " errno=" << errno;
 
 	h.Wakeup(/*status=*/ -1, /*ch=*/ NULL);
 }

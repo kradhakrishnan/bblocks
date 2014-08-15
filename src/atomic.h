@@ -4,9 +4,9 @@
 #include <atomic>
 #include <inttypes.h>
 
-#include "assert.h"
-
 namespace bblocks {
+
+using namespace std;
 
 //............................................................................... AtomicCounter ....
 
@@ -38,7 +38,7 @@ public:
 
 private:
 
-	std::atomic<size_t> count_;
+	atomic<size_t> count_;
 
 };
 

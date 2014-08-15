@@ -5,11 +5,11 @@
 #include <stdint.h>
 #include <tr1/unordered_map>
 
-#include "net/fdpoll.h"
 #include "util.hpp"
 #include "lock.h"
 #include "async.h"
 #include "schd/thread.h"
+#include "net/fdpoll.h"
 
 namespace bblocks {
 
@@ -30,7 +30,7 @@ public:
 
 	using FdPoll::fn_t;
 
-	Epoll(const std::string & logPath);
+	Epoll(const string & logPath);
 	virtual ~Epoll();
 
 	virtual bool Add(const fd_t fd, const uint32_t events, const fn_t & fn) override;
@@ -66,8 +66,8 @@ private:
 		bool mute_;             // Don't invoke handler
 	};
 
-	typedef std::tr1::unordered_map<fd_t, FDRecord *> fd_map_t;
-	typedef std::list<FDRecord *> fdrec_list_t;
+	typedef tr1::unordered_map<fd_t, FDRecord *> fd_map_t;
+	typedef list<FDRecord *> fdrec_list_t;
 
 	/**
 	 * Epoll thread entry method
@@ -79,7 +79,7 @@ private:
 	 */
 	void EmptyTrashcan();
 
-	LogPath log_;		    // Log file
+	string log_;		    // Log file
 	SpinMutex lock_;	    // Default lock
 	fd_t fd_;		    // Epoll fd
 	fd_map_t fdmap_;	    // fd <-> FDRecord map

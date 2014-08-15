@@ -9,8 +9,8 @@ using namespace std;
 // .................................................................................. RpcServer ....
 
 RpcServer::RpcServer(UnicastAcceptor & acceptor)
-    : fqn_("/RpcServer/" + STR(this))
-    , lock_(fqn_)
+    : name_("/RpcServer/" + STR(this))
+    , lock_(name_)
     , acceptor_(acceptor)
     , pendingStart_(0)
     , pendingStop_(0)
@@ -39,7 +39,7 @@ RpcServer::Register(int id, const Fn<RpcRequest> & h)
 int
 RpcServer::Start(const SocketAddress & addr, const ErrorHandle & h)
 {
-	LOG_INFO << "Stating RPC server";
+	INFO(name_) << "Stating RPC server";
 
 	errh_ = h;
 
@@ -50,13 +50,13 @@ RpcServer::Start(const SocketAddress & addr, const ErrorHandle & h)
 void
 RpcServer::AcceptDone(int status, UnicastTransportChannel * ch)
 {
-	LOG_DEBUG << "Accepted. status=" << status;
+	DEBUG(name_) << "Accepted. status=" << status;
 
 	if (status != 0) {
 		/*
 		 * Error accepting channel, notify the caller.
 		 */
-		LOG_ERROR << "Error accepting connection. status=" << status;
+		ERROR(name_) << "Error accepting connection. status=" << status;
 
 		 errh_.Wakeup(/*status=*/ status);
 		 return;
@@ -86,18 +86,18 @@ RpcServer::ReadHeader(RpcChannel * ch)
 void
 RpcServer::ReadHeaderDone(int status, IOBuffer buf, RpcChannel * ch)
 {
-	LOG_DEBUG << "Read header. ch=" << ch->ch_ << " status=" << status;
+	DEBUG(name_) << "Read header. ch=" << ch->ch_ << " status=" << status;
  
 	if (status != (int) buf.Size()) {
 		DEADEND
 	}
 
-	LOG_DEBUG << buf.Dump();
+	DEBUG(name_) << buf.Dump();
 
 	size_t pos = 0;
 	ch->hdr_.Decode(buf, pos);
 
-	LOG_DEBUG << "Rpc packet decoded. "
+	DEBUG(name_) << "Rpc packet decoded. "
 		  << " seqno=" << ch->hdr_.seqno_.Get()
 		  << " opcode=" << (int) ch->hdr_.opcode_.Get()
 		  << " size=" << ch->hdr_.size_.Get()
@@ -134,7 +134,7 @@ RpcServer::HandleHello(RpcChannel * ch, IOBuffer & buf)
 	ch->endpoint_ = RpcEndpoint(msg.name_.Get(), msg.uuid_.Get());
 	ch->isActive_ = true;
 
-	LOG_INFO << "Channel endpoint discovered. name=" << ch->endpoint_.name_
+	INFO(name_) << "Channel endpoint discovered. name=" << ch->endpoint_.name_
 		 << " uuid=" << ch->endpoint_.uuid_;
 
 	RpcResponseHeader hdr(/*seqno=*/ 0, /*opcode=*/ RPC_HELLO, /*size=*/ 0,
@@ -181,7 +181,7 @@ RpcServer::ReadDataDone(int status, IOBuffer buf, RpcChannel * ch)
 	uint32_t expected = ch->hdr_.cksum_.Get(); 
 	uint32_t cksum = Adler32::Calc(buf.Ptr(), buf.Size());
 	if (cksum != expected) {
-		LOG_ERROR << "Checksum did not match. ch=" << ch
+		ERROR(name_) << "Checksum did not match. ch=" << ch
 			  << " expected=" << cksum << " actual=" << cksum;
 		errh_.Wakeup(/*status=*/ -1);
 		return;
@@ -215,7 +215,7 @@ RpcServer::DispatchRpcCall(const RpcRequest & packet)
 
 	ASSERT(it != rpcs_.end());
 	if (it == rpcs_.end()) {
-		LOG_ERROR << "Command not found. command=" << packet.hdr_.opcode_.Get();
+		ERROR(name_) << "Command not found. command=" << packet.hdr_.opcode_.Get();
 		return -1;
 	}
 
@@ -238,7 +238,7 @@ RpcServer::StopDone(int status)
 // .................................................................................. RcpClient ....
 
 RpcClient::RpcClient(const RpcEndpoint & endpoint, UnicastConnector & connector)
-	: fqn_("/rpcclient"), endpoint_(endpoint), connector_(connector), pendingConns_(0)
+	: name_("/rpcclient"), endpoint_(endpoint), connector_(connector), pendingConns_(0)
 {
 }
 
@@ -260,7 +260,7 @@ RpcClient::Connect(const SocketAddress & addr, const ConnDoneHandle & h)
 void
 RpcClient::ConnDone(int status, UnicastTransportChannel * ch)
 {
-	LOG_INFO << "ConnDone. status=" << status << " ch=" << ch;
+	INFO(name_) << "ConnDone. status=" << status << " ch=" << ch;
 
 	if (status != 0) {
 		connh_.Wakeup(/*status=*/ 0);
@@ -283,7 +283,7 @@ RpcClient::ConnDone(int status, UnicastTransportChannel * ch)
 	pos = 0;
 	hdr.Encode(buf, pos);
 
-	LOG_DEBUG << "Sending hello. ch=" << ch << " bytes=" << buf.Size()
+	DEBUG(name_) << "Sending hello. ch=" << ch << " bytes=" << buf.Size()
 		  << " buf=" << buf.Dump();
 
 	int err = ch->Write(buf, async_fn(this, &This::HelloWriteDone, ch));

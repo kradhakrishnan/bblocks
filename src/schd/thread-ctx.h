@@ -75,7 +75,7 @@ struct ThreadCtx
 		delete[] pool;
 	}
 
-	static LogPath log_;
+	static string log_;
 };
 
 }

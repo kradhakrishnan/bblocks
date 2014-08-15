@@ -13,7 +13,7 @@ using namespace bblocks;
 namespace po = boost::program_options;
 
 // log path
-static LogPath _log("/bmark_tcp");
+static string _log("/bmark_tcp");
 
 // .................................................................................... ChStats ....
 

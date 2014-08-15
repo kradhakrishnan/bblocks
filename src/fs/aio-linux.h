@@ -123,10 +123,10 @@ private:
 
 	void InitAioCtx(aio_context_t & ctx, const size_t nreqs);
 
-	LogPath log_;
+	string log_;
 	SpinMutex lock_;
-	std::vector<aio_context_t> ctxs_;
-	std::vector<PollThread *> aioths_;
+	vector<aio_context_t> ctxs_;
+	vector<PollThread *> aioths_;
 	InList<Op> ops_;
 };
 
@@ -146,7 +146,7 @@ public:
 
 	//.... Create/destroy ....//
 
-	SpinningDevice(const std::string & devPath, const disksize_t nsectors, AioProcessor * aio);
+	SpinningDevice(const string & devPath, const disksize_t nsectors, AioProcessor * aio);
 
 	virtual ~SpinningDevice();
 
@@ -186,8 +186,8 @@ private:
 
 	//.... private members ....//
 
-	const std::string devPath_;
-	LogPath log_;
+	const string devPath_;
+	string log_;
 	const uint64_t nsectors_;
 	AioProcessor * aio_;
 	fd_t fd_;

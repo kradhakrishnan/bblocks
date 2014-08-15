@@ -24,11 +24,11 @@ struct RpcEndpoint
 {
 	RpcEndpoint() : name_(""), uuid_(UINT64_MAX) {}
 
-	RpcEndpoint(const std::string & name, const uint64_t uuid)
+	RpcEndpoint(const string & name, const uint64_t uuid)
 		: name_(name), uuid_(uuid)
 	{}
 
-	std::string name_;
+	string name_;
 	uint64_t uuid_;
 };
 
@@ -260,14 +260,14 @@ private:
 	void ReadDataDone(int status, IOBuffer bug, RpcChannel * ch) __async_fn__;
 	void WriteHelloResponseDone(int status, IOBuffer buf, RpcChannel * ch) __async_fn__;
 
-	using rpc_map_t = std::map<int, Fn<RpcRequest> >;
+	using rpc_map_t = map<int, Fn<RpcRequest> >;
 
-	const std::string fqn_;
+	const string name_;
 	SpinMutex lock_;
 	UnicastAcceptor & acceptor_;
 	rpc_map_t rpcs_;
-	std::atomic<size_t> pendingStart_;
-	std::atomic<size_t> pendingStop_;
+	atomic<size_t> pendingStart_;
+	atomic<size_t> pendingStop_;
 	StopDoneHandle stoph_;
 	ErrorHandle errh_;
 };
@@ -292,10 +292,10 @@ private:
     void ConnDone(int status, UnicastTransportChannel * ch) __async_fn__;
     void HelloWriteDone(int status, IOBuffer buf, UnicastTransportChannel * ch) __async_fn__;
 
-    const std::string fqn_;
+    const string name_;
     const RpcEndpoint endpoint_;
     UnicastConnector & connector_;
-    std::atomic<size_t> pendingConns_;
+    atomic<size_t> pendingConns_;
     ConnDoneHandle connh_;
 };
 

@@ -186,7 +186,7 @@ private:
              << " MBps " << (s ? (MiB / s) : 0) << endl;
     }
 
-    LogPath log_;
+    string log_;
     SpinMutex lock_;
     const string devname_;
     const disksize_t devsize_;

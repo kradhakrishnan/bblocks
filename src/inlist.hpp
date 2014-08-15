@@ -126,7 +126,7 @@ public:
 
 	static const unsigned int MAX_SPIN = 10000;
 
-	InQueue(const std::string & name) : log_("/q/" + name), maxSpin_(1000) {}
+	InQueue(const string & name) : log_("/q/" + name), maxSpin_(1000) {}
 
 	inline void Push(T * t)
 	{
@@ -180,7 +180,7 @@ private:
 
 	InQueue();
 
-	LogPath log_;
+	string log_;
 	mutable PThreadMutex lock_;
 	WaitCondition conditionEmpty_;
 	InList<T> q_;
@@ -198,7 +198,7 @@ class Queue
 {
 public:
 
-    Queue(const std::string & name)
+    Queue(const string & name)
         : log_("/q/" + name)
     {
     }
@@ -230,10 +230,10 @@ private:
 
     Queue();
 
-    LogPath log_;
+    string log_;
     PThreadMutex lock_;
     WaitCondition conditionEmpty_;
-    std::queue<T> q_;
+    queue<T> q_;
 };
 
 

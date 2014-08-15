@@ -42,7 +42,7 @@ static inline unsigned long long rdtsc(void)
 #endif
 
 
-template<class T> using SharedPtr = std::shared_ptr<T>;
+template<class T> using SharedPtr = shared_ptr<T>;
 
 template<class T>
 SharedPtr<T>
@@ -254,12 +254,12 @@ public:
 		return q_.front();
 	}
 
-	typename std::vector<T>::iterator Begin()
+	typename vector<T>::iterator Begin()
 	{
 		return q_.begin();
 	}
 
-	typename std::vector<T>::iterator End()
+	typename vector<T>::iterator End()
 	{
 		return q_.end();
 	}
@@ -271,7 +271,7 @@ public:
 
 private:
 
-	std::vector<T> q_;
+	vector<T> q_;
 };
 
 // .................................................................................... AutoPtr ....

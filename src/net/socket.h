@@ -59,7 +59,7 @@ public:
 	/**
 	 * Create socket for accepting connection
 	 */
-	 static SocketAddress ServerSocketAddr(const std::string & hostname, const short port)
+	 static SocketAddress ServerSocketAddr(const string & hostname, const short port)
 	 {
 		SocketAddress addr;
 		addr.laddr_ =  GetAddr(hostname, port);
@@ -77,7 +77,7 @@ public:
 	/**
 	 * Convert hostname:port to sockaddr_in
 	 */
-	static sockaddr_in GetAddr(const std::string & hostname, const short port)
+	static sockaddr_in GetAddr(const string & hostname, const short port)
 	{
 		sockaddr_in addr;
 
@@ -121,14 +121,14 @@ public:
 	/**
 	 * Convert hostname:port string to sockaddr_in
 	 */
-	static sockaddr_in GetAddr(const std::string & saddr)
+	static sockaddr_in GetAddr(const string & saddr)
 	{
-		std::vector<std::string> tokens;
+		vector<string> tokens;
 		boost::split(tokens, saddr, boost::is_any_of(":"));
 
 		ASSERT(tokens.size() == 2);
 
-		const std::string host = tokens[0];
+		const string host = tokens[0];
 		const short port = atoi(tokens[1].c_str());
 
 		return GetAddr(host, port);
@@ -138,8 +138,8 @@ public:
 	 * Construct a connection (local binding-remote binding) form laddr and
 	 * raddr strings of format host:port
 	 */
-	static SocketAddress GetAddr(const std::string & laddr,
-				     const std::string & raddr)
+	static SocketAddress GetAddr(const string & laddr,
+				     const string & raddr)
 	{
 		return SocketAddress(GetAddr(laddr), GetAddr(raddr));
 	}

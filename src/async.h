@@ -2,7 +2,7 @@
 #define _DH_CORE_ASYNC_H_
 
 #include "defs.h"
-#include "bblocks.hpp"
+#include "bblocks.h"
 #include "schd/thread-pool.h"
 
 namespace bblocks {
@@ -141,7 +141,7 @@ struct CompletionQueue##TSUFFIX : CHandle							\
 	void ProcessEvents(int)									\
 	{											\
 		while (true) {									\
-			std::list<CompletionEvent> q;						\
+			list<CompletionEvent> q;						\
 												\
 			{									\
 				/* we are like epoll, we take all the events that have		\
@@ -175,7 +175,7 @@ struct CompletionQueue##TSUFFIX : CHandle							\
 	};											\
 												\
 	SpinMutex lock_;									\
-	std::list<CompletionEvent> q_;								\
+	list<CompletionEvent> q_;								\
 	CHandle * h_;										\
 	void (CHandle::*fn_)(TENUM(T,n));							\
 	bool inprogress_;									\

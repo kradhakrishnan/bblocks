@@ -203,7 +203,7 @@ private:
     }
 
     SpinMutex lock_;
-    LogPath log_;
+    string log_;
     Epoll epoll_;
     MultiPathEpoll mpepoll_;
     TCPServer tcpServer_;

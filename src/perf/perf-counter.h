@@ -28,7 +28,7 @@ public:
 		TIME,
 	};
 
-	PerfCounter(const std::string & name, const std::string & units, const Type & type)
+	PerfCounter(const string & name, const string & units, const Type & type)
 		: name_(name)
 		, units_(units)
 		, type_(type)
@@ -63,9 +63,9 @@ public:
 		UpdateBucket(val);
 	}
 
-	friend std::ostream & operator<<(std::ostream & os, const PerfCounter & pc)
+	friend ostream & operator<<(ostream & os, const PerfCounter & pc)
 	{
-		os << "Perfcoutner: " << pc.name_ << std::endl;
+		os << "Perfcoutner: " << pc.name_ << endl;
 
 		if (!pc.count_) return os;
 
@@ -101,24 +101,24 @@ public:
 
 protected:
 
-	typedef std::map<std::string, std::string> kvs_t;
+	typedef map<string, string> kvs_t;
 
-	static void DrawLine(std::ostream & os)
+	static void DrawLine(ostream & os)
 	{
-		os << "+" << std::setfill('-') << std::setw(30) << "-"
-		   << "+" << std::setfill('-') << std::setw(30) << "-"
-		   << "+" << std::endl << std::setfill(' ');
+		os << "+" << setfill('-') << setw(30) << "-"
+		   << "+" << setfill('-') << setw(30) << "-"
+		   << "+" << endl << setfill(' ');
 	}
 
-	static void Print(std::ostream & os, const kvs_t & kvs)
+	static void Print(ostream & os, const kvs_t & kvs)
 	{
 		DrawLine(os);
 
 		for (auto kv : kvs)
 		{
-			os << "|" << std::setw(30) << std::left << kv.first << "|"
-			   << std::setw(30) << std::left << kv.second << "|"
-			   << std::endl;
+			os << "|" << setw(30) << left << kv.first << "|"
+			   << setw(30) << left << kv.second << "|"
+			   << endl;
 		}
 
 		DrawLine(os);
@@ -161,7 +161,7 @@ protected:
 	}
 
 	template<class T>
-	static const std::string to_h(const T & val)
+	static const string to_h(const T & val)
 	{
 		if (val >= 1000 * 1000) {
 			return STR(int(val / (1000 * 1000))) + "M";
@@ -172,14 +172,14 @@ protected:
 		}
 	}
 
-	const std::string name_;
-	const std::string units_;
+	const string name_;
+	const string units_;
 	const Type type_;
-	std::atomic<uint64_t> val_;
-	std::atomic<uint64_t> count_;
-	std::atomic<uint64_t> min_;
-	std::atomic<uint64_t> max_;
-	std::atomic<uint32_t> bucket_[32];
+	atomic<uint64_t> val_;
+	atomic<uint64_t> count_;
+	atomic<uint64_t> min_;
+	atomic<uint64_t> max_;
+	atomic<uint32_t> bucket_[32];
 	uint64_t startms_;
 };
 
@@ -196,7 +196,7 @@ class TimeCounter
 {
 public:
 
-	TimeCounter(const std::string & name)
+	TimeCounter(const string & name)
 		: name_(name)
 		, startms_(Time::NowInMilliSec())
 		, refms_(Time::NowInMilliSec())
@@ -213,19 +213,19 @@ public:
 		refms_ = Time::NowInMilliSec();
 	}
 
-	friend std::ostream & operator<<(std::ostream & os, const TimeCounter<T> & v)
+	friend ostream & operator<<(ostream & os, const TimeCounter<T> & v)
 	{
 		const uint64_t elapsed_ms = Time::NowInMilliSec() - v.startms_;
 
-		os << "TimeCounter : " << v.name_ << std::endl
-		   << " Elapsed: " << elapsed_ms << " ms" << std::endl;
+		os << "TimeCounter : " << v.name_ << endl
+		   << " Elapsed: " << elapsed_ms << " ms" << endl;
 
 		for (int i = 0; i < 32; ++i) {
 			if (!v.timer[i]) continue;
 
 			os << T(i) << " " << v.timer_[i]
 			   << " ms ( " << (v.timer_[i] * 100 / elapsed_ms) << "% )"
-			   << std::endl;
+			   << endl;
 		}
 
 		return os;
@@ -233,10 +233,10 @@ public:
 
 private:
 
-	const std::string name_;
+	const string name_;
 	const uint64_t startms_;
 	uint64_t refms_;
-	std::atomic<uint32_t> timer_[32];
+	atomic<uint32_t> timer_[32];
 };
 
 }

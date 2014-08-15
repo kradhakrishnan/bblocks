@@ -1,5 +1,6 @@
 #include <list>
 
+#include "logger.h"
 #include "net/epoll/epoll.h"
 #include "schd/thread-pool.h"
 

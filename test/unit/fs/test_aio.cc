@@ -96,7 +96,7 @@ public:
 
 private: 
 
-    LogPath log_;
+    string log_;
     LinuxAioProcessor aio_;
     SpinningDevice dev_;
     atomic<int> count_;

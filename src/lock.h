@@ -201,7 +201,7 @@ public:
         CLOSED = 0x11
     };
 
-    explicit SpinMutex(const std::string & name)
+    explicit SpinMutex(const string & name)
         : name_("/spinmutex" + name)
         , mutex_(OPEN)
         , statSpinTime_(name_ + "/spin-time", "microsec", PerfCounter::TIME)
@@ -211,7 +211,7 @@ public:
 
     ~SpinMutex()
     {
-        VERBOSE(LogPath("/SpinMutex")) << statSpinTime_;
+        VERBOSE(string("/SpinMutex")) << statSpinTime_;
     }
 
     virtual void Lock()
@@ -258,7 +258,7 @@ public:
 
 protected:
 
-    const std::string name_;
+    const string name_;
     pthread_t owner_;
     volatile _Atomic_word mutex_;
 

@@ -46,7 +46,7 @@ public:
 		void * ptr;
 		int status = posix_memalign(&ptr, 512, size);
 		INVARIANT(status != -1);
-		return IOBuffer(std::shared_ptr<uint8_t>((uint8_t *) ptr, Dalloc()), size);
+		return IOBuffer(shared_ptr<uint8_t>((uint8_t *) ptr, Dalloc()), size);
 	}
 
 	/*
@@ -194,11 +194,11 @@ public:
 		ReadInt(t, tmp);
 	}
 
-	std::string Dump() const
+	string Dump() const
 	{
-		if (!data_) return std::string();
+		if (!data_) return string();
 
-		std::ostringstream ss;
+		ostringstream ss;
 
 		ss << "[";
 		for (size_t i = 0; i < size_; i++) {
@@ -217,11 +217,11 @@ public:
 
 protected:
 
-	IOBuffer(const std::shared_ptr<uint8_t> & data, const size_t size, const size_t off = 0)
+	IOBuffer(const shared_ptr<uint8_t> & data, const size_t size, const size_t off = 0)
 		: data_(data), size_(size), off_(off)
 	{}
 
-	std::shared_ptr<uint8_t> data_;
+	shared_ptr<uint8_t> data_;
 	size_t size_;
 	size_t off_;
 };

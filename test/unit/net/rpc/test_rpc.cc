@@ -9,7 +9,7 @@
 using namespace std;
 using namespace bblocks;
 
-static LogPath _log("/rpctest");
+static string _log("/rpctest");
 
 // ......................................................... test_rpcpacket ....
 

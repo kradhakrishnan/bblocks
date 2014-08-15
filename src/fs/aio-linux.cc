@@ -248,7 +248,7 @@ LinuxAioProcessor::PollThread::ThreadMain()
 
 //.............................................................................. SpinningDevice ....
 
-SpinningDevice::SpinningDevice(const std::string & devPath,
+SpinningDevice::SpinningDevice(const string & devPath,
                                const disksize_t nsectors, AioProcessor * aio)
 	: devPath_(devPath)
 	, log_(STR("/spinningDevice") + devPath)

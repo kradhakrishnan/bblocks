@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include "bblocks.h"
 #include "buf/bufpool.h"
 #include "test/unit/unit-test.h"
 
@@ -36,7 +37,7 @@ struct BufferPoolTest
 		}
 	}
 
-	std::atomic<int> count_;
+	atomic<int> count_;
 };
 
 void
@@ -70,7 +71,7 @@ struct Th
         }
     }
 
-    std::atomic<uint64_t> i_;
+    atomic<uint64_t> i_;
 
 };
 
@@ -126,8 +127,8 @@ struct ThMaster
         BBlocks::Schedule(th, &ThSlave::Run, this);
     }
 
-    std::atomic<int> i_;
-    std::atomic<int> out_;
+    atomic<int> i_;
+    atomic<int> out_;
 };
 
 void ThSlave::Run(ThMaster * th)
@@ -141,7 +142,7 @@ parallel_test()
     BBlocks::Start();
 
     ThMaster m;
-    std::vector<ThSlave *> ss;
+    vector<ThSlave *> ss;
     for (unsigned int i = 0; i < SysConf::NumCores() - 1; ++i) {
         ThSlave * s = new ThSlave();
         m.Start(s);

@@ -164,7 +164,7 @@ PYINCLUDE := -I/usr/include/python2.7/
 
 CCFLAGS += -fPIC -Wall -std=c++11 -Werror -D__STDC_LIMIT_MACROS $(BUILD_CCFLAGS)
 LDFLAGS += -L$(OBJDIR)  -L/usr/lib
-INCLUDE += -I. -I./src -Ipublic -I/usr/include/boost $(PYINCLUDE) 
+INCLUDE += -I. -I./src -I./include -I/usr/include/boost $(PYINCLUDE) 
 LIBS    += -lrt -lpthread  -lz -lboost_program_options
 
 ifndef OBJDIR

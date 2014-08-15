@@ -134,7 +134,7 @@ struct Raw : RPCData
 
 struct String : RPCData
 {
-	explicit String(const std::string & v = std::string()) : v_(v) {}
+	explicit String(const string & v = string()) : v_(v) {}
 
 	virtual void Encode(IOBuffer & buf, size_t & pos);
 	virtual void Decode(IOBuffer & buf, size_t & pos);
@@ -144,12 +144,12 @@ struct String : RPCData
 		return v_.size() + sizeof(uint32_t);
 	}
 
-	bool operator==(const std::string & str) const { return str == v_; }
+	bool operator==(const string & str) const { return str == v_; }
 	bool operator==(const String & rhs) const { return v_ == rhs.v_; }
-	void Set(const std::string & v) { v_ = v; }
-	const std::string & Get() const { return v_; }
+	void Set(const string & v) { v_ = v; }
+	const string & Get() const { return v_; }
 
-	std::string v_;
+	string v_;
 };
 
 // .................................................................................... List<T> ....
@@ -157,7 +157,7 @@ struct String : RPCData
 template<class T>
 struct List : RPCData
 {
-	List(const std::vector<T> & v = std::vector<T>()) : v_(v) {}
+	List(const vector<T> & v = vector<T>()) : v_(v) {}
 
 	void
 	Encode(IOBuffer & buf, size_t & pos)
@@ -191,11 +191,11 @@ struct List : RPCData
 		return v_ == rhs.v_;
 	}
 
-	void Set(const std::vector<T> & v) { v_ = v; }
+	void Set(const vector<T> & v) { v_ = v; }
 	void Set(const List<T> & v) { v_ = v.v_; }
-	const std::vector<T> & Get() const { return v_; }
+	const vector<T> & Get() const { return v_; }
 
-	std::vector<T> v_;
+	vector<T> v_;
 };
 
 // .................................................................................. RPCPacket ....

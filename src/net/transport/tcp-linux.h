@@ -38,7 +38,7 @@ public:
 	using UnicastTransportChannel::WriteDoneHandle;
 	using UnicastTransportChannel::StopDoneHandle;
 
-	explicit TCPChannel(const std::string & fqn, int fd, FdPoll & epoll);
+	explicit TCPChannel(const string & name, int fd, FdPoll & epoll);
 	virtual ~TCPChannel();
 
 	virtual int Peek(IOBuffer & data, const ReadDoneHandle & h) override;
@@ -104,11 +104,11 @@ public:
 	void Close();
 
 
-	const std::string fqn_;
+	const string name_;
 	SpinMutex lock_;
 	int fd_;
 	FdPoll & epoll_;
-	std::list<WriteCtx> wpending_;
+	list<WriteCtx> wpending_;
 	ReadCtx rpending_;
 	StopDoneHandle stoph_;
 
@@ -136,7 +136,7 @@ public:
 	using UnicastAcceptor::StopDoneHandle;
 
 	TCPServer(FdPoll & epoll)
-		: fqn_(fqn()), lock_(fqn_), epoll_(epoll)
+		: name_(name()), lock_(name_), epoll_(epoll)
 	{}
 
 	virtual ~TCPServer() {}
@@ -159,10 +159,10 @@ public:
 	void HandleFdEvent(int fd, uint32_t events) __intr_fn__;
 	void BarrierDone(StopDoneHandle h);
 
-	const std::string fqn() const { return "/tcpserver/" + STR(this); }
-	const std::string fqn(int fd) const { return fqn() + "/ch/" + STR(fd); }
+	const string name() const { return "/tcpserver/" + STR(this); }
+	const string name(int fd) const { return name() + "/ch/" + STR(fd); }
 
-	const std::string fqn_;
+	const string name_;
 	SpinMutex lock_;
 	FdPoll & epoll_;
 	socket_t sockfd_;
@@ -187,8 +187,8 @@ public:
 	using UnicastConnector::ConnectDoneHandle;
 	using UnicastConnector::StopDoneHandle;
 
-	TCPConnector(FdPoll & epoll, const std::string & fqn = "/tcp/connector")
-	    : fqn_(fqn), lock_(fqn), epoll_(epoll)
+	TCPConnector(FdPoll & epoll, const string & name = "/tcp/connector")
+	    : name_(name), lock_(name), epoll_(epoll)
 	{}
 
 	virtual ~TCPConnector()
@@ -209,12 +209,12 @@ public:
 
 	__DISABLE_ASSIGN_AND_COPY__(TCPConnector);
 
-	typedef std::map<fd_t, ConnectDoneHandle> pending_map_t;
+	typedef map<fd_t, ConnectDoneHandle> pending_map_t;
 
 	void HandleFdEvent(int fd, uint32_t events) __intr_fn__;
 	void BarrierDone(StopDoneHandle h);
 
-	const std::string fqn_;
+	const string name_;
 	SpinMutex lock_;
 	FdPoll & epoll_;
 	pending_map_t pendingConnects_;

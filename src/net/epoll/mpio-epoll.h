@@ -15,12 +15,12 @@ public:
 	using FdPoll::fd_t;
 	using FdPoll::fn_t;
 
-	MultiPathEpoll(const size_t npollth, const std::string & logpath = "mp-epoll/")
+	MultiPathEpoll(const size_t npollth, const string & logpath = "mp-epoll/")
 		: lock_(logpath)
 		, log_(logpath)
 	{
 		for (size_t i = 0; i < npollth; ++i) {
-			auto epoll = std::shared_ptr<Epoll>(new Epoll(logpath + STR(i)));
+			auto epoll = shared_ptr<Epoll>(new Epoll(logpath + STR(i)));
 			epolls_.push_back(epoll);
 		}
 	}
@@ -81,12 +81,12 @@ public:
 
 private:
 
-	typedef std::map<fd_t, size_t> fdmap_t;
+	typedef map<fd_t, size_t> fdmap_t;
 
 	SpinMutex lock_;
-	LogPath log_;
-	std::atomic<size_t> idx_;
-	std::vector<std::shared_ptr<Epoll> > epolls_;
+	string log_;
+	atomic<size_t> idx_;
+	vector<shared_ptr<Epoll> > epolls_;
 	fdmap_t fdmap_;
 };
 
