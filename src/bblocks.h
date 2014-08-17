@@ -13,8 +13,8 @@ class BBlocks
 {
 public:
 
-        static void Start();
 	static void Start(const uint32_t ncores);
+        static void Start();
 
 	static void Shutdown();
 
@@ -28,6 +28,14 @@ public:
 	{											\
 		NonBlockingThreadPool::Instance().Schedule(obj, fn, TARG(t,n));			\
 	}											\
+												\
+	template<class _OBJ_, TDEF(T,n)>							\
+	static void ScheduleIn(const uint32_t msec, _OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), \
+			       TPARAM(T,t,n))							\
+	{											\
+		NonBlockingThreadPool::Instance().ScheduleIn(msec, obj, fn, TARG(t,n));		\
+	}											\
+
 
 	TP_SCHEDULE(1) // void Schedule<T1>(...)
 	TP_SCHEDULE(2) // void Schedule<T1,T2>(...)

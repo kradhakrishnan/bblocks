@@ -1,6 +1,8 @@
 #pragma once
 
+#include <sys/timerfd.h>
 #include <stdexcept>
+#include <set>
 
 #include "buf/bufpool.h"
 #include "schd/thread.h"
@@ -154,6 +156,149 @@ private:
 	InQueue<ThreadRoutine> q_;
 };
 
+// ................................................................................ TimeKeeper ....
+
+class TimeKeeper : public Thread
+{
+public:
+
+	using This = TimeKeeper;
+
+	TimeKeeper(const string & path)
+		: Thread(path + string("/thread"))
+		, path_(path)
+		, lock_(path_)
+		, fd_(-1)
+	{}
+
+	bool Init()
+	{
+		/*
+		 * Create timer
+		 */
+		fd_ = timerfd_create(CLOCK_MONOTONIC, /*flags=*/ 0);
+
+		if (fd_ == -1) {
+			ERROR(path_) << "Unable to create timer";
+			return false;
+		}
+
+		Thread::StartBlockingThread();
+
+		INFO(path_) << "Created time keeper successfully";
+
+		return true;
+	}
+
+	bool Shutdown()
+	{
+		Guard _(&lock_);
+
+		Thread::Cancel();
+
+		INVARIANT(fd_ > 0);
+		close(fd_);
+
+		/*
+		 * Since ThreadRoutine is opaque, we cannot assume anything about its construction
+		 * We demand that user clean up all timer events before stopping
+		 */
+		INVARIANT(timers_.empty());
+
+		return true;
+	}
+
+	bool ScheduleIn(const uint32_t msec, ThreadRoutine * r)
+	{
+		Guard _(&lock_);
+
+		timers_.insert(TimerEvent(GetTimeSpec(msec), r));
+
+		return SetTimer();
+	}
+
+
+private:
+
+	timespec GetTimeSpec(const uint32_t msec)
+	{
+		timespec t;
+
+		int status = clock_gettime(CLOCK_MONOTONIC, &t);
+
+		INVARIANT(status != -1);
+
+		t.tv_sec += MSEC_TO_SEC(msec);
+		t.tv_nsec += MSEC_TO_NSEC(msec % 1000);
+
+		/*
+		 * Max value for nsec is 999,999,999
+		 * Adjust the values accordingly
+		 */
+		t.tv_sec += t.tv_nsec / 1000000000;
+		t.tv_nsec = t.tv_nsec % 1000000000;
+
+		ASSERT(t.tv_nsec <= 999999999);
+
+		return t;
+	}
+
+	bool SetTimer()
+	{
+		ASSERT(lock_.IsOwner());
+		INVARIANT(!timers_.empty());
+
+		const timespec time = timers_.begin()->time_;
+
+		itimerspec t;
+
+		t.it_value.tv_sec = time.tv_sec;
+		t.it_value.tv_nsec = time.tv_nsec;
+		t.it_interval.tv_sec = t.it_interval.tv_nsec = 0;
+
+		DEBUG(path_) << "Resetting timer to "
+			     << time.tv_sec << "." << time.tv_nsec;
+
+		int status = timerfd_settime(fd_, /*flags=*/ TFD_TIMER_ABSTIME, &t,
+					     /*old-value=*/ NULL);
+
+		if (status == -1) {
+			ERROR(path_) << "Error setting timer. " << strerror(errno);
+			return false;
+		}
+
+		return true;
+	}
+
+	virtual void * ThreadMain() override;
+
+	struct TimerEvent
+	{
+		TimerEvent(const timespec time, ThreadRoutine * r)
+			: time_(time)
+			, r_(r)
+		{
+			INVARIANT(r_);
+		}
+
+		bool operator<(const TimerEvent & rhs)
+		{
+			return time_.tv_sec == rhs.time_.tv_sec ? time_.tv_nsec < rhs.time_.tv_nsec
+							        : time_.tv_sec < rhs.time_.tv_sec;
+		}
+
+		timespec time_;
+		ThreadRoutine * r_;
+	};
+
+	typedef multiset<TimerEvent> timer_set_t;
+
+	const string path_;
+	SpinMutex lock_;
+	int fd_;
+	timer_set_t timers_;
+};
+
 //....................................................................... NonBlockingThreadPool ....
 
 class NonBlockingThreadPool : public Singleton<NonBlockingThreadPool>
@@ -191,6 +336,7 @@ public:
 
 	NonBlockingThreadPool()
 		: nextTh_(0)
+		, timekeeper_("/NBTP/time-keeper")
 	{}
 
 	void Start(const uint32_t ncpu)
@@ -199,6 +345,19 @@ public:
 
 		Guard _(&lock_);
 
+		//
+		// Start timer
+		//
+		bool status = timekeeper_.Init();
+
+		if (!status) {
+			ERROR("/NBTP") << "Unable to start timekeeper." << strerror(errno);
+			DEADEND
+		}
+
+		//
+		// Start the threads
+		//
 		for (size_t i = 0; i < ncpu; ++i) {
 			NonBlockingThread * th = new NonBlockingThread("/th/" + STR(i), i);
 			threads_.push_back(th);
@@ -214,6 +373,8 @@ public:
 	void Shutdown()
 	{
 		Guard _(&lock_);
+
+		timekeeper_.Shutdown();
 		DestroyThreads();
 	}
 
@@ -248,6 +409,26 @@ public:
 		r = new (buf) FnPtr##n<TENUM(T,n)>(fn, TARG(t,n));				\
 		threads_[nextTh_++ % threads_.size()]->Push(r);					\
 	}											\
+												\
+	template<class _OBJ_, TDEF(T,n)>							\
+	void ScheduleIn(const uint32_t ms, _OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)),		\
+	                TPARAM(T,t,n))								\
+	{											\
+		ThreadRoutine * r;								\
+		void * buf = BufferPool::Alloc<MemberFnPtr##n<_OBJ_, TENUM(T,n)> >();		\
+		r = new (buf) MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));		\
+		INVARIANT(timekeeper_.ScheduleIn(ms, r));					\
+	}											\
+												\
+	template<TDEF(T,n)>									\
+	void ScheduleIn(const uint32_t ms, void (*fn)(TENUM(T,n)), TPARAM(T,t,n))		\
+	{											\
+		ThreadRoutine * r;								\
+		void * buf = BufferPool::Alloc<FnPtr##n<TENUM(T,n)> >();			\
+		r = new (buf) FnPtr##n<TENUM(T,n)>(fn, TARG(t,n));				\
+		INVARIANT(timekeeper_.ScheduleIn(ms, r));					\
+	}											\
+
 
 	NBTP_SCHEDULE(1) // void Schedule<T1>(...)
 	NBTP_SCHEDULE(2) // void Schedule<T1,T2>(...)
@@ -311,6 +492,7 @@ private:
 	threads_t threads_;
 	WaitCondition condExit_;
 	uint32_t nextTh_;
+	TimeKeeper timekeeper_;
 };
 
 } // namespace bblocks

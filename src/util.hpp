@@ -1,5 +1,4 @@
-#ifndef _IOCORE_UTIL_H_
-#define _IOCORE_UTIL_H_
+#pragma once
 
 #include <list>
 #include <queue>
@@ -72,11 +71,11 @@ public:
 
 	static uint64_t NowInMilliSec()
 	{
-		timeval tv;
-		int status = gettimeofday(&tv, /*tz=*/ NULL);
-		(void) status;
-		ASSERT(!status);
-		return tv.tv_sec * 1000 + (tv.tv_usec / 1000);
+		timespec t;
+		int status = clock_gettime(CLOCK_MONOTONIC, &t);
+		INVARIANT(status == 0);
+
+		return SEC_TO_MSEC(t.tv_sec) + NSEC_TO_MSEC(t.tv_nsec);
 	}
 };
 
@@ -335,6 +334,4 @@ private:
 	T * ptr_;
 };
 
-};
-
-#endif
+}
