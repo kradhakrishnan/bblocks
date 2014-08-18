@@ -3,23 +3,32 @@ TODO:
 Compiler/Exec
 =============
 
-- Get asan working
+- Get thread analyser working (hellgrind)
 
 Network
 =======
 
-- Get rpc working on proto-buf
-- Get rpc working on custom data parser (optional)
+- Implement UDP (udp)
+- Implement IPC (ipc)
 
 Actor
 =====
 
-- Define actor interfaces
-- Design and implement local actor -- Synchronized aka re-actor and concurrent aka pro-actor
-- Design and implement remote actor
+- Define actor interfaces (--)
+- Design and implement remote actor (--)
 - Design and implement actor management (read about it first)
+- Implement action mesh (action-mesh)
+
+Core
+====
+
+- Implement ThreadCtx cleanup (bblocks)
+- Implement Watchdog (bblocks)
+- Implement cancel for timers (bblocks)
 
 Documentation
 =============
 
-- API level doc - doxygen
+- API level doc - doxygen (doc)
+- Classify public and private headers (--)
+- Improve documentation for public headers (--)
