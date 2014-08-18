@@ -37,6 +37,7 @@ struct ThreadCtx
 	{
 		INFO(log_) << "Initializing buffer for " << tinst;
 
+		INVARIANT(!pool_);
 		INVARIANT(!tinst_);
 
 		tinst_ = tinst;

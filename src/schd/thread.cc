@@ -5,12 +5,22 @@ using namespace bblocks;
 
 Thread::~Thread()
 {
+	Destroy();
+}
+
+void
+Thread::Destroy()
+{
 	if (ctx_pool_) {
+
+		INFO(log_) << "Cleaning up thread context for " << (uint64_t) this;
+
 		/*
 		 * There is blanket assumption here that the thread is no longer running.
 		 * TODO: Add verification for the invariant
 		 */
 		ThreadCtx::Cleanup(ctx_pool_);
+		ctx_pool_ = NULL;
 	}
 
 	INFO(log_) << "Thread " << tid_ << " destroyed.";

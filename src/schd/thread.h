@@ -22,6 +22,7 @@ public:
 
 	Thread(const string & logPath)
 		: log_(logPath)
+		, tid_(-1)
 		, ctx_pool_(NULL)
 	{}
 
@@ -89,6 +90,8 @@ public:
 		int status = pthread_setaffinity_np(tid_, sizeof(cpuset), &cpuset);
 		INVARIANT(!status);
 	}
+
+	void Destroy();
 
 	static void * ThFn(void * args);
 

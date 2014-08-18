@@ -68,20 +68,19 @@ TimeKeeper::ThreadMain()
 		Guard _(&lock_);
 
 		INVARIANT(timers_.size() >= count);
+		INVARIANT(count == 1);
 
 		/*
 		 * Timers are ordered by the wait times, so we can start kicking off
 		 * starting from the front
 		 */
-		for (uint64_t i = 0; i < count; ++i) {
-			const TimerEvent & t = *timers_.begin();
-			DEBUG(path_) << "Dispatching for time "
-				     << t.time_.tv_sec << "." << t.time_.tv_nsec;
+		const TimerEvent & t = *timers_.begin();
+		DEBUG(path_) << "Dispatching for time "
+			     << t.time_.tv_sec << "." << t.time_.tv_nsec;
 
-			NonBlockingThreadPool::Instance().Schedule(t.r_);
+		NonBlockingThreadPool::Instance().Schedule(t.r_);
 
-			timers_.erase(timers_.begin());
-		}
+		timers_.erase(timers_.begin());
 
 		if (!timers_.empty()) {
 			INVARIANT(SetTimer());

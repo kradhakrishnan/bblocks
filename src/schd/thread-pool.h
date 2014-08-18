@@ -171,8 +171,18 @@ public:
 		, fd_(-1)
 	{}
 
+	~TimeKeeper()
+	{
+		INVARIANT(fd_ == -1);
+		INVARIANT(timers_.empty());
+	}
+
 	bool Init()
 	{
+		INVARIANT(fd_ == -1);
+		INVARIANT(timers_.empty());
+		INVARIANT(!ThreadCtx::tinst_);
+
 		/*
 		 * Create timer
 		 */
@@ -195,9 +205,16 @@ public:
 		Guard _(&lock_);
 
 		Thread::Cancel();
+	    	Thread::Stop();
+
+		/*
+		 * We have to destroy the thread so BBlocks can be restarted
+		 */
+		Thread::Destroy();
 
 		INVARIANT(fd_ > 0);
 		close(fd_);
+		fd_ = -1;
 
 		/*
 		 * Since ThreadRoutine is opaque, we cannot assume anything about its construction

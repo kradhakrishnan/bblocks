@@ -90,14 +90,10 @@ public:
 					    Time::NowInMilliSec(), /*arg=*/ i);
 		}
 
-		BBlocks::Wait();
-
-		t.Reset();
-
-		for (int i = MAX_MSG; i > 0; i--) {
-			BBlocks::ScheduleIn(/*msec=*/ i, &t, &TestBasicCase::Called,
-					    Time::NowInMilliSec(), /*arg=*/ i);
-		}
+		/*
+		 * We would like to test the reverse, unfortunately we cannot assert on increasing
+		 * order
+		 */
 
 		BBlocks::Wait();
 		BBlocks::Shutdown();
