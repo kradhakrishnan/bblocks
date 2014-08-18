@@ -25,44 +25,43 @@ Yes. There is no time frame for it though.
 ###### 4. How do I compile the code on Ubuntu ?
 
 ```
-~> make ubuntu-setup
-~> make clean
+$ git clone https://github.com/kradhakrishnan/bblocks.cc.git
+$ cd bblocks
+$ make ubuntu-setup
+$ make clean
 
 For debug build,
-~> make
+$ make
 
 For opt build,
-~> make OPT=enable
+$ make OPT=enable
 ```
 
 ###### 5. How do I install and use the library ?
 
 ```
 To install optimized build, (typically advised)
-make clean
-make OPT=enable DEBUG=disable install
+$ make clean
+$ make OPT=enable DEBUG=disable install
 
 To install debug build,
-make clean
-make install
+$ make clean
+$ make install
 ```
 
-Added -I/usr/lib/bblocks while compiling and -lbblocks -L/usr/lib while linking.
+Add -I/usr/lib/bblocks while compiling and -lbblocks -L/usr/lib while linking.
 
 ###### 6. How do I run tests ?
 
 ```
-To run all tests,
-~> make run-test
-
 To run basic unit tests,
-~> make run-unit-test
+$ make run-unit-test
 
 To run valgrind monitored unit tests,
-~> make run-valgrind-test
+$ make run-valgrind-test
 
 To run all test suite across all build type,
-~> make run-all-test
+$ make run-all-test
 ```
 
 ###### 7. What are some of the makefile options ?
