@@ -87,3 +87,5 @@ The code is avaiable for community consumption under LGPL v3. I am pretty open i
 ###### 9. Is bblocks available for other languages ?
 
 I would like to implement wrapper for cython. I would love to port it to Windows, but I don't see the usecase nor do I have the time for it.
+
+[ ![Codeship Status for kradhakrishnan/bblocks.cc](https://www.codeship.io/projects/f6119580-0966-0132-2a1d-16ad0627e247/status)](https://www.codeship.io/projects/31516)
