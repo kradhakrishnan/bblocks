@@ -53,12 +53,14 @@ ubuntu-setup: build-setup
 run-test: all run-unit-test run-valgrind-test
 
 run-unit-test: default
-	python test/unit/run-unit-test.py -b ../build -u test/unit/default-unit-tests \
-					  -o ../build/unit-test.log
+	python test/unit/run-unit-test.py -b $(OBJDIR) \
+					  -u test/unit/default-unit-tests \
+					  -o $(OBJDIR)/unit-test.log
 
 run-valgrind-test: default
-	python test/unit/run-unit-test.py -v -b ../build -u test/unit/default-unit-tests \
-					  -o ../build/unit-test.log
+	python test/unit/run-unit-test.py -v -b $(OBJDIR) \
+					  -u test/unit/default-unit-tests \
+					  -o $(OBJDIR)/unit-test.log
 
 run-flamebox: default
 	$(shell cd test/flamebox; \
@@ -70,7 +72,13 @@ calc-lcov: default
 		genhtml lcov.dat --output-directory lcov-html -q)
 
 run-all-test:
-	@scripts/run-checkin-test.sh
+	@scripts/run-all-test.sh
+
+run-codeship-test: default
+	python test/unit/run-unit-test.py -b $(OBJDIR) \
+					  -u test/unit/default-codeship-tests \
+					  -o $(OBJDIR)/codeship-test.log ; \
+	cat $(OBJDIR)/codeship-test.log
 
 #
 # Install
