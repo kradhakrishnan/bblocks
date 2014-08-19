@@ -1,4 +1,5 @@
 ![alt tag](https://github.com/kradhakrishnan/bblocks/blob/master/doc/bblocks.jpg?raw=true)
+![alt tag](https://www.codeship.io/projects/f6119580-0966-0132-2a1d-16ad0627e247/status)
 
 ### About the project
 
@@ -18,11 +19,7 @@ Currently, only Ubuntu is supported.
 
 Linux/Unix compatible variants like Solaris, Free BSD etc.
 
-###### 3. Is there plans to support Windows ?
-
-Yes. There is no time frame for it though.
-
-###### 4. How do I compile the code on Ubuntu ?
+###### 3. How do I compile the code on Ubuntu ?
 
 ```
 $ git clone https://github.com/kradhakrishnan/bblocks.cc.git
@@ -37,7 +34,7 @@ For opt build,
 $ make OPT=enable
 ```
 
-###### 5. How do I install and use the library ?
+###### 4. How do I install and use the library ?
 
 ```
 To install optimized build, (typically advised)
@@ -51,7 +48,7 @@ $ make install
 
 Add -I/usr/lib/bblocks while compiling and -lbblocks -L/usr/lib while linking.
 
-###### 6. How do I run tests ?
+###### 5. How do I run tests ?
 
 ```
 To run basic unit tests,
@@ -64,7 +61,7 @@ To run all test suite across all build type,
 $ make run-all-test
 ```
 
-###### 7. What are some of the makefile options ?
+###### 6. What are some of the makefile options ?
 
 ```
 ** release flags **
@@ -80,11 +77,11 @@ tsan = enable         Enable thread sanitizer
 asan = enable         Enable address sanitizer
 ```
 
-###### 8. Under what license is the code distributed ?
+###### 7. Under what license is the code distributed ?
 
 The code is avaiable for community consumption under LGPL v3. I am pretty open in the license, please mail me or leave a comment if you need other license arrangement for your computing needs.
 
-###### 9. Is bblocks available for other languages ?
+###### 8. Is bblocks available for other languages ?
 
 I would like to implement wrapper for cython. I would love to port it to Windows, but I don't see the usecase nor do I have the time for it.
 
@@ -92,4 +89,4 @@ I would like to implement wrapper for cython. I would love to port it to Windows
 
 Please click on the link below to check the status of the master.
 
-[ ![Codeship Status for kradhakrishnan/bblocks.cc](https://www.codeship.io/projects/f6119580-0966-0132-2a1d-16ad0627e247/status)](https://www.codeship.io/projects/31516)
+https://www.codeship.io/projects/31516
