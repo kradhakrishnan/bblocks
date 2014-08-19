@@ -88,4 +88,8 @@ The code is avaiable for community consumption under LGPL v3. I am pretty open i
 
 I would like to implement wrapper for cython. I would love to port it to Windows, but I don't see the usecase nor do I have the time for it.
 
+###### 9. Where can I check the status of continuous integration ?
+
+Please click on the link below to check the status of the master.
+
 [ ![Codeship Status for kradhakrishnan/bblocks.cc](https://www.codeship.io/projects/f6119580-0966-0132-2a1d-16ad0627e247/status)](https://www.codeship.io/projects/31516)
