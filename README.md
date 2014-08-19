@@ -16,7 +16,7 @@ Currently, only Ubuntu is supported.
 
 ###### 2. What are future OS support we can expect ?
 
-Support for RedHat can be expected soon.
+Linux/Unix compatible variants like Solaris, Free BSD etc.
 
 ###### 3. Is there plans to support Windows ?
 
