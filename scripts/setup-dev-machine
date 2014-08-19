@@ -1,12 +1,12 @@
 #
 # Install packages
 #
-apt-get install build-essential libboost-program-options-dev libboost-dev libaio-dev zlibc zlib1g-dev \
-                libtcmalloc-minimal4 libtcmalloc-minimal4-dbg \
-                valgrind fakeroot build-essential crash kexec-tools \
-		makedumpfile kernel-wedge tree bmon pyflakes sshpass \
-		libtsan0 libtsan0-dbg libasan0 libasan0-dbg \
-		clang doxygen cython net-tools
+sudo apt-get install build-essential libboost-program-options-dev libboost-dev libaio-dev zlibc zlib1g-dev \
+                     libtcmalloc-minimal4 libtcmalloc-minimal4-dbg \
+                     valgrind fakeroot build-essential crash kexec-tools \
+		     makedumpfile kernel-wedge tree bmon pyflakes sshpass \
+		     libtsan0 libtsan0-dbg libasan0 libasan0-dbg \
+		     clang doxygen cython net-tools
 
 if [ $? -ne 0 ]; then
     echo 'Error ! Failed to install packages'
