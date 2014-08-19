@@ -70,7 +70,6 @@ calc-lcov: default
 		genhtml lcov.dat --output-directory lcov-html -q)
 
 run-all-test:
-	dpkg -l | grep python
 	@scripts/run-checkin-test.sh
 
 #
