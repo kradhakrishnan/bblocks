@@ -7,7 +7,7 @@ import os
 import subprocess
 import time
 
-sys.path.append("/usr/lib/python2.6/lib-dynload/")
+sys.path.append("/usr/lib/python2.7/lib-dynload/")
 
 
 #
