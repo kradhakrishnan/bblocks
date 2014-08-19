@@ -88,7 +88,7 @@ The code is avaiable for community consumption under LGPL v3. I am pretty open i
 
 I would like to implement wrapper for cython. I would love to port it to Windows, but I don't see the usecase nor do I have the time for it.
 
-###### 9. Where can I check the status of continuous integration ?
+###### 9. Where can I check the status of latest build ?
 
 Please click on the link below to check the status of the master.
 
