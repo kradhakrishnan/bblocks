@@ -1,5 +1,4 @@
-#ifndef _CORE_NET_RPC_H_
-#define _CORE_NET_RPC_H_
+#pragma once
 
 #include "util.hpp"
 #include "buf/buffer.h"
@@ -7,11 +6,11 @@
 namespace bblocks
 {
 
-// .................................................................................... RPCData ....
+// .............................................................................. Serializeable ....
 
-struct RPCData
+struct Serializeable
 {
-	virtual ~RPCData() {}
+	virtual ~Serializeable() {}
 
 	/**
 	 *
@@ -40,7 +39,7 @@ struct RPCData
 // ..................................................................................... Int<T> ....
 
 template<class T>
-struct Int : RPCData
+struct Int : Serializeable
 {
 	explicit Int(const T v = 0) : v_(v) {}
 
@@ -67,7 +66,7 @@ struct Int : RPCData
 // ............................................................................... Int<uint8_t> ....
 
 template<>
-struct Int<uint8_t> : RPCData
+struct Int<uint8_t> : Serializeable
 {
 	explicit Int<uint8_t>(const uint8_t v = 0) : v_(v) {}
 
@@ -98,7 +97,7 @@ typedef Int<uint64_t> UInt64;
 // ................................................................................... Raw<int> ....
 
 template<int SIZE>
-struct Raw : RPCData
+struct Raw : Serializeable
 {
 	explicit Raw(const uint8_t v[] = NULL)
 	{
@@ -132,7 +131,7 @@ struct Raw : RPCData
 
 // ..................................................................................... String ....
 
-struct String : RPCData
+struct String : Serializeable
 {
 	explicit String(const string & v = string()) : v_(v) {}
 
@@ -155,7 +154,7 @@ struct String : RPCData
 // .................................................................................... List<T> ....
 
 template<class T>
-struct List : RPCData
+struct List : Serializeable
 {
 	List(const vector<T> & v = vector<T>()) : v_(v) {}
 
@@ -198,89 +197,4 @@ struct List : RPCData
 	vector<T> v_;
 };
 
-// .................................................................................. RPCPacket ....
-
-struct RPCPacket : RPCData
-{
-	RPCPacket(const uint8_t opcode, const uint8_t opver = 0)
-		: opcode_(opcode), opver_(opver), size_(Size()), cksum_(0)
-	{}
-
-	virtual void Encode(IOBuffer & buf, size_t & pos)
-	{
-		INVARIANT(buf.Size() >= Size());
-
-		opcode_.Encode(buf, pos);
-		opver_.Encode(buf, pos);
-		size_.Encode(buf, pos);
-		cksum_.Encode(buf, pos);
-	}
-
-	virtual void Encode(IOBuffer & buf) = 0;
-
-	virtual void Decode(IOBuffer & buf, size_t & pos)
-	{
-		INVARIANT(buf.Size() >= Size());
-
-		opcode_.Decode(buf, pos);
-		opver_.Decode(buf, pos);
-		size_.Decode(buf, pos);
-		cksum_.Decode(buf, pos);
-	}
-
-	virtual void Decode(IOBuffer & buf) = 0;
-
-	virtual size_t Size() const
-	{
-		return opcode_.Size()
-			+ opver_.Size()
-			+ size_.Size()
-			+ cksum_.Size();
-	}
-
-	void EncodePacketHash(IOBuffer & buf)
-	{
-		INVARIANT(cksum_.Get() == 0);
-
-		const size_t off = opcode_.Size() + opver_.Size() + size_.Size();
-
-		cksum_.Set(Adler32::Calc(buf.Ptr(), Size()));
-		buf.UpdateInt(cksum_.Get(), off);
-	}
-
-	bool IsPacketValid(IOBuffer & buf)
-	{
-		INVARIANT(buf.Size() >= Size());
-
-		const size_t off = opcode_.Size() + opver_.Size() + size_.Size();
-
-		/* 
-		 * Fetch checksum from buffer
-		 */
-		uint32_t ecksum;
-		buf.ReadInt(ecksum, off);
-		INVARIANT(ecksum == cksum_.Get());
-
-		/*
-		 * calc checksum on the buffer
-		 */
-		buf.UpdateInt(/*val=*/ (uint32_t) 0, off);
-		uint32_t acksum = Adler32::Calc(buf.Ptr(), Size());
-
-		/*
-		 * fix the buffer
-		 */
-		buf.UpdateInt(ecksum, off);
-
-		return ecksum == acksum;
-	}
-
-	UInt8 opcode_;
-	UInt8 opver_;
-	UInt16 size_;
-	UInt32 cksum_;
-};
-
 }
-
-#endif

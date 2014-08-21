@@ -1,4 +1,4 @@
-#include "net/rpc/rpc-data.h"
+#include "net/event-bus/data.hpp"
 
 using namespace bblocks;
 
