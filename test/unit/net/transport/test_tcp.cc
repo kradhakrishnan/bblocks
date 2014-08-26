@@ -19,7 +19,7 @@ public:
 
     typedef BasicTCPTest This;
 
-    static const uint32_t MAX_ITERATION = 20;
+    static const uint32_t MAX_ITERATION = 200;
     static const uint32_t WBUFFERSIZE = 4 * 1024;  // 4 KiB
     static const uint32_t TIMEINTERVAL_MS = 1 * 1000;   // 1 s
 

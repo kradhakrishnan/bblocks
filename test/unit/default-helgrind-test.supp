@@ -1,0 +1,34 @@
+{
+   epollsupp
+   Helgrind:Race
+   fun:_ZN7bblocks5EpollD1Ev
+   fun:_ZN7bblocks5EpollD0Ev
+   fun:_ZNSt15_Sp_counted_ptrIPN7bblocks5EpollELN9__gnu_cxx12_Lock_policyE2EE10_M_disposeEv
+   fun:_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv
+   fun:_ZNSt14__shared_countILN9__gnu_cxx12_Lock_policyE2EED1Ev
+   fun:_ZNSt12__shared_ptrIN7bblocks5EpollELN9__gnu_cxx12_Lock_policyE2EED1Ev
+   fun:_ZNSt10shared_ptrIN7bblocks5EpollEED1Ev
+   fun:_ZSt8_DestroyISt10shared_ptrIN7bblocks5EpollEEEvPT_
+   fun:_ZNSt12_Destroy_auxILb0EE9__destroyIPSt10shared_ptrIN7bblocks5EpollEEEEvT_S7_
+   fun:_ZSt8_DestroyIPSt10shared_ptrIN7bblocks5EpollEEEvT_S5_
+   fun:_ZSt8_DestroyIPSt10shared_ptrIN7bblocks5EpollEES3_EvT_S5_RSaIT0_E
+   fun:_ZNSt6vectorISt10shared_ptrIN7bblocks5EpollEESaIS3_EE15_M_erase_at_endEPS3_
+}
+
+{
+   epollsupp
+   drd:ConflictingAccess
+   fun:_ZN7bblocks5EpollD1Ev
+   fun:_ZN7bblocks5EpollD0Ev
+   fun:_ZNSt15_Sp_counted_ptrIPN7bblocks5EpollELN9__gnu_cxx12_Lock_policyE2EE10_M_disposeEv
+   fun:_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv
+   fun:_ZNSt14__shared_countILN9__gnu_cxx12_Lock_policyE2EED1Ev
+   fun:_ZNSt12__shared_ptrIN7bblocks5EpollELN9__gnu_cxx12_Lock_policyE2EED1Ev
+   fun:_ZNSt10shared_ptrIN7bblocks5EpollEED1Ev
+   fun:_ZSt8_DestroyISt10shared_ptrIN7bblocks5EpollEEEvPT_
+   fun:_ZNSt12_Destroy_auxILb0EE9__destroyIPSt10shared_ptrIN7bblocks5EpollEEEEvT_S7_
+   fun:_ZSt8_DestroyIPSt10shared_ptrIN7bblocks5EpollEEEvT_S5_
+   fun:_ZSt8_DestroyIPSt10shared_ptrIN7bblocks5EpollEES3_EvT_S5_RSaIT0_E
+   fun:_ZNSt6vectorISt10shared_ptrIN7bblocks5EpollEESaIS3_EE15_M_erase_at_endEPS3_
+}
+

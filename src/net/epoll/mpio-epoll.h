@@ -27,10 +27,8 @@ public:
 
 	virtual ~MultiPathEpoll()
 	{
-		{
-			Guard _(&lock_);
-			epolls_.clear();
-		}
+		Guard _(&lock_);
+		epolls_.clear();
 	}
 
 	virtual bool Add(const fd_t fd, const uint32_t events, const fn_t & fn) override

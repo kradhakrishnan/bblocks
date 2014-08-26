@@ -126,15 +126,14 @@ public:
 
 	static const unsigned int MAX_SPIN = 10000;
 
-	InQueue(const string & name) : log_("/q/" + name), maxSpin_(1000) {}
+	InQueue(const string & name) : log_("/q/" + name), lock_(name), maxSpin_(1000) {}
 
 	inline void Push(T * t)
 	{
 		lock_.Lock();
 		q_.Push(t);
-		lock_.Unlock();
-
 		conditionEmpty_.Signal();
+		lock_.Unlock();
 	}
 
 	inline T * Pop()

@@ -15,12 +15,23 @@ sys.path.append("/usr/lib/python2.7/lib-dynload/")
 #
 _debug = None
 _valgrind = False
-_valgrindsupp = ""
+_helgrind = False
+_drd = False
+_valgrindsupp = None
+_helgrindsupp = None
 _verbose = False
 
 def EnableValgrind():
 	global _valgrind
 	_valgrind = True
+
+def EnableHelgrind():
+    global _helgrind
+    _helgrind = True
+
+def EnableDRD():
+    global _drd
+    _drd = True
 
 #
 # Debug - Print and flush for log coherence
@@ -32,11 +43,11 @@ def InitDebug(filename):
 def Debug(str):
 	print(str)
 	sys.stdout.flush()
-	_debug.write("%s\n" % str)
+	_debug.write("$ %s\n" % str)
 
 def Verbose(str):
 	if _verbose:
-		print("%s\n" % str)
+		print("$ %s\n" % str)
 
 #
 # XML parsing helpers
@@ -73,25 +84,52 @@ def Exec(test, timeout):
 		    "--track-origins=yes",
 		    "-v",
 		    test ]
+	elif _helgrind:
+	    cmd = [ "timeout",
+		    "--kill-after=%d" % timeout,
+		    "%ds" % timeout,
+		    "valgrind",
+		    "--tool=helgrind",
+		    "--error-exitcode=255",
+		    "--suppressions=%s" % _helgrindsupp,
+		    "--gen-suppressions=all",
+		    "-v",
+		    test ]
+	elif _drd:
+	    cmd = [ "timeout",
+		    "--kill-after=%d" % timeout,
+		    "%ds" % timeout,
+		    "valgrind",
+		    "--tool=drd",
+		    "--error-exitcode=255",
+		    "--gen-suppressions=all",
+		    "-v",
+		    test ]
 	else:
 	    cmd = [ "timeout",  "--kill-after=%d" % timeout, "%ds" % timeout,
 		    test ]
 
-	Verbose(">> Executing command : %s" % cmd)
+	Verbose("Executing command : %s" % cmd)
 
 	status = subprocess.call(args=cmd, stdin=None, stdout=_debug,
 				 stderr=_debug)
 
-	Verbose(">> exit stauts = %d" % status)
+	Verbose("exit stauts = %d" % status)
 
 	if status == 0:
 		return True
 
 	if status == 124:
-		Debug("TIMEOUT after %d sec**" % timeout)
+		Debug("** TIMEOUT after %d sec **" % timeout)
 
 	if _valgrind and status == 255:
-		Debug("VALGRIND FAILURE")
+		Debug("** VALGRIND FAILURE **")
+
+	if _helgrind and status == 255:
+		Debug("** HELGRIND FAILURE **")
+
+	if _drd and status == 255:
+		Debug("** DRD FAILURE **")
 
 	return False
 
@@ -108,6 +146,10 @@ oparser.add_option("-b", "--build-dir", action="store", type="string", dest="bui
 oparser.add_option("-o", "--output", action="store", type="string", dest="outfile")
 # -v or --valgrind
 oparser.add_option("-v", "--valgrind", action="store_true", default=False, dest="valgrind")
+# --helgrind
+oparser.add_option("--helgrind", action="store_true", default=False, dest="helgrind")
+# --drd
+oparser.add_option("--drd", action="store_true", default=False, dest="drd")
 
 (options, args) = oparser.parse_args()
 
@@ -118,10 +160,16 @@ if not options.filename or not options.outfile or not options.builddir:
 InitDebug(options.outfile)
 
 if options.valgrind:
-	Debug("> Enabling valgrind")
+	Verbose("Enabling valgrind")
 	EnableValgrind()
-
-_valgrindsupp = "%s.supp" % options.filename
+	_valgrindsupp = "%s.supp" % options.filename
+elif options.helgrind:
+	Verbose("Enabling helgrind")
+	EnableHelgrind()
+        _helgrindsupp = "%s.supp" % options.filename
+elif options.drd:
+	Verbose("Enableing DRD")
+	EnableDRD()
 
 Debug("[ %s ]" % options.filename)
 
@@ -150,10 +198,10 @@ for test in tests:
 	elapsedsec = time.time() - start_time
 
 	if status:
-		Debug("%d) %s SUCCESS (%.2f sec/%d sec)" % (id, name, elapsedsec, timeout))
+		Debug("%d)\t%s\tSUCCESS\t(%.2f sec/%d sec)" % (id, name, elapsedsec, timeout))
 		success += 1
 	else:
-		Debug("%d) %s FAILED (%.2f sec/%d sec)" % (id, name, elapsedsec, timeout))
+		Debug("%d)\t%s\tFAILED\t(%.2f sec/%d sec)" % (id, name, elapsedsec, timeout))
 		failedTests.append(name)
 		failed += 1
 

@@ -1,6 +1,19 @@
 include ${SUBDIR:%=%/Makefile}
 
 #
+# spin = disable
+#
+ifdef spin
+    ifeq ($(spin), disable)
+	BUILD_CCFLAGS += -DDISABLE_SPINNING
+    else
+	$(error Unknown option for spin)
+    endif
+
+    $(info ** spin disabled)
+endif
+
+#
 # tsan=enable
 # 
 ifdef tsan

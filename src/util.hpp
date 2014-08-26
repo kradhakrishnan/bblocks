@@ -77,6 +77,15 @@ public:
 
 		return SEC_TO_MSEC(t.tv_sec) + NSEC_TO_MSEC(t.tv_nsec);
 	}
+
+	static uint64_t NowInMicroSec()
+	{
+		timespec t;
+		int status = clock_gettime(CLOCK_MONOTONIC, &t);
+		INVARIANT(status == 0);
+
+		return SEC_TO_MICROSEC(t.tv_sec) + NSEC_TO_MICROSEC(t.tv_nsec);
+	}
 };
 
 //..................................................................................... Adler32 ....

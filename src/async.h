@@ -121,8 +121,9 @@ struct CompletionQueue##TSUFFIX : CHandle							\
 												\
 	~CompletionQueue##TSUFFIX()								\
 	{											\
+		Guard _(&lock_);								\
 		INVARIANT(q_.empty());								\
-		INVARIANT(!inprogress_);							\
+		while(inprogress_);								\
 	}											\
 												\
 	void Wakeup(TPARAM(T,t,n))								\
@@ -400,7 +401,7 @@ class AsyncWait
 {
 public:
 
-	AsyncWait() : lock_(/*isRecursive=*/ false), done_(false) {}
+	AsyncWait() : lock_("/asyncwait", /*isRecursive=*/ false), done_(false) {}
 
 	void Done(T t)
 	{

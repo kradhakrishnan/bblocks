@@ -5,6 +5,8 @@
 using namespace bblocks;
 using namespace std;
 
+string _log = "test/schd/test_th_message";
+
 //................................................................................ test_handler ....
 
 class ICallee
@@ -23,11 +25,11 @@ public:
 
     void Handle(int val)
     {
-        cout << "Got handle " << count_ << endl;
+        DEBUG(_log) << "Got handle " << count_;
+
         ASSERT(val == 0xfeaf);
-        if (++count_ == 100) {
-            BBlocks::Wakeup();
-        }
+
+	if (++count_ == 100) BBlocks::Wakeup();
     }
 
     atomic<int> count_;
@@ -57,6 +59,7 @@ test_handler()
 
     Callee callee;
     Caller caller(&callee);
+
     for (int i = 0; i < 100; ++i) {
         BBlocks::Schedule(&caller, &Caller::Start, /*val=*/ (int) 0xfeaf);
     }

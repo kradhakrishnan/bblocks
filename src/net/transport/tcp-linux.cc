@@ -24,6 +24,8 @@ TCPChannel::TCPChannel(const string & name, int fd, FdPoll & epoll)
 
 TCPChannel::~TCPChannel()
 {
+    Guard _(&lock_);
+
     VERBOSE(name_) << statReadSize_;
     VERBOSE(name_) << statWriteSize_;
 }
@@ -84,6 +86,8 @@ TCPChannel::Stop(const StopDoneHandle & h)
 {
 	ASSERT(h)
 
+        Guard _(&lock_);
+
 	const bool status = epoll_.Remove(fd_);
 	INVARIANT(status);
 
@@ -98,15 +102,13 @@ TCPChannel::Stop(const StopDoneHandle & h)
 void
 TCPChannel::BarrierDone(int)
 {
-	{
-		Guard _(&lock_);
+	Guard _(&lock_);
 
-		Close();
-		FailOps();
+	Close();
+	FailOps();
 
-		INVARIANT(wpending_.empty());
-		INVARIANT(!rpending_.h_);
-	}
+	INVARIANT(wpending_.empty());
+	INVARIANT(!rpending_.h_);
 
 	stoph_.Wakeup(/*status=*/ 0);
 	stoph_ = NULL;
@@ -115,6 +117,8 @@ TCPChannel::BarrierDone(int)
 void
 TCPChannel::Close()
 {
+        ASSERT(lock_.IsOwner());
+
 	DEBUG(name_) << "Closing channel " << fd_;
 
 	::shutdown(fd_, SHUT_RDWR);
@@ -449,6 +453,7 @@ TCPServer::Stop(const StopDoneHandle & h)
 void
 TCPServer::BarrierDone(StopDoneHandle h)
 {
+        Guard _(&lock_);
 	h.Wakeup(/*status=*/ 0);
 }
 
@@ -457,6 +462,8 @@ TCPServer::BarrierDone(StopDoneHandle h)
 int
 TCPConnector::Connect(const SocketAddress & addr, const ConnectDoneHandle & h)
 {
+        bool ok;
+
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	INVARIANT(fd >= 0);
 
@@ -479,14 +486,13 @@ TCPConnector::Connect(const SocketAddress & addr, const ConnectDoneHandle & h)
 	status = connect(fd, (sockaddr *) &addr.RemoteAddr(), sizeof(sockaddr_in));
 	INVARIANT(status == -1 && errno == EINPROGRESS);
 
-	{
-		Guard _(&lock_);
-		INVARIANT(pendingConnects_.find(fd) == pendingConnects_.end());
-		const bool ok = pendingConnects_.insert(make_pair(fd, h)).second;
-		INVARIANT(ok);
-	}
+	Guard _(&lock_);
 
-	const bool ok = epoll_.Add(fd, EPOLLOUT, intr_fn(this, &TCPConnector::HandleFdEvent));
+	INVARIANT(pendingConnects_.find(fd) == pendingConnects_.end());
+	ok = pendingConnects_.insert(make_pair(fd, h)).second;
+	INVARIANT(ok);
+
+	ok = epoll_.Add(fd, EPOLLOUT, intr_fn(this, &TCPConnector::HandleFdEvent));
 	INVARIANT(ok);
 
 	return 0;
@@ -496,6 +502,8 @@ void
 TCPConnector::HandleFdEvent(int fd, uint32_t events)
 {
 	INFO(name_) << "connected: events=" << events << " fd=" << fd;
+
+	Guard _(&lock_);
 
 	/*
 	 * Remove the connector from polling list
@@ -508,14 +516,11 @@ TCPConnector::HandleFdEvent(int fd, uint32_t events)
 	 */
 	ConnectDoneHandle h;
 
-	{
-		Guard _(&lock_);
 
-		auto it = pendingConnects_.find(fd);
-		INVARIANT(it != pendingConnects_.end());
-		h = it->second;
-		pendingConnects_.erase(it);
-	}
+	auto it = pendingConnects_.find(fd);
+	INVARIANT(it != pendingConnects_.end());
+	h = it->second;
+	pendingConnects_.erase(it);
 
 	/*
 	 * Notify client

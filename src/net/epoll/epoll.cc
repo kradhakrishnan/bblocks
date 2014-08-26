@@ -45,34 +45,30 @@ Epoll::~Epoll()
 	Thread::Cancel();
 	Thread::Stop();
 
-	{
-		/*
-		 * Empty trash can (fds marked for deletion)
-		 */
-		Guard _(&lock_);
-		INVARIANT(fdmap_.empty());
-		EmptyTrashcan();
-	}
+	/*
+	 * Empty trash can (fds marked for deletion)
+	 */
+	Guard _(&lock_);
+
+	INVARIANT(fdmap_.empty());
+	EmptyTrashcan();
 }
 
 bool
 Epoll::Add(const fd_t fd, const uint32_t events, const fn_t & chandler)
 {
-	ASSERT(!lock_.IsOwner());
+	Guard _(&lock_);
 
 	DEBUG(log_) << "Add. fd:" << fd << ", events:" << events;
 
 	FDRecord * fdrec = new FDRecord(fd, events, chandler);
 	INVARIANT(fdrec);
 
-	{
-		/*
-		 * Insert to fdmap
-		 */
-		Guard _(&lock_);
-		INVARIANT(fdmap_.find(fd) == fdmap_.end());
-		fdmap_.insert(make_pair(fd, fdrec));
-	}
+	/*
+	 * Insert to fdmap
+	 */
+	INVARIANT(fdmap_.find(fd) == fdmap_.end());
+	fdmap_.insert(make_pair(fd, fdrec));
 
 	/*
 	 * Notify the kernel
@@ -99,29 +95,24 @@ Epoll::Add(const fd_t fd, const uint32_t events, const fn_t & chandler)
 bool
 Epoll::Remove(const fd_t fd)
 {
-	ASSERT(!lock_.IsOwner());
+	Guard _(&lock_);
 
 	DEBUG(log_) << "Remove. fd:" << fd;
 
-	FDRecord * fdrec = NULL;
+	/*
+	 * Remove from fdmap
+	 */
 
-	{
-		/*
-		 * Remove from fdmap
-		 */
-		Guard _(&lock_);
+	auto it = fdmap_.find(fd);
+	INVARIANT(it != fdmap_.end() && it->second);
+	FDRecord * fdrec = it->second;
+	fdmap_.erase(it);
 
-		auto it = fdmap_.find(fd);
-		INVARIANT(it != fdmap_.end() && it->second);
-		fdrec = it->second;
-		fdmap_.erase(it);
-
-		/*
-		 * mute callbacks
-		 */
-		INVARIANT(!fdrec->mute_);
-		fdrec->mute_ = true;
-	}
+	/*
+	 * mute callbacks
+	 */
+	INVARIANT(!fdrec->mute_);
+	fdrec->mute_ = true;
 
 	/*
 	 * Notify the kernel
@@ -134,15 +125,12 @@ Epoll::Remove(const fd_t fd)
 		return false;
 	}
 
-	{
-		/*
-		 * Push into trash can. We don't delete the fd record here because we have
-		 * tagged them as completion token with the epoll. We safely remove after
-		 * being woken up by the epoll.
-		 */
-		Guard _(&lock_);
-		trashcan_.push_back(fdrec);
-	}
+	/*
+	 * Push into trash can. We don't delete the fd record here because we have
+	 * tagged them as completion token with the epoll. We safely remove after
+	 * being woken up by the epoll.
+	 */
+	trashcan_.push_back(fdrec);
 
 	return true;
 }
@@ -150,23 +138,19 @@ Epoll::Remove(const fd_t fd)
 bool
 Epoll::AddEvent(const fd_t fd, const uint32_t events)
 {
-	ASSERT(!lock_.IsOwner());
 	ASSERT(events & (EPOLLIN | EPOLLOUT));
+
+	Guard _(&lock_);
 
 	DEBUG(log_) << "AddEvent. fd:" << fd << " events:" << events;
 
-	FDRecord * fdrec = NULL;
-
-	{
-		/*
-		 * Update fdmap
-		 */
-		Guard _(&lock_);
-		auto it = fdmap_.find(fd);
-		INVARIANT(it != fdmap_.end() && it->second);
-		fdrec = it->second;
-		fdrec->events_ |= events;
-	}
+	/*
+	 * Update fdmap
+	 */
+	auto it = fdmap_.find(fd);
+	INVARIANT(it != fdmap_.end() && it->second);
+	FDRecord * fdrec = it->second;
+	fdrec->events_ |= events;
 
 	/*
 	 * Notify the kernel
@@ -187,23 +171,19 @@ Epoll::AddEvent(const fd_t fd, const uint32_t events)
 bool
 Epoll::RemoveEvent(const fd_t fd, const uint32_t events)
 {
-	ASSERT(!lock_.IsOwner());
 	ASSERT(events & (EPOLLIN | EPOLLOUT));
+
+	Guard _(&lock_);
 
 	DEBUG(log_) << "RemoveEvent. fd=" << fd << " events=" << events;
 
-	FDRecord * fdrec = NULL;
-
-	{
-		/*
-		 * Update fdmap
-		 */
-		Guard _(&lock_);
-		auto it = fdmap_.find(fd);
-		INVARIANT(it != fdmap_.end() && it->second);
-		fdrec = it->second;
-		fdrec->events_ &= ~events;
-	}
+	/*
+	 * Update fdmap
+	 */
+	auto it = fdmap_.find(fd);
+	INVARIANT(it != fdmap_.end() && it->second);
+	FDRecord * fdrec = it->second;
+	fdrec->events_ &= ~events;
 
 	/*
 	 * Notify the kernel
@@ -243,11 +223,11 @@ Epoll::ThreadMain()
 	events.resize(MAX_EPOLL_EVENT);
 
 	while (true) {
-		int nfds = epoll_wait(fd_, &events[0], MAX_EPOLL_EVENT, /*ms=*/ -1);
+		int nfds = epoll_wait(fd_, &events[0], MAX_EPOLL_EVENT, /*timeout=*/ -1);
 
-		DEBUG(log_) << "Woke up. nfds=" << nfds;
+		DEBUG(log_) << "Woke up. nfds=" << nfds << " errno=" << errno;
 
-		if (nfds == -1) {
+		if (nfds <= 0) {
 			if (errno == EBADF) {
 				/*
 				 * epoll is closed
@@ -256,10 +236,7 @@ Epoll::ThreadMain()
 				break;
 			}
 
-			if (errno == EINTR) {
-				/*
-				 * interrupted, retry
-				 */
+			if (errno == 0 || errno == EINTR || errno == EAGAIN) {
 				continue;
 			}
 
@@ -267,8 +244,6 @@ Epoll::ThreadMain()
 			// We assume this is fatal
 			DEADEND
 		}
-
-		DisableThreadCancellation();
 
 		DEFENSIVE_CHECK(nfds > 0);
 
@@ -299,8 +274,6 @@ Epoll::ThreadMain()
 		 */
 		Guard _(&lock_);
 		EmptyTrashcan();
-
-		EnableThreadCancellation();
 	}
 
 	return NULL;

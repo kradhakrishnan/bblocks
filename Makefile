@@ -8,7 +8,6 @@ SUBDIR = src/			\
 
 clean: build-teardown
 
-
 #
 # Unfortunately, I need this flag to pass compilation of boost library
 # TODO: Get rid of this please
@@ -49,31 +48,54 @@ ubuntu-setup: build-setup
 #
 # Tests
 #
-
 run-test: all run-unit-test run-valgrind-test
 
 run-unit-test: default
-	python test/unit/run-unit-test.py -b $(OBJDIR) \
-					  -u test/unit/default-unit-tests \
-					  -o $(OBJDIR)/unit-test.log
+	@echo " TEST		Unit"
+	@python test/unit/run-unit-test.py --build-dir $(OBJDIR) \
+					   --unit-test test/unit/default-unit-tests \
+					   --output $(OBJDIR)/unit-test.log
 
 run-valgrind-test: default
-	python test/unit/run-unit-test.py -v -b $(OBJDIR) \
-					  -u test/unit/default-unit-tests \
-					  -o $(OBJDIR)/unit-test.log
+	@echo " TEST		Valgrind"
+	@python test/unit/run-unit-test.py --valgrind --build-dir $(OBJDIR) \
+					   --unit-test test/unit/default-unit-tests \
+					   --output $(OBJDIR)/unit-test.log
 
+run-helgrind-test: default
+	@echo " TEST		Helgrind ** The tests won't succeed if spin=disable is not specified **"
+	@python test/unit/run-unit-test.py --helgrind --build-dir $(OBJDIR) \
+					   --unit-test test/unit/default-helgrind-test \
+					   --output $(OBJDIR)/unit-test.log
+
+run-drd-test: default
+	@echo " TEST		DRD ** The tests won't succeed if spin=disable is not specified **"
+	@python test/unit/run-unit-test.py --drd --build-dir $(OBJDIR) \
+					   --unit-test test/unit/default-helgrind-test \
+					   --output $(OBJDIR)/unit-test.log
+
+run-all-test:
+	@echo " TEST		ALL"
+	@scripts/run-all-test.sh
+
+#
+# Flamebox
+#
 run-flamebox: default
 	$(shell cd test/flamebox; \
 	        python run-flamebox.py --config flamebox.config --output ../../..)
 
+#
+# Code coverage
+#
 calc-lcov: default
 	$(shell cd ../build; \
 		lcov -q --capture --directory . --output-file lcov.dat -b ../bblocks; \
 		genhtml lcov.dat --output-directory lcov-html -q)
 
-run-all-test:
-	@scripts/run-all-test.sh
-
+#
+# Codeship tests/scripts
+#
 run-codeship-test: default
 	python test/unit/run-unit-test.py -b $(OBJDIR) \
 					  -u test/unit/default-codeship-tests \

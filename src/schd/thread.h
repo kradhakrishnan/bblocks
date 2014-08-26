@@ -60,7 +60,9 @@ public:
 
 	void Cancel()
 	{
-		int status = pthread_cancel(tid_);
+		int status;
+
+		status = pthread_cancel(tid_);
 		INVARIANT(!status);
 	}
 

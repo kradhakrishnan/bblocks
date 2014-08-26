@@ -41,7 +41,7 @@
 	abort();\
 }
 
-#ifdef DEBUG_BUILD
+#if defined(DEBUG_BUILD)
 #define ASSERT(x) {\
 	if (!bool(x)) {\
 		STD_ERROR << "ASSERT: " << #x << " . "\
@@ -74,8 +74,12 @@
 
 #define MSEC_TO_SEC(x) ((x) / (double) 1000)
 #define MSEC_TO_NSEC(x) ((x) * 1000 * 1000)
+
 #define SEC_TO_MSEC(x) ((x) * 1000)
+#define SEC_TO_MICROSEC(x) ((x) * 1000 * 1000)
+
 #define NSEC_TO_MSEC(x) ((x) / (double) 1000000)
+#define NSEC_TO_MICROSEC(x) ((x) / (double) 1000)
 
 /*
  * Compile helpers

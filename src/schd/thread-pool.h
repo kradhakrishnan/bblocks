@@ -352,7 +352,9 @@ public:
 
 
 	NonBlockingThreadPool()
-		: nextTh_(0)
+		: lock_("/NBTP/lock")
+		, waitLock_("/NBTP/wait")
+		, nextTh_(0)
 		, timekeeper_("/NBTP/time-keeper")
 	{}
 
@@ -389,22 +391,20 @@ public:
 
 	void Shutdown()
 	{
-		Guard _(&lock_);
-
 		timekeeper_.Shutdown();
 		DestroyThreads();
 	}
 
 	void Wakeup()
 	{
-		Guard _(&lock_);
+		Guard _(&waitLock_);
 		condExit_.Broadcast();
 	}
 
 	void Wait()
 	{
-		Guard _(&lock_);
-		condExit_.Wait(&lock_);
+		Guard _(&waitLock_);
+		condExit_.Wait(&waitLock_);
 	}
 
 	#define NBTP_SCHEDULE(n)								\
@@ -415,6 +415,7 @@ public:
 		ThreadRoutine * r;								\
 		void * buf = BufferPool::Alloc<MemberFnPtr##n<_OBJ_, TENUM(T,n)> >();		\
 		r = new (buf) MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));		\
+		Guard _(&lock_);								\
 		threads_[nextTh_++ % threads_.size()]->Push(r);					\
 	}											\
 												\
@@ -424,6 +425,7 @@ public:
 		ThreadRoutine * r;								\
 		void * buf = BufferPool::Alloc<FnPtr##n<TENUM(T,n)> >();			\
 		r = new (buf) FnPtr##n<TENUM(T,n)>(fn, TARG(t,n));				\
+		Guard _(&lock_);								\
 		threads_[nextTh_++ % threads_.size()]->Push(r);					\
 	}											\
 												\
@@ -454,6 +456,7 @@ public:
 
 	void Schedule(ThreadRoutine * r)
 	{
+		Guard _(&lock_);
 		threads_[nextTh_++ % threads_.size()]->Push(r);
 	}
 
@@ -466,6 +469,7 @@ public:
 		ThreadRoutine * r;								\
 		void * buf = BufferPool::Alloc<MemberFnPtr##n<_OBJ_, TENUM(T,n)> >();		\
 		r = new (buf) MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));	    	\
+		Guard _(&lock_);								\
 		threads_[nextTh_++ % threads_.size()]->Push(r);					\
 	}											\
 
@@ -476,6 +480,8 @@ public:
 
 	void ScheduleBarrier(ThreadRoutine * r)
 	{
+		Guard _(&lock_);
+
 		BarrierRoutine * br = new BarrierRoutine(r, threads_.size());
 		for (size_t i = 0; i < threads_.size(); ++i) {
 			ThreadRoutine * r;
@@ -492,6 +498,8 @@ private:
 
 	void DestroyThreads()
 	{
+		Guard _(&lock_);
+
 		for (auto it = threads_.begin(); it != threads_.end(); ++it) {
 			NonBlockingThread * th = *it;
 			/*
@@ -505,7 +513,8 @@ private:
 	}
 
 
-	PThreadMutex lock_;
+	SpinMutex lock_;
+	PThreadMutex waitLock_;
 	threads_t threads_;
 	WaitCondition condExit_;
 	uint32_t nextTh_;

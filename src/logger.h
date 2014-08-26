@@ -7,6 +7,7 @@
 #include <streambuf>
 #include <stdio.h>
 #include <memory>
+#include <pthread.h>
 
 #include "util.hpp"
 
@@ -148,20 +149,33 @@ class ConsoleLogWriter : public LogWriter
 public:
 
 	ConsoleLogWriter()
-		: isopen_(true)
-	{}
+	{
+		int status = pthread_mutex_init(&lock_, NULL);
+		INVARIANT(status == 0);
+	}
+
+	~ConsoleLogWriter()
+	{
+		int status = pthread_mutex_destroy(&lock_);
+		INVARIANT(status == 0);
+	}
 
 	void Append(const string & data, const LogWriter::Priority & priority)
 	{
-		bool expected = true;
-		while (!isopen_.compare_exchange_strong(expected, false));
+		int status;
+
+		status = pthread_mutex_lock(&lock_);
+		INVARIANT(status == 0);
+
 		cerr << data << endl;
-		isopen_ = true;
+
+		status = pthread_mutex_unlock(&lock_);
+		INVARIANT(status == 0);
 	}
 
 private:
 
-	atomic<bool> isopen_;
+	pthread_mutex_t lock_;
 };
 
 //............................................................... LogHelper ....

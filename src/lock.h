@@ -13,185 +13,307 @@ namespace bblocks {
 
 class WaitCondition;
 
+// ...................................................................................... Mutex ....
+
 class Mutex
 {
 public:
 
-    virtual void Lock() = 0;
-    virtual void Unlock() = 0;
+	virtual void Lock() = 0;
 
-    virtual bool IsOwner() = 0;
+	virtual void Unlock() = 0;
 
-    virtual ~Mutex() {}
+	virtual bool IsOwner() = 0;
+
+	virtual ~Mutex() {}
 };
+
+// ................................................................................... AutoLock ....
 
 class AutoLock
 {
 public:
 
-    explicit AutoLock(Mutex * mutex)
-        : mutex_(mutex)
-    {
-        ASSERT(mutex_);
-        mutex_->Lock();
-    }
+	explicit AutoLock(Mutex * mutex)
+		: mutex_(mutex)
+	{
+		ASSERT(mutex_);
+		mutex_->Lock();
+	}
 
-    void Unlock()
-    {
-        ASSERT(mutex_);
-        mutex_->Unlock();
-        mutex_ = NULL;
-    }
+	void Unlock()
+	{
+		ASSERT(mutex_);
+		mutex_->Unlock();
+		mutex_ = NULL;
+	}
 
-    ~AutoLock()
-    {
-        if (mutex_) {
-            mutex_->Unlock();
-        }
-    }
+	~AutoLock()
+	{
+		if (mutex_) {
+			mutex_->Unlock();
+		}
+	}
 
 protected:
 
-    AutoLock()
-        : mutex_(NULL)
-    {
-    }
+	AutoLock();
 
-    Mutex * mutex_;
+	Mutex * mutex_;
 
 private:
 
-    AutoLock(AutoLock &);
+	AutoLock(AutoLock &);
 };
 
 using Guard = AutoLock;
 
-class AutoUnlock : public AutoLock
+// ................................................................................. AutoUnlock ....
+
+class AutoUnlock : private AutoLock
 {
 public:
 
-    explicit AutoUnlock(Mutex * mutex)
-    {
-        mutex_ = mutex;
-        ASSERT(mutex_);
-    }
+	explicit AutoUnlock(Mutex * mutex)
+	{
+		mutex_ = mutex;
+		ASSERT(mutex_);
+	}
 
 private:
 
-    AutoUnlock();
+	AutoUnlock();
 };
+
+// ............................................................................... PThreadMutex ....
 
 class PThreadMutex : public Mutex
 {
 public:
 
-    friend class WaitCondition;
+	friend class WaitCondition;
 
-    PThreadMutex(bool isRecursive = true)
-        : isRecursive_(isRecursive)
-    {
-        pthread_mutexattr_t attr;
-        int status;
-        status = pthread_mutexattr_init(&attr);
-        (void) status;
-        ASSERT(status == 0);
+	PThreadMutex(const string & path, bool isRecursive = false)
+		: path_(path)
+		, isRecursive_(isRecursive)
+		, statLockTime_(path_ + "/lock-time", "microsec", PerfCounter::TIME)
+	{
+		pthread_mutexattr_t attr;
+		int status;
+		status = pthread_mutexattr_init(&attr);
+		INVARIANT(status == 0);
 
-        // Enable/disable recursive locking
-        if (isRecursive_) {
-            status = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-            ASSERT(status == 0);
-        }
+		// Enable/disable recursive locking
+		if (isRecursive_) {
+			status = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+			INVARIANT(status == 0);
+		}
 
-#ifdef ERROR_CHECK
-        // Enable error checking
-        status = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-        ASSERT(status == 0);
-#endif
-        status = pthread_mutex_init(&mutex_, &attr);
-        ASSERT(status == 0);
-    }
+	#ifdef ERROR_CHECK
+		// Enable error checking
+		status = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+		INVARIANT(status == 0);
+	#endif
 
-    bool TryLock()
-    {
-        return pthread_mutex_trylock(&mutex_) == 0;
-    }
+		status = pthread_mutex_init(&mutex_, &attr);
+		INVARIANT(status == 0);
+	}
 
-    virtual void Lock() override
-    {
-        int status = pthread_mutex_lock(&mutex_);
-        (void) status;
-        ASSERT(status == 0);
-    }
+	virtual ~PThreadMutex()
+	{
+		int status = pthread_mutex_destroy(&mutex_);
+		INVARIANT(status == 0);
 
-    virtual void Unlock() override
-    {
-        int status = pthread_mutex_unlock(&mutex_);
-        (void) status;
-        ASSERT(status == 0);
-    }
+		VERBOSE(path_) << statLockTime_;
+	}
 
-    virtual bool IsOwner() override
-    {
-        return pthread_mutex_lock(&mutex_) == EDEADLK;
-    }
+	bool TryLock()
+	{
+		int status = pthread_mutex_trylock(&mutex_);
 
-    virtual ~PThreadMutex()
-    {
-        pthread_mutex_destroy(&mutex_);
-        // ASSERT(status == 0);
-    }
+		if (status == 0) {
+			/*
+			 * Acquired the lock
+			 */
+			owner_ = pthread_self();
+			return true;
+		}
 
-    private:
+		return false;
+	}
 
-    const bool isRecursive_;
-    pthread_mutex_t mutex_;
+	virtual void Lock() override
+	{
+		const uint64_t startInMicroSec = Time::NowInMicroSec();
+
+		int status = pthread_mutex_lock(&mutex_);
+		INVARIANT(status == 0);
+
+		statLockTime_.Update(Time::NowInMicroSec() - startInMicroSec);
+
+		owner_ = pthread_self();
+	}
+
+	virtual void Unlock() override
+	{
+		/*
+		 * TODO:
+		 * ASSERT that only owner can unlock, though that doesn't necessarily have to be
+		 * true.
+		 */
+
+		int status = pthread_mutex_unlock(&mutex_);
+		INVARIANT(status == 0);
+	}
+
+	virtual bool IsOwner() override
+	{
+		if (TryLock())
+		{
+			/*
+			 * Lock is open, cannot be the owner
+			 */
+			Unlock();
+			return false;
+		}
+
+		return pthread_self() == owner_;
+	}
+
+	private:
+
+	const string path_;
+	const bool isRecursive_;
+	pthread_mutex_t mutex_;
+	pthread_t owner_;
+
+	PerfCounter statLockTime_;
 };
+
+// .............................................................................. WaitCondition ....
 
 class WaitCondition
 {
 public:
 
-    WaitCondition()
-    {
-        int status = pthread_cond_init(&cond_, /*attr=*/ NULL);
-        (void) status;
-        ASSERT(status == 0);
-    }
+	WaitCondition()
+	{
+		int status = pthread_cond_init(&cond_, /*attr=*/ NULL);
+		INVARIANT(status == 0);
+	}
 
-    ~WaitCondition()
-    {
-        int status = pthread_cond_destroy(&cond_);
-        (void) status;
-        // ASSERT(status == 0);
-    }
+	~WaitCondition()
+	{
+		int status = pthread_cond_destroy(&cond_);
+		(void) status;
+		// TODO: INVARIANT(status == 0);
+	}
 
-    void Wait(PThreadMutex * lock)
-    {
-        int status = pthread_cond_wait(&cond_, &lock->mutex_);
-        (void) status;
-        ASSERT(status == 0);
-    }
+	void Wait(PThreadMutex * lock)
+	{
+		int status = pthread_cond_wait(&cond_, &lock->mutex_);
+		INVARIANT(status == 0);
+	}
 
-    void Signal()
-    {
-        int status = pthread_cond_signal(&cond_);
-        (void) status;
-        ASSERT(status == 0);
-    }
+	void Signal()
+	{
+		int status = pthread_cond_signal(&cond_);
+		INVARIANT(status == 0);
+	}
 
-    void Broadcast()
-    {
-        int status = pthread_cond_broadcast(&cond_);
-        (void) status;
-        ASSERT(status == 0);
-    }
+	void Broadcast()
+	{
+		int status = pthread_cond_broadcast(&cond_);
+		INVARIANT(status == 0);
+	}
 
 private:
 
-    pthread_cond_t cond_;
+	pthread_cond_t cond_;
 };
 
-class SpinMutex : public Mutex
+// ........................................................................... PThreadSpinMutex ....
+
+class PThreadSpinMutex : public Mutex
+{
+public:
+
+	PThreadSpinMutex(const string & path)
+		: path_(path)
+		, statSpinTime_(path_ + "/spin-time", "microsec", PerfCounter::TIME)
+	{
+		int status = pthread_spin_init(&lock_, PTHREAD_PROCESS_PRIVATE);
+		INVARIANT(status == 0);
+	}
+
+	virtual ~PThreadSpinMutex()
+	{
+		int status = pthread_spin_destroy(&lock_);
+		INVARIANT(status == 0);
+
+		VERBOSE(path_) << statSpinTime_;
+	}
+
+	virtual void Lock() override
+	{
+		const uint64_t startInMicroSec = Time::NowInMicroSec();
+
+		int status = pthread_spin_lock(&lock_);
+		INVARIANT(status == 0);
+
+		statSpinTime_.Update(Time::NowInMicroSec() - startInMicroSec);
+
+		owner_ = pthread_self();
+	}
+
+	virtual void Unlock() override
+	{
+		ASSERT(IsOwner());
+
+		int status = pthread_spin_unlock(&lock_);
+		INVARIANT(status == 0);
+	}
+
+	virtual bool IsOwner() override
+	{
+		if (TryLock()) {
+			/*
+			 * Lock is open, cannot be the owner
+			 */
+			 Unlock();
+			 return false;
+		}
+
+		return owner_ == pthread_self();
+	}
+
+private:
+
+	bool TryLock()
+	{
+		int status = pthread_spin_trylock(&lock_);
+
+		if (status == 0) {
+			/*
+			 * acquired the lock
+			 */
+			owner_ = pthread_self();
+			return true;
+		}
+
+		return false;
+	}
+
+	string path_;
+	pthread_t owner_;
+	pthread_spinlock_t lock_;
+
+	PerfCounter statSpinTime_;
+};
+
+// ............................................................................ CustomSpinMutex ....
+
+class CustomSpinMutex : public Mutex
 {
 public:
 
@@ -201,7 +323,7 @@ public:
         CLOSED = 0x11
     };
 
-    explicit SpinMutex(const string & name)
+    explicit CustomSpinMutex(const string & name)
         : name_("/spinmutex" + name)
         , mutex_(OPEN)
         , statSpinTime_(name_ + "/spin-time", "microsec", PerfCounter::TIME)
@@ -209,7 +331,7 @@ public:
         ASSERT(Is(OPEN));
     }
 
-    ~SpinMutex()
+    ~CustomSpinMutex()
     {
         VERBOSE(string("/SpinMutex")) << statSpinTime_;
     }
@@ -218,7 +340,7 @@ public:
     {
         INVARIANT(Is(OPEN) || !IsOwner());
 
-        uint64_t start_ms = Time::NowInMilliSec();
+        uint64_t startInMicroSec = Time::NowInMicroSec();
 
         bool status = false;
         while (true)
@@ -234,7 +356,7 @@ public:
             pthread_yield();
         }
 
-        statSpinTime_.Update((Time::NowInMilliSec() - start_ms) * 1000);
+        statSpinTime_.Update((Time::NowInMicroSec() - startInMicroSec));
     }
 
     virtual void Unlock()
@@ -265,10 +387,13 @@ protected:
     PerfCounter statSpinTime_;
 };
 
-#define READ_LOCK(x) AutoReadLock _(x);
-#define WRITE_LOCK(x) AutoWriteLock __(x);
-#define READ_UNLOCK _.Unlock();
-#define WRITE_UNLOCK __.Unlock();
+#ifdef DISABLE_SPINNING
+using SpinMutex = PThreadMutex;
+#else
+using SpinMutex = PThreadSpinMutex;
+#endif
+
+// ...................................................................................... RWLock ...
 
 class RWLock
 {
@@ -278,6 +403,8 @@ public:
     virtual void WriteLock() = 0;
     virtual void Unlock() = 0;
 };
+
+// .............................................................................. PThreadRWLock ....
 
 class PThreadRWLock : public RWLock
 {
@@ -323,6 +450,8 @@ protected:
     pthread_rwlock_t rwlock_;
 };
 
+// ............................................................................... AutoReadLock ....
+
 class AutoReadLock
 {
 public:
@@ -354,6 +483,8 @@ private:
 
     RWLock * rwlock_;
 };
+
+// .............................................................................. AutoWriteLock ....
 
 class AutoWriteLock
 {
