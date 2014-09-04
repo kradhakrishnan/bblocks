@@ -139,29 +139,65 @@ public:
 
 	inline T * Pop()
 	{
-		for (unsigned int i = 0; i < maxSpin_; ++i) {
-			lock_.Lock();
-			if (!q_.IsEmpty()) {
-				T * t = q_.Pop();
-				lock_.Unlock();
-				return t;
-			}
-			lock_.Unlock();
-			sched_yield();
-		}   
+		T * t = TryPop();
 
-		// lame adaptive spinning
-		// maxSpin_ = maxSpin_ * maxSpin_;
-		// if (maxSpin_ > MAX_SPIN) {
-		//    maxSpin_ = 10;
-		// }
+		/*
+		 * Return T if the pop was successful.
+		 */
+		if (t) return t;
 
+		/*
+		 * Timeout.
+		 *
+		 * No objects were received while spinning. Apply traditional lock and wait
+		 * algorithm
+		 */
 		lock_.Lock();
+
 		while (q_.IsEmpty()) {
 			conditionEmpty_.Wait(&lock_);
 		}
 
-		T * t = q_.Pop();
+		t = q_.Pop();
+
+		lock_.Unlock();
+
+		return t;
+	}
+
+	inline T * Pop(const uint32_t ms)
+	{
+		T * t = TryPop();
+
+		/*
+		 * Return T if the pop was successful.
+		 */
+		if (t) return t;
+
+		/*
+		 * Timeout.
+		 *
+		 * No objects were received while spinning. Apply traditional lock and wait
+		 * algorithm
+		 */
+		if (!lock_.Lock(ms))
+			/*
+			 * Timeout
+			 */
+			return NULL;
+
+		while (q_.IsEmpty()) {
+			if (!conditionEmpty_.Wait(&lock_, ms)) {
+				/*
+				 * Timeout waiting for object
+				 */
+				lock_.Unlock();
+				return NULL;
+			}
+		}
+
+		t = q_.Pop();
+
 		lock_.Unlock();
 
 		return t;
@@ -177,6 +213,27 @@ public:
 	}
 
 private:
+
+	inline T * TryPop()
+	{
+		/*
+		 * Spin for a little bit waiting for message. This increases the throughput rate on
+		 * a loaded system since the cost of sleeping and waking is fairly high for a job
+		 * scheduler algorithm
+		 */
+		for (unsigned int i = 0; i < maxSpin_; ++i) {
+			lock_.Lock();
+			if (!q_.IsEmpty()) {
+				T * t = q_.Pop();
+				lock_.Unlock();
+				return t;
+			}
+			lock_.Unlock();
+			sched_yield();
+		}
+
+		return NULL;
+    }
 
 	InQueue();
 

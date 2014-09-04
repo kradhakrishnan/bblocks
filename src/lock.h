@@ -13,6 +13,8 @@ namespace bblocks {
 
 class WaitCondition;
 
+// ...................................................................................... Mutex ....
+
 class Mutex
 {
 public:
@@ -24,6 +26,8 @@ public:
 
     virtual ~Mutex() {}
 };
+
+// ................................................................................... AutoLock ....
 
 class AutoLock
 {
@@ -66,6 +70,8 @@ private:
 
 using Guard = AutoLock;
 
+// ................................................................................. AutoUnlock ....
+
 class AutoUnlock : public AutoLock
 {
 public:
@@ -80,6 +86,8 @@ private:
 
     AutoUnlock();
 };
+
+// ............................................................................... PThreadMutex ....
 
 class PThreadMutex : public Mutex
 {
@@ -123,6 +131,15 @@ public:
         ASSERT(status == 0);
     }
 
+    virtual bool Lock(const uint32_t ms)
+    {
+        ASSERT(ms);
+        auto t = Time::GetTimeSpec(ms);
+        int status = pthread_mutex_timedlock(&mutex_, &t);
+        INVARIANT(status == 0 || status == ETIMEDOUT);
+        return status == 0;
+    }
+
     virtual void Unlock() override
     {
         int status = pthread_mutex_unlock(&mutex_);
@@ -146,6 +163,8 @@ public:
     const bool isRecursive_;
     pthread_mutex_t mutex_;
 };
+
+// ............................................................................... WaitConditon ....
 
 class WaitCondition
 {
@@ -172,6 +191,15 @@ public:
         ASSERT(status == 0);
     }
 
+    bool Wait(PThreadMutex * lock, const uint32_t ms)
+    {
+        auto t = Time::GetTimeSpec(ms);
+        int status = pthread_cond_timedwait(&cond_, &lock->mutex_, &t);
+        (void) status;
+        ASSERT(status == 0 || status == ETIMEDOUT);
+        return status == 0;
+    }
+
     void Signal()
     {
         int status = pthread_cond_signal(&cond_);
@@ -190,6 +218,8 @@ private:
 
     pthread_cond_t cond_;
 };
+
+// .................................................................................. SpinMutex ....
 
 class SpinMutex : public Mutex
 {
@@ -211,7 +241,21 @@ public:
 
     ~SpinMutex()
     {
-        VERBOSE(string("/SpinMutex")) << statSpinTime_;
+        INFO("/SpinMutex") << statSpinTime_;
+    }
+
+    bool TryLock()
+    {
+        int status = __sync_bool_compare_and_swap(&mutex_, OPEN, CLOSED);
+
+        if (status) {
+            ASSERT(Is(CLOSED));
+            owner_ = pthread_self();
+            return true;
+        }
+
+        return false;
+
     }
 
     virtual void Lock()
@@ -220,19 +264,7 @@ public:
 
         uint64_t start_ms = Time::NowInMilliSec();
 
-        bool status = false;
-        while (true)
-        {
-            status = __sync_bool_compare_and_swap(&mutex_, OPEN, CLOSED);
-
-            if (status) {
-                ASSERT(Is(CLOSED));
-                owner_ = pthread_self();
-                break;
-            }
-
-            pthread_yield();
-        }
+        while (!TryLock()) pthread_yield();
 
         statSpinTime_.Update((Time::NowInMilliSec() - start_ms) * 1000);
     }
@@ -265,10 +297,7 @@ protected:
     PerfCounter statSpinTime_;
 };
 
-#define READ_LOCK(x) AutoReadLock _(x);
-#define WRITE_LOCK(x) AutoWriteLock __(x);
-#define READ_UNLOCK _.Unlock();
-#define WRITE_UNLOCK __.Unlock();
+// ..................................................................................... RWLock ....
 
 class RWLock
 {
@@ -278,6 +307,8 @@ public:
     virtual void WriteLock() = 0;
     virtual void Unlock() = 0;
 };
+
+// .............................................................................. PThreadRWLock ....
 
 class PThreadRWLock : public RWLock
 {
@@ -323,6 +354,8 @@ protected:
     pthread_rwlock_t rwlock_;
 };
 
+// ............................................................................... AutoReadLock ....
+
 class AutoReadLock
 {
 public:
@@ -354,6 +387,8 @@ private:
 
     RWLock * rwlock_;
 };
+
+// .............................................................................. AutoWriteLock ....
 
 class AutoWriteLock
 {

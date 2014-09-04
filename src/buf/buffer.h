@@ -4,6 +4,7 @@
 #include <malloc.h>
 #include <memory>
 #include <arpa/inet.h>
+#include <sys/mman.h>
 #include <sstream>
 
 #include "assert.h"
@@ -38,6 +39,19 @@ public:
 		}
 	};
 
+	struct MappedDalloc
+	{
+		MappedDalloc(const size_t size) : size_(size) {}
+
+		void operator()(uint8_t * data)
+		{
+			int status = munmap(data, size_);
+			INVARIANT(status == 0);
+		}
+
+		const size_t size_;
+	};
+
 	/*
 	 * static methods
 	 */
@@ -47,6 +61,14 @@ public:
 		int status = posix_memalign(&ptr, 512, size);
 		INVARIANT(status != -1);
 		return IOBuffer(shared_ptr<uint8_t>((uint8_t *) ptr, Dalloc()), size);
+	}
+
+	static IOBuffer AllocMappedMem(const size_t size)
+	{
+		void * ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE,
+			          /*fd=*/ -1, /*offset=*/ 0);
+		INVARIANT(ptr != MAP_FAILED);
+		return IOBuffer(shared_ptr<uint8_t>((uint8_t *) ptr, MappedDalloc(size)), size);
 	}
 
 	/*

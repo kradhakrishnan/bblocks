@@ -1,12 +1,14 @@
 #ifndef _KCOMMON_LOGGER_H_
 #define _KCOMMON_LOGGER_H_
 
+#include <fstream>
 #include <vector>
 #include <string>
 #include <sstream>
 #include <streambuf>
 #include <stdio.h>
 #include <memory>
+#include <set>
 
 #include "util.hpp"
 
@@ -52,6 +54,7 @@ class Logger : public Singleton<Logger>
 public:
 
     friend class Singleton<Logger>;
+    friend class LogMessage;
 
     enum LogType
     {
@@ -71,13 +74,45 @@ public:
     {
         const LogWriter::Priority p = type & (LEVEL_ERROR) ? LogWriter::HIGHPRIORITY
 							   : LogWriter::DEFAULT;
+
         writer_->Append(msg, p);
     }
 
 private:
 
-    Logger() {}
+    void LoadLogrc()
+    {
+        string filename = string(getenv("HOME")) + "/.bblogrc";
 
+        ifstream f(filename);
+
+        if (!f.is_open()) {
+            cerr << "Error loading " << filename << endl;
+            return;
+        }
+
+        cerr << "Loading ~/.bblogrc" << endl;
+
+        string line;
+        while (getline(f, line)) {
+            cout << line << endl;
+            /* Ignore empty lines and comments */
+            if (line.empty() || line[0] == '#') continue;
+
+            cerr << "Enabel debug/verbose for " << line << endl;
+
+            logrc_.insert(line);
+        }
+
+        f.close();
+    }
+
+    Logger()
+    {
+	LoadLogrc();
+    }
+
+    set<string> logrc_;
     SharedPtr<LogWriter> writer_;
 };
 
@@ -96,6 +131,15 @@ public:
 
     ~LogMessage()
     {
+	auto logger = Logger::Instance();
+
+	if (type_ == Logger::LogType::LEVEL_DEBUG
+	    || type_ == Logger::LogType::LEVEL_VERBOSE) {
+		if (logger.logrc_.find(path_) == logger.logrc_.end()) {
+			return;
+		}
+	}
+
         ostringstream tmp;
         tmp << (char) type_ << " " << Timestamp() << " [" << path_ << "] ";
 

@@ -88,11 +88,20 @@ class NonBlockingThread : public Thread
 {
 public:
 
+	friend class Watchdog;
+
 	NonBlockingThread(const string & path, const uint32_t id)
 		: Thread(path)
+		, id_(id)
 		, exitMain_(false)
 		, q_(path)
+		, statWatchdogTime_(path + "/watchdogtime", "microsec", PerfCounter::TIME)
 	{}
+
+	~NonBlockingThread()
+	{
+		INFO(log_) << statWatchdogTime_;
+	}
 
 	virtual void * ThreadMain();
 
@@ -147,13 +156,11 @@ private:
 		}
 	};
 
-	virtual bool ShouldYield() override
-	{
-		return !q_.IsEmpty();
-	}
-
+	const uint32_t id_;
 	bool exitMain_;
 	InQueue<ThreadRoutine> q_;
+
+	PerfCounter statWatchdogTime_;
 };
 
 // ................................................................................ TimeKeeper ....
@@ -165,7 +172,7 @@ public:
 	using This = TimeKeeper;
 
 	TimeKeeper(const string & path)
-		: Thread(path + string("/thread"))
+		: Thread(path + string("/timekeeper"))
 		, path_(path)
 		, lock_(path_)
 		, fd_(-1)
@@ -229,36 +236,15 @@ public:
 	{
 		Guard _(&lock_);
 
-		timers_.insert(TimerEvent(GetTimeSpec(msec), r));
+		DEBUG(path_) << "ScheduleIn. msec=" << msec << " r=" << (uint64_t) r;
+
+		timers_.insert(TimerEvent(Time::GetTimeSpec(msec), r));
 
 		return SetTimer();
 	}
 
 
 private:
-
-	timespec GetTimeSpec(const uint32_t msec)
-	{
-		timespec t;
-
-		int status = clock_gettime(CLOCK_MONOTONIC, &t);
-
-		INVARIANT(status != -1);
-
-		t.tv_sec += MSEC_TO_SEC(msec);
-		t.tv_nsec += MSEC_TO_NSEC(msec % 1000);
-
-		/*
-		 * Max value for nsec is 999,999,999
-		 * Adjust the values accordingly
-		 */
-		t.tv_sec += t.tv_nsec / 1000000000;
-		t.tv_nsec = t.tv_nsec % 1000000000;
-
-		ASSERT(t.tv_nsec <= 999999999);
-
-		return t;
-	}
 
 	bool SetTimer()
 	{
@@ -350,50 +336,18 @@ public:
 		AtomicCounter pendingCalls_;
 	};
 
+	NonBlockingThreadPool();
 
-	NonBlockingThreadPool()
-		: nextTh_(0)
-		, timekeeper_("/NBTP/time-keeper")
-	{}
+	~NonBlockingThreadPool();
 
-	void Start(const uint32_t ncpu)
-	{
-		INVARIANT(ncpu <= SysConf::NumCores());
-
-		Guard _(&lock_);
-
-		//
-		// Start timer
-		//
-		bool status = timekeeper_.Init();
-
-		if (!status) {
-			ERROR("/NBTP") << "Unable to start timekeeper." << strerror(errno);
-			DEADEND
-		}
-
-		//
-		// Start the threads
-		//
-		for (size_t i = 0; i < ncpu; ++i) {
-			NonBlockingThread * th = new NonBlockingThread("/th/" + STR(i), i);
-			threads_.push_back(th);
-			th->StartNonBlockingThread();
-		}
-	}
+	void Start(const uint32_t ncpu);
 
 	size_t ncpu() const
 	{
 		return threads_.size();
 	}
 
-	void Shutdown()
-	{
-		Guard _(&lock_);
-
-		timekeeper_.Shutdown();
-		DestroyThreads();
-	}
+	void Shutdown();
 
 	void Wakeup()
 	{

@@ -30,6 +30,15 @@ public:
 		return status != -1;
 	}
 
+	static bool GetTcpNoDelay(const int fd)
+	{
+		int flag = 0;
+		socklen_t len = sizeof(char);
+		int status = getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, &len);
+		INVARIANT(status != -1);
+		return flag;
+	}
+
 	static bool SetTcpWindow(const int fd, const int size)
 	{
 		// Set out buffer size
@@ -39,6 +48,24 @@ public:
 		// Set in buffer size
 		status = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
 		return status != -1;
+	}
+
+	static int GetTcpRcvBuffer(const int fd)
+	{
+		int size = 0;
+		socklen_t len = sizeof(int);
+		int status = getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &size, &len);
+		INVARIANT(status != -1);
+		return size;
+	}
+
+	static int GetTcpSendBuffer(const int fd)
+	{
+		int size = 0;
+		socklen_t len = sizeof(int);
+		int status = getsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, &len);
+		INVARIANT(status != -1);
+		return size;
 	}
 };
 

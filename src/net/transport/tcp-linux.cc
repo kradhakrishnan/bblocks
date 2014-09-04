@@ -17,6 +17,12 @@ TCPChannel::TCPChannel(const string & name, int fd, FdPoll & epoll)
 {
 	ASSERT(fd_ >= 0);
 
+	INFO(name_) << "TCP send buffer size is " << SocketOptions::GetTcpRcvBuffer(fd_) << " B";
+	INFO(name_) << "TCP receive buffer size is "
+		    << SocketOptions::GetTcpSendBuffer(fd_) << " B";
+	INFO(name_) << "TCP no delay is "
+		    << (SocketOptions::GetTcpNoDelay(fd_) ? "enabled" : "disabled");
+
 	const bool ok= epoll_.Add(fd_, EPOLLIN | EPOLLOUT | EPOLLET,
 				  intr_fn(this, &TCPChannel::HandleFdEvent));
 	INVARIANT(ok);
@@ -362,8 +368,8 @@ TCPServer::Accept(const SocketAddress & addr, const AcceptDoneHandle & h)
 	    return -1;
 	}
 
-	SocketOptions::SetTcpNoDelay(sockfd_, /*enable=*/ true);
 #if 0
+	SocketOptions::SetTcpNoDelay(sockfd_, /*enable=*/ true);
 	SocketOptions::SetTcpWindow(sockfd_, /*size=*/ 85 * 1024);
 #endif
 

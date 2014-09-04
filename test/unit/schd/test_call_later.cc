@@ -96,6 +96,14 @@ public:
 		 */
 
 		BBlocks::Wait();
+
+		t.Reset();
+		for (int i = 1; i <= MAX_MSG; i++) {
+			BBlocks::ScheduleIn(/*msec=*/ i, &t, &TestBasicCase::Called,
+					    Time::NowInMilliSec(), /*arg=*/ i);
+		}
+
+		BBlocks::Wait();
 		BBlocks::Shutdown();
 	}
 

@@ -77,6 +77,45 @@ public:
 
 		return SEC_TO_MSEC(t.tv_sec) + NSEC_TO_MSEC(t.tv_nsec);
 	}
+
+	static uint64_t NowInMicroSec()
+	{
+		timespec t;
+		int status = clock_gettime(CLOCK_MONOTONIC, &t);
+		INVARIANT(status == 0);
+
+		return SEC_TO_MICROSEC(t.tv_sec) + NSEC_TO_MICROSEC(t.tv_nsec);
+	}
+
+	/**
+	 * Get timespec for time msec from now.
+	 *
+	 * @param	msec	    Milli seconds from now
+	 * @returns	timespec
+	 */
+	static timespec GetTimeSpec(const uint32_t msec)
+	{
+		timespec t;
+
+		int status = clock_gettime(CLOCK_MONOTONIC, &t);
+
+		INVARIANT(status != -1);
+
+		t.tv_sec += MSEC_TO_SEC(msec);
+		t.tv_nsec += MSEC_TO_NSEC(msec % 1000);
+
+		/*
+		 * Max value for nsec is 999,999,999
+		 * Adjust the values accordingly
+		 */
+		t.tv_sec += t.tv_nsec / 1000000000;
+		t.tv_nsec = t.tv_nsec % 1000000000;
+
+		ASSERT(t.tv_nsec <= 999999999);
+
+		return t;
+	}
+
 };
 
 //..................................................................................... Adler32 ....

@@ -5,6 +5,8 @@
 using namespace bblocks;
 using namespace std;
 
+static const string _path = "/test_th_message";
+
 //................................................................................ test_handler ....
 
 class ICallee
@@ -19,13 +21,15 @@ class Callee : public ICallee
 {
 public:
 
+    static const int MAX_CALLS = 1000;
+
     Callee() : count_(0) {}
 
     void Handle(int val)
     {
-        cout << "Got handle " << count_ << endl;
+        DEBUG(_path) << "Got handle " << count_;
         ASSERT(val == 0xfeaf);
-        if (++count_ == 100) {
+        if (++count_ == MAX_CALLS) {
             BBlocks::Wakeup();
         }
     }
@@ -57,7 +61,7 @@ test_handler()
 
     Callee callee;
     Caller caller(&callee);
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < Callee::MAX_CALLS; ++i) {
         BBlocks::Schedule(&caller, &Caller::Start, /*val=*/ (int) 0xfeaf);
     }
 
