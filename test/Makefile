@@ -9,6 +9,7 @@ LIBRARY +=
 TARGET += test/unit/schd/test_th_pool.cc		\
 	  test/unit/schd/test_th_message.cc		\
 	  test/unit/schd/test_call_later.cc		\
+	  test/unit/schd/test_async_lock.cc		\
 	  test/unit/net/transport/test_tcp.cc		\
 	  test/unit/net/event-bus/test_data.cc		\
 	  test/unit/fs/test_aio.cc			\

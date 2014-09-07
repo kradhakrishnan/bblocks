@@ -2,6 +2,7 @@
 	<test name="schd/test_th_pool" cmd="test/unit/schd/test_th_pool" timeout="60" />
 	<test name="schd/test_th_message" cmd="test/unit/schd/test_th_message" timeout="60" />
 	<test name="schd/test_call_later" cmd="test/unit/schd/test_call_later" timeout="120" />
+	<test name="schd/test_async_lock" cmd="test/unit/schd/test_async_lock" timeout="120" />
 	<test name="fs/test_aio" cmd="test/unit/fs/test_aio" timeout="60" />
 	<test name="net/test_tcp" cmd="test/unit/net/transport/test_tcp" timeout="60" />
 	<test name="net/event-bus/test_data" cmd="test/unit/net/event-bus/test_data" timeout="60" />
