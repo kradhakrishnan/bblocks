@@ -122,7 +122,7 @@ struct CompletionQueue##TSUFFIX : CHandle							\
 	~CompletionQueue##TSUFFIX()								\
 	{											\
 		INVARIANT(q_.empty());								\
-		INVARIANT(!inprogress_);							\
+		/*INVARIANT(!inprogress_);*/							\
 	}											\
 												\
 	void Wakeup(TPARAM(T,t,n))								\
