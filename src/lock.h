@@ -262,11 +262,11 @@ public:
     {
         INVARIANT(Is(OPEN) || !IsOwner());
 
-        uint64_t start_ms = Time::NowInMilliSec();
+        uint64_t startInMicroSec = Rdtsc::NowInMicroSec();
 
         while (!TryLock()) pthread_yield();
 
-        statSpinTime_.Update((Time::NowInMilliSec() - start_ms) * 1000);
+        statSpinTime_.Update(Rdtsc::ElapsedInMicroSec(startInMicroSec));
     }
 
     virtual void Unlock()

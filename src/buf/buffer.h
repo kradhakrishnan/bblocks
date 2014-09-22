@@ -7,9 +7,6 @@
 #include <sys/mman.h>
 #include <sstream>
 
-#include "assert.h"
-#include "atomic.h"
-
 namespace bblocks {
 
 //..................................................................................... IOBuffer ...

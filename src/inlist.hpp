@@ -1,9 +1,7 @@
-#ifndef _CORE_INLIST_H_
-#define _CORE_INLIST_H_
+#pragma once
 
-#include "util.hpp"
+#include "util.h"
 #include "lock.h"
-
 
 namespace bblocks {
 
@@ -295,5 +293,3 @@ private:
 
 
 }
-
-#endif

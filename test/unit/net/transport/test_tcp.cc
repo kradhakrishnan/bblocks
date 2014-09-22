@@ -3,7 +3,7 @@
 #include <sys/time.h>
 
 #include "test/unit/unit-test.h"
-#include "util.hpp"
+#include "util.h"
 #include "net/transport/tcp-linux.h"
 #include "net/epoll/mpio-epoll.h"
 #include "async.h"

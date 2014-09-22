@@ -3,7 +3,7 @@
 #include <set>
 
 #include "async.h"
-#include "util.hpp"
+#include "util.h"
 #include "bblocks.h"
 
 namespace bblocks {
@@ -23,7 +23,7 @@ public:
 		, ncpu_(0)
 		, timestamps_(NULL)
 		, stoplock_(path_ + "/stoplock")
-		, lastWakeupInMicroSec_(Time::NowInMicroSec())
+		, lastWakeupInMicroSec_(Rdtsc::NowInMicroSec())
 	{
 	}
 
@@ -124,7 +124,7 @@ public:
 		ASSERT(id < ncpu_);
 		ASSERT(timestamps_[id] != UINT64_MAX);
 
-		const uint32_t elapsedInMicroSec = Time::NowInMicroSec() - timestamps_[id];
+		const uint32_t elapsedInMicroSec = Rdtsc::ElapsedInMicroSec(timestamps_[id]);
 
 		return elapsedInMicroSec > YIELD_MS;
 	}

@@ -13,6 +13,11 @@ void
 BBlocks::Start(const uint32_t ncores)
 {
 	/*
+	 * Prime up the GetHz function
+	 */
+	INFO("/bblocks") << "CPU Hz = " << System::GetHz();
+
+	/*
 	 * We need to init the current thread context to enable buffering to schedule
 	 */
 	ThreadCtx::Init(/*tinst=*/ NULL);

@@ -22,7 +22,7 @@ static string _log("/bmark_tcp");
 //
 struct ChStats
 {
-	ChStats() : start_ms_(NowInMilliSec()), bytes_read_(0), bytes_written_(0)
+	ChStats() : start_ms_(Rdtsc::NowInMilliSec()), bytes_read_(0), bytes_written_(0)
 	{}
 
 	uint64_t start_ms_;
@@ -48,8 +48,6 @@ public:
 		, epoll_(/*threads=*/ 2, "/server")
 		, server_(epoll_)
 		, buf_(IOBuffer::Alloc(iosize))
-		, rcqueue_(this, &This::ReadDone)
-		, wakeupq_(this, &This::ReadUntilBlocked)
 	{
 		buf_.FillRandom();
 	}
@@ -90,23 +88,23 @@ public:
 			chstats_.insert(make_pair(ch, ChStats()));
 		}
 
-		BBlocks::Schedule(this, &This::ReadUntilBlocked, ch);
+		BBlocks::Yield(this, &This::ReadUntilBlocked, ch);
 	}
 
 	void ReadUntilBlocked(TCPChannel * ch) __async_fn__
 	{
-		while (true) {
-			int status = ch->Read(buf_, cqueue_fn(&rcqueue_, ch));
-			INVARIANT(status >= 0 && status <= (int) buf_.Size());
-			UpdateStats(ch, status);
-			if (status != (int) buf_.Size()) break;
+		int status = ch->Read(buf_, async_fn(this, &This::ReadDone, ch));
+		INVARIANT(status >= 0 && status <= (int) buf_.Size());
+		UpdateStats(ch, status);
+		if (status != (int) buf_.Size()) {
+			return;
 		}
+
+		BBlocks::Yield(this, &This::ReadUntilBlocked, ch);
 	}
 
-	virtual void ReadDone(int status, IOBuffer, uintptr_t ctx) __cqueue_fn__
+	virtual void ReadDone(int status, IOBuffer, TCPChannel * ch) __cqueue_fn__
 	{
-		TCPChannel * ch = reinterpret_cast<TCPChannel *>(ctx);
-
 		/*
 		 * Update stats
 		 */
@@ -127,7 +125,7 @@ private:
 
 		it->second.bytes_read_ += size;
 
-		uint64_t elapsed_s = MS2SEC(Timer::Elapsed(it->second.start_ms_));
+		uint64_t elapsed_s = MS2SEC(Rdtsc::ElapsedInMilliSec(it->second.start_ms_));
 		if (elapsed_s >= 5) {
 			/* Print results on screen */
 			double MB = it->second.bytes_read_ / double(1024 * 1024);
@@ -138,7 +136,7 @@ private:
 
 			/* Reset print timer */
 			it->second.bytes_read_ = 0;
-			it->second.start_ms_ = NowInMilliSec();
+			it->second.start_ms_ = Rdtsc::NowInMilliSec();
 		}
 	}
 
@@ -149,8 +147,6 @@ private:
 	TCPServer server_;
 	chstats_map_t chstats_;
 	IOBuffer buf_;
-	CQueueWithCtx2<int, IOBuffer, uintptr_t> rcqueue_;
-	CQueue<TCPChannel *> wakeupq_;
 };
 
 //.......................................................................... TCPClientBenchmark ....
@@ -180,8 +176,6 @@ public:
 		, pendingios_(0)
 		, pendingConns_(0)
 		, pendingWakeups_(0)
-		, wcqueue_(this, &This::WriteDone)
-		, wakeupq_(this, &This::WakeupSendData)
 	{
 		buf_.FillRandom();
 	}
@@ -221,18 +215,6 @@ public:
 		}
 	}
 
-	virtual void WriteDone(int status, IOBuffer buf, uintptr_t ctx) __cqueue_fn__
-	{
-		TCPChannel * ch = reinterpret_cast<TCPChannel *>(ctx);
-
-		ASSERT(status);
-		UpdateStats(ch, status);
-
-		--pendingios_;
-
-		SendData(ch);
-	}
-
 	void Connected(int status, UnicastTransportChannel * uch) __async_fn__
 	{
 		TCPChannel * ch = dynamic_cast<TCPChannel *>(uch);
@@ -249,6 +231,16 @@ public:
 
 		--pendingConns_;
 		++nactiveconn_;
+
+		SendData(ch);
+	}
+
+	virtual void WriteDone(int status, IOBuffer buf, TCPChannel * ch) __cqueue_fn__
+	{
+		ASSERT(status);
+		UpdateStats(ch, status);
+
+		--pendingios_;
 
 		SendData(ch);
 	}
@@ -306,30 +298,29 @@ private:
 	void SendData(TCPChannel * ch)
 	{
 		int status;
-		while (true) {
-			if (timer_.Elapsed() > SEC2MS(nsec_)) {
-				// time elapsed, stop sending data
-				Stop();
-				break;
-			}
-
-			++pendingios_;
-
-			status = ch->Write(buf_, cqueue_fn(&wcqueue_, ch));
-
-			INVARIANT(size_t(status) <= buf_.Size());
-
-			if (size_t(status) != buf_.Size()) {
-				break;
-			}
-
-			UpdateStats(ch, status);
-			--pendingios_;
-
-			++pendingWakeups_;
-			wakeupq_.Wakeup(ch);
-			break;
+		if (timer_.Elapsed() > SEC2MS(nsec_)) {
+			/*
+			 * time elapsed, stop sending data
+			 */
+			Stop();
+			return;
 		}
+
+		++pendingios_;
+
+		status = ch->Write(buf_, async_fn(this, &This::WriteDone, ch));
+
+		INVARIANT(size_t(status) <= buf_.Size());
+
+		if (size_t(status) != buf_.Size()) {
+			return;
+		}
+
+		UpdateStats(ch, status);
+		--pendingios_;
+
+		++pendingWakeups_;
+		BBlocks::Yield(this, &This::WakeupSendData, ch);
 	}
 
 	void PrintStats()
@@ -361,8 +352,6 @@ private:
 	atomic<size_t> pendingios_;
 	atomic<size_t> pendingConns_;
 	atomic<size_t> pendingWakeups_;
-	CQueueWithCtx2<int, IOBuffer, uintptr_t> wcqueue_;
-	CQueue<TCPChannel *> wakeupq_;
 };
 
 

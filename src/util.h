@@ -7,13 +7,17 @@
 #include <inttypes.h>
 #include <rpc/xdr.h>
 #include <zlib.h>
+#include <fstream>
+#include <atomic>
 
 #include <tr1/memory>
+#include <boost/regex.hpp>
 
 #include "defs.h"
-#include "atomic.h"
 
 namespace bblocks {
+
+using namespace std;
 
 typedef int fd_t;
 typedef int status_t;
@@ -24,24 +28,7 @@ enum
 	FAIL = -1
 };
 
-#if defined(__i386__)
-static inline unsigned long long rdtsc(void)
-{
-	unsigned long long int x;
-	__asm__ volatile (".byte 0x0f, 0x31" : "=A" (x));
-	return x;
-}
-#elif defined(__x86_64__)
-static inline unsigned long long rdtsc(void)
-{
-	unsigned hi, lo;
-	__asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
-	return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
-}
-#endif
-
-
-template<class T> using SharedPtr = shared_ptr<T>;
+template<class T> using SharedPtr = std::shared_ptr<T>;
 
 template<class T>
 SharedPtr<T>
@@ -63,12 +50,103 @@ public:
 	}
 };
 
+// ..................................................................................... System ....
+
+class System
+{
+public:
+	static uint64_t GetHz()
+	{
+		static uint64_t hz = 0;
+
+		if (hz) return hz;
+
+		/*
+		 * Load hz from /proc/cpuinfo
+		 */
+		ifstream file("/proc/cpuinfo");
+		if (file.is_open()) {
+			string line;
+			while (getline(file, line)) {
+				boost::regex ex("[ \t]*cpu MHz[ \t]*:[ \t]*([0-9.]+)[ \t]*");
+				boost::smatch match;
+				if (boost::regex_match(line, match, ex)) {
+					INVARIANT(match.size() == 2);
+				        const double MHz = atof(match[1].str().c_str());
+					hz = MHz * 1000 * 1000;
+				}
+			}
+		}
+
+		INVARIANT(hz);
+
+		file.close();
+
+		return hz;
+	}
+};
+
+// ...................................................................................... Rdtsc ....
+
+class Rdtsc
+{
+public:
+
+#if defined(__i386__)
+	static inline unsigned long long rdtsc(void)
+	{
+		unsigned long long int x;
+		__asm__ volatile (".byte 0x0f, 0x31" : "=A" (x));
+		return x;
+	}
+#elif defined(__x86_64__)
+	static inline unsigned long long rdtsc(void)
+	{
+		unsigned hi, lo;
+		__asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+		return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
+	}
+#endif
+
+	static inline uint64_t NowInMicroSec()
+	{
+		const uint64_t now = rdtsc();
+		return now / (double)(System::GetHz() * 1000 * 1000);
+	}
+
+	static inline uint64_t NowInMilliSec()
+	{
+		const uint64_t now = rdtsc();
+		return now / (double)(System::GetHz() * 1000);
+	}
+
+	static inline uint64_t ElapsedInMilliSec(const uint64_t startInMilliSec)
+	{
+		const uint64_t nowInMilliSec = NowInMilliSec();
+		return Elapsed(nowInMilliSec, startInMilliSec);
+	}
+
+	static inline uint64_t ElapsedInMicroSec(const uint64_t startInMicroSec)
+	{
+		const uint64_t nowInMicroSec = NowInMicroSec();
+		return Elapsed(nowInMicroSec, startInMicroSec);
+	}
+
+	static inline uint64_t Elapsed(const uint64_t end, const uint64_t start)
+	{
+		return end > start ? (end - start) : 0;
+	}
+};
+
 //........................................................................................ Time ....
 
 class Time
 {
 public:
 
+	/*
+	 * clock based time fuctions
+	 */
 	static uint64_t NowInMilliSec()
 	{
 		timespec t;
@@ -115,7 +193,6 @@ public:
 
 		return t;
 	}
-
 };
 
 //..................................................................................... Adler32 ....

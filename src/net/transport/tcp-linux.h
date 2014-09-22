@@ -9,7 +9,7 @@
 #include <netdb.h>
 #include <list>
 
-#include "util.hpp"
+#include "util.h"
 #include "async.h"
 #include "schd/thread-pool.h"
 #include "net/epoll/epoll.h"

@@ -36,7 +36,7 @@ public:
 		, count_(0)
 		, min_(UINT32_MAX)
 		, max_(0)
-		, startms_(Time::NowInMilliSec())
+		, startms_(Rdtsc::NowInMilliSec())
 	{
 		InitBucket();
 	}
@@ -126,7 +126,7 @@ protected:
 
 	double ElapsedSec() const
 	{
-		return (Time::NowInMilliSec() - startms_) / 1000;
+		return Rdtsc::ElapsedInMilliSec(startms_) / 1000;
 	}
 
 	double Avg() const
@@ -198,8 +198,8 @@ public:
 
 	TimeCounter(const string & name)
 		: name_(name)
-		, startms_(Time::NowInMilliSec())
-		, refms_(Time::NowInMilliSec())
+		, startms_(Rdtsc::NowInMilliSec())
+		, refms_(Rdtsc::NowInMilliSec())
 	{
 		for (int i = 0; i < sizeof(timer_); ++i) {
 			timer_[i].store(/*val=*/ 0);
@@ -209,13 +209,13 @@ public:
 	void ClockIn(const T & t)
 	{
 		INVARIANT(t < 32);
-		timer_[t] += Time::NowInMilliSec() - refms_;
-		refms_ = Time::NowInMilliSec();
+		timer_[t] += Rdtsc::ElapsedInMilliSec(refms_);
+		refms_ = Rdtsc::NowInMilliSec();
 	}
 
 	friend ostream & operator<<(ostream & os, const TimeCounter<T> & v)
 	{
-		const uint64_t elapsed_ms = Time::NowInMilliSec() - v.startms_;
+		const uint64_t elapsed_ms = Rdtsc::ElapsedInMilliSec(v.startms_);
 
 		os << "TimeCounter : " << v.name_ << endl
 		   << " Elapsed: " << elapsed_ms << " ms" << endl;

@@ -1,8 +1,7 @@
 #pragma once
 
 #include "bblocks.h"
-#include "atomic.h"
-#include "util.hpp"
+#include "util.h"
 #include "schd/thread-pool.h"
 
 #define TEST(x) { \

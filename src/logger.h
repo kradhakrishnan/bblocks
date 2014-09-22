@@ -9,8 +9,9 @@
 #include <stdio.h>
 #include <memory>
 #include <set>
+#include <atomic>
 
-#include "util.hpp"
+#include "util.h"
 
 /**
  TODO:

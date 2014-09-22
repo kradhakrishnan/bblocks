@@ -89,7 +89,7 @@ NonBlockingThread::ThreadMain()
 		{
 			ThreadRoutine * r = q_.Pop();
 
-			const uint64_t & startInMicroSec = Time::NowInMicroSec();
+			const uint64_t & startInMicroSec = Rdtsc::NowInMicroSec();
 
 			/* Call watchdog check for this and other threads in the system */
 			Watchdog::Instance().Wakeup(startInMicroSec);
@@ -107,13 +107,14 @@ NonBlockingThread::ThreadMain()
 			/* Execute */
 			r->Run();
 
-			const uint64_t & endInMicroSec = Time::NowInMicroSec();
+			const uint64_t & endInMicroSec = Rdtsc::NowInMicroSec();
 
 			/* Cancel watch */
 			Watchdog::Instance().CancelWatch(id_, endInMicroSec);
 
 			/* update stats */
-			const uint32_t elapsedInMicroSec = endInMicroSec - startInMicroSec;
+			const uint32_t elapsedInMicroSec = Rdtsc::Elapsed(endInMicroSec,
+									  startInMicroSec);
 			statWatchdogTime_.Update(elapsedInMicroSec);
 		}
 	} catch (ThreadExitException & e) {
@@ -122,7 +123,7 @@ NonBlockingThread::ThreadMain()
 		 * Cancel the watch
 		 */
 
-		Watchdog::Instance().CancelWatch(id_, Time::NowInMicroSec());
+		Watchdog::Instance().CancelWatch(id_, Rdtsc::NowInMicroSec());
 	}
 
 	INVARIANT(q_.IsEmpty());

@@ -122,7 +122,7 @@ struct CompletionQueue##TSUFFIX : CHandle							\
 	~CompletionQueue##TSUFFIX()								\
 	{											\
 		INVARIANT(q_.empty());								\
-		/*INVARIANT(!inprogress_);*/							\
+		INVARIANT(!inprogress_);							\
 	}											\
 												\
 	void Wakeup(TPARAM(T,t,n))								\
@@ -140,31 +140,31 @@ struct CompletionQueue##TSUFFIX : CHandle							\
 												\
 	void ProcessEvents(int)									\
 	{											\
-		while (true) {									\
-			list<CompletionEvent> q;						\
+		list<CompletionEvent> q;							\
 												\
-			{									\
-				/* we are like epoll, we take all the events that have		\
-				   matured and process them					\
-				 */								\
-				Guard _(&lock_);						\
-				ASSERT(inprogress_);	    					\
-				q = q_;								\
-				q_.clear();							\
+		{										\
+			/* we are like epoll, we take all the events that have			\
+			   matured and process them						\
+			 */									\
+			Guard _(&lock_);							\
+			ASSERT(inprogress_);							\
+			q = q_;									\
+			q_.clear();								\
 												\
-				if (q.empty()) {						\
-					inprogress_ = false;					\
-					return;							\
-				}								\
-			}									\
-												\
-			ASSERT(!q.empty());							\
-												\
-			for (auto it = q.begin(); it != q.end(); ++it) {			\
-			    CompletionEvent & e = *it;						\
-			    (h_->*fn_)(TARGEX(e.t,_,n));					\
+			if (q.empty()) {							\
+				inprogress_ = false;						\
+				return;								\
 			}									\
 		}										\
+												\
+		ASSERT(!q.empty());								\
+												\
+		for (auto it = q.begin(); it != q.end(); ++it) {				\
+		    CompletionEvent & e = *it;							\
+		    (h_->*fn_)(TARGEX(e.t,_,n));						\
+		}										\
+												\
+		BBlocks::Yield(this, &This::ProcessEvents, /*arg=*/ 0);				\
 	}											\
 												\
 	struct CompletionEvent									\

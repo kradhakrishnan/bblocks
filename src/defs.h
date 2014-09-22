@@ -63,7 +63,7 @@
 			  << #x << " " << __FILE__ << ":" << __LINE__				\
 			  << " syserror: " << strerror(errno)					\
 			  << ENDL;								\
-		CompilerHelper::PrintBackTrace();						\
+		/* CompilerHelper::PrintBackTrace(); */						\
 		abort();									\
 	}											\
 }

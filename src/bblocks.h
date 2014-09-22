@@ -35,7 +35,13 @@ public:
 	{											\
 		NonBlockingThreadPool::Instance().ScheduleIn(msec, obj, fn, TARG(t,n));		\
 	}											\
-
+												\
+	template<class _OBJ_, TDEF(T, n)>							\
+	static void Yield(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), TPARAM(T,t,n))		\
+	{											\
+		NonBlockingThreadPool::Instance().Yield(obj, fn, TARG(t,n));			\
+	}											\
+	
 
 	TP_SCHEDULE(1) // void Schedule<T1>(...)
 	TP_SCHEDULE(2) // void Schedule<T1,T2>(...)

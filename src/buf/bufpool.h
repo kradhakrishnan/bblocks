@@ -4,7 +4,7 @@
 #include <list>
 
 #include "schd/thread-ctx.h"
-#include "util.hpp"
+#include "util.h"
 #include "lock.h"
 
 namespace bblocks {

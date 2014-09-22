@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <tr1/unordered_map>
 
-#include "util.hpp"
+#include "util.h"
 #include "lock.h"
 #include "async.h"
 #include "schd/thread.h"

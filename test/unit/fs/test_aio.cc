@@ -4,7 +4,7 @@
 #include <atomic>
 
 #include "test/unit/unit-test.h"
-#include "util.hpp"
+#include "util.h"
 #include "fs/aio-linux.h"
 #include "async.h"
 

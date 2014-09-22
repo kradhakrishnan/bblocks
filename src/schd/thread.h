@@ -4,7 +4,7 @@
 #include <atomic>
 
 #include "logger.h"
-#include "util.hpp"
+#include "util.h"
 #include "schd/schd-helper.h"
 
 namespace bblocks {

@@ -1,9 +1,11 @@
 #pragma once
 
-#include <sys/timerfd.h>
 #include <stdexcept>
 #include <set>
+#include <atomic>
 
+#include <sys/timerfd.h>
+ 
 #include "buf/bufpool.h"
 #include "schd/thread.h"
 
@@ -320,10 +322,10 @@ public:
 
 		void Run(int)
 		{ 
-			const uint64_t count = pendingCalls_.Add(/*count=*/ -1);
+			const uint64_t count = --pendingCalls_;
 
 			if (count == 1) {
-				INVARIANT(!pendingCalls_.Count());
+				INVARIANT(!pendingCalls_);
 				NonBlockingThreadPool::Instance().Schedule(cb_);
 				cb_ = NULL;
 				delete this;
@@ -333,7 +335,7 @@ public:
 	private:
 
 		ThreadRoutine * cb_;
-		AtomicCounter pendingCalls_;
+		atomic<size_t> pendingCalls_;
 	};
 
 	NonBlockingThreadPool();
@@ -399,7 +401,24 @@ public:
 		r = new (buf) FnPtr##n<TENUM(T,n)>(fn, TARG(t,n));				\
 		INVARIANT(timekeeper_.ScheduleIn(ms, r));					\
 	}											\
-
+	template<class _OBJ_, TDEF(T,n)>							\
+	void Yield(_OBJ_ * obj, void (_OBJ_::*fn)(TENUM(T,n)), TPARAM(T,t,n))			\
+	{											\
+		ThreadRoutine * r;								\
+		void * buf = BufferPool::Alloc<MemberFnPtr##n<_OBJ_, TENUM(T,n)> >();		\
+		r = new (buf) MemberFnPtr##n<_OBJ_, TENUM(T,n)>(obj, fn, TARG(t,n));		\
+		Yield(r);									\
+	}											\
+												\
+	template<TDEF(T,n)>									\
+	void Yield(void (*fn)(TENUM(T,n)), TPARAM(T,t,n))					\
+	{											\
+		ThreadRoutine * r;								\
+		void * buf = BufferPool::Alloc<FnPtr##n<TENUM(T,n)> >();			\
+		r = new (buf) FnPtr##n<TENUM(T,n)>(fn, TARG(t,n));				\
+		Yield(r);									\
+	}											\
+	
 
 	NBTP_SCHEDULE(1) // void Schedule<T1>(...)
 	NBTP_SCHEDULE(2) // void Schedule<T1,T2>(...)
@@ -409,6 +428,12 @@ public:
 	void Schedule(ThreadRoutine * r)
 	{
 		threads_[nextTh_++ % threads_.size()]->Push(r);
+	}
+
+	void Yield(ThreadRoutine * r)
+	{
+		INVARIANT(ThreadCtx::tinst_);
+		((NonBlockingThread *) ThreadCtx::tinst_)->Push(r);
 	}
 
 	bool ShouldYield();
