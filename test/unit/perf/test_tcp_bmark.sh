@@ -3,6 +3,19 @@
 serverlog=/tmp/server.log
 clientlog=/tmp/client.log
 
+function cleanup()
+{
+	echo '** Killing server'
+
+	pids=`ps -ef | grep bmark_tcp | grep -v grep | awk '{ print $2 }'`
+
+	for pid in $pids;
+	do
+		echo 'Killing process ' $pid
+		kill -9 $pid || echo '** ERROR ** Failed to stop process'
+	done
+}
+
 function quit()
 {
 	code=$1
@@ -63,6 +76,7 @@ function run_test()
 #
 echo '** Running test'
 
+cleanup
 check_precondition
 
 serverport=8000
@@ -103,14 +117,7 @@ done
 #
 # Cleanup
 #
-echo '** Killing server'
-
-pids=`ps | grep bmark_tcp | grep -v grep | awk '{ print $1 }'`
-
-for pid in $pids;
-do
-	kill -9 $pid || echo '** ERROR ** Failed to stop process'
-done
+cleanup
 
 echo '** DONE **'
 

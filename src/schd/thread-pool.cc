@@ -15,6 +15,8 @@ __thread Thread * ThreadCtx::tinst_;
 __thread list<uint8_t *> * ThreadCtx::pool_;
 
 string ThreadCtx::log_("/threadctx");
+PerfCounter ThreadCtx::statGC_("/threadctx/gc", "B", PerfCounter::BYTES);
+PerfCounter ThreadCtx::statHits_("/threadctx/alloc", "hits", PerfCounter::COUNTER);
 
 //
 // NonBlockingThread
@@ -116,6 +118,9 @@ NonBlockingThread::ThreadMain()
 			const uint32_t elapsedInMicroSec = Rdtsc::Elapsed(endInMicroSec,
 									  startInMicroSec);
 			statWatchdogTime_.Update(elapsedInMicroSec);
+
+                        /* Cleanup thread ctx memory */
+                        ThreadCtx::GarbageCollect();
 		}
 	} catch (ThreadExitException & e) {
 		/*

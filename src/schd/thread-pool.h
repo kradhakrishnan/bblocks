@@ -135,6 +135,8 @@ public:
 
 private:
 
+        static const int THREADCTX_MEMORY_THRESHOLD_MiB = 10; // 10 MiB 
+
 	class ThreadExitException : public runtime_error
 	{
 	public:
@@ -152,11 +154,14 @@ private:
 
 			/*
 			 * The intention of scheduling this routine is to destroy the thread which
-			 * is process the requests. Kill the thread.
+			 * is processing the requests. Kill the thread.
 			 */
 			throw ThreadExitException("pthread_exit proxy");
 		}
 	};
+
+        /* Cleanup thread ctx memory if it is passed the threshold */
+        void CleanupThreadCtx();
 
 	const uint32_t id_;
 	bool exitMain_;

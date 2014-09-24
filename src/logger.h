@@ -88,7 +88,7 @@ private:
         ifstream f(filename);
 
         if (!f.is_open()) {
-            cerr << "Error loading " << filename << endl;
+            cerr << "Skipping " << filename << endl;
             return;
         }
 

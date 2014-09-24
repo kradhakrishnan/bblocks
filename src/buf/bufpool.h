@@ -27,8 +27,11 @@ public:
 		if (id >= SLAB_DEPTH || ThreadCtx::pool_[id].empty()) {
 			int status = posix_memalign(&ptr, 512, size);
 			INVARIANT(status != -1);
+			ThreadCtx::statHits_.Update(-1);
 			return ptr;
 		}
+
+		ThreadCtx::statHits_.Update(id);
 
 		uint8_t * data = ThreadCtx::pool_[id].front();
 		ThreadCtx::pool_[id].pop_front();

@@ -111,13 +111,13 @@ public:
 	static inline uint64_t NowInMicroSec()
 	{
 		const uint64_t now = rdtsc();
-		return now / (double)(System::GetHz() * 1000 * 1000);
+		return now / (double)(System::GetHz() / double(1000 * 1000));
 	}
 
 	static inline uint64_t NowInMilliSec()
 	{
 		const uint64_t now = rdtsc();
-		return now / (double)(System::GetHz() * 1000);
+		return now / (double)(System::GetHz() / double(1000));
 	}
 
 	static inline uint64_t ElapsedInMilliSec(const uint64_t startInMilliSec)
