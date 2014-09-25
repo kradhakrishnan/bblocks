@@ -62,7 +62,7 @@ run-valgrind-test: default
 					  -u test/unit/default-unit-tests \
 					  -o $(OBJDIR)/unit-test.log
 
-run-flamebox: default
+run-flamebox:
 	$(shell cd test/flamebox; \
 	        python run-flamebox.py --config flamebox.config --output ../../..)
 
