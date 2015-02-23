@@ -59,7 +59,7 @@ public:
 
 	static void Run()
 	{
-		BBlocks::Start(/*ncpu=*/ 2);
+		BBlocks::Start();
 
 		TestBasicCase t;
 		for (int i = 1; i <= MAX_TASK; i++) {

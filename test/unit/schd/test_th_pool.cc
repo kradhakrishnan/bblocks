@@ -20,6 +20,8 @@ struct BufferPoolTest
 {
 	typedef BufferPoolTest This;
 
+	static const int MAX_CALLS = 100;
+
 	BufferPoolTest() : count_(0) {}
 
 	void Alloc(int count)
@@ -32,7 +34,7 @@ struct BufferPoolTest
 	{
 		BufferPool::Dalloc(o);
 
-		if (++count_ == 99) {
+		if (++count_ == MAX_CALLS) {
 			BBlocks::Wakeup();
 		}
 	}
@@ -46,7 +48,7 @@ bufferpool_test()
     BBlocks::Start();
 
     BufferPoolTest test;
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < BufferPoolTest::MAX_CALLS; ++i) {
 		BBlocks::Schedule(&test, &BufferPoolTest::Alloc, i);
     }
 
@@ -56,18 +58,20 @@ bufferpool_test()
 
 //.................................................................................. SimpleTest ....
 
-struct Th
+struct PingPong
 {
-    Th() : i_(0) {}
+    PingPong() : i_(0) {}
 
-    virtual void Run(Th * th)
+	static const size_t MAX_CALLS = 1000;
+
+    virtual void Run(PingPong * th)
     {
         i_++;
-        if (i_ > 1000) {
+        if (i_ > MAX_CALLS) {
             BBlocks::Wakeup();
             return;
         } else {
-            BBlocks::Schedule(th, &Th::Run, this);
+            BBlocks::Schedule(th, &PingPong::Run, this);
         }
     }
 
@@ -76,14 +80,14 @@ struct Th
 };
 
 void
-simple_test()
+pingpong_test()
 {
     BBlocks::Start();
 
-    Th th1;
-    Th th2;
+    PingPong ping;
+    PingPong pong;
 
-    th1.Run(&th2);
+    ping.Run(&pong);
 
     BBlocks::Wait();
     BBlocks::Shutdown();
@@ -95,37 +99,39 @@ struct ThMaster;
 
 struct ThSlave
 {
-    ThSlave()
-    {
-        cout << "Slave created." << endl;
-    }
+	ThSlave()
+	{
+		cout << "Slave created." << endl;
+	}
 
-    void Run(ThMaster * th);
+	void Run(ThMaster * th);
 };
 
 struct ThMaster
 {
-    ThMaster() : i_(0), out_(0) {}
+	ThMaster() : i_(0), out_(0) {}
 
-    void Start(ThSlave * th)
-    {
-        ++out_;
-        BBlocks::Schedule(this, &ThMaster::Run, th);
-    }
+	void ScheduleSlave(ThSlave * th)
+	{
+		++out_;
+		BBlocks::Schedule(this, &ThMaster::Run, th);
+	}
 
-    virtual void Run(ThSlave * th)
-    {
-	++i_;
-	--out_;
+	virtual void Run(ThSlave * th)
+	{
+		++i_;
+		--out_;
 
-        if (i_ > 1000) {
-            if (!out_) BBlocks::Wakeup();
+		if (i_ > 1000) {
+			if (!out_) {
+				BBlocks::Wakeup();
+			}
             return;
-        }
+		}
 
-        ++out_;
-        BBlocks::Schedule(th, &ThSlave::Run, this);
-    }
+		++out_;
+		BBlocks::Schedule(th, &ThSlave::Run, this);
+	}
 
     atomic<int> i_;
     atomic<int> out_;
@@ -141,22 +147,22 @@ parallel_test()
 {
     BBlocks::Start();
 
-    ThMaster m;
-    vector<ThSlave *> ss;
-    for (unsigned int i = 0; i < SysConf::NumCores() - 1; ++i) {
+    ThMaster master;
+    vector<ThSlave *> slaves;
+    for (size_t i = 0; i < SysConf::NumCores(); ++i) {
         ThSlave * s = new ThSlave();
-        m.Start(s);
-        ss.push_back(s);
+        master.ScheduleSlave(s);
+        slaves.push_back(s);
     }
 
     BBlocks::Wait();
     BBlocks::Shutdown();
 
-    for (unsigned int i = 0; i < ss.size(); ++i) {
-        delete ss[i];
+    for (size_t i = 0; i < slaves.size(); ++i) {
+        delete slaves[i];
     }
 
-    ss.clear();
+    slaves.clear();
 }
 
 int
@@ -165,7 +171,7 @@ main(int argc, char ** argv)
     InitTestSetup();
 
     TEST(bufferpool_test);
-    TEST(simple_test);
+    TEST(pingpong_test);
     TEST(parallel_test);
 
     TeardownTestSetup();

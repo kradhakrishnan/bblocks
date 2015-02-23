@@ -14,7 +14,7 @@ class BBlocks
 public:
 
 	static void Start(const uint32_t ncores);
-        static void Start();
+	static void Start();
 
 	static void Shutdown();
 

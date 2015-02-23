@@ -1,0 +1,66 @@
+#!/bin/bash
+
+function lookup_ubuntu_info()
+{
+  filename="/etc/lsb-release"
+  param=$1
+
+  val=$(cat /etc/lsb-release | grep $param | sed "s:$param=::")
+}
+
+#
+# Get Linux distribution
+#
+function get_distribution()
+{
+  lookup_ubuntu_info DISTRIB_ID 
+  dist=$val
+}
+
+#
+# Get Ubuntu version
+#
+function get_ubuntu_version()
+{
+  lookup_ubuntu_info DISTRIB_RELEASE
+  ver=$val
+}
+
+#
+# Make sure the distribution is Ubuntu
+#
+get_distribution
+
+if [ "$dist" != "Ubuntu" ]; then
+  echo "Unknown distribution $dist. Script expects Ubuntu."
+  exit -1
+fi
+
+#
+# Make sure the version specified is supported
+# Currently we support 10.04
+#
+get_ubuntu_version
+
+if [ "$ver" == "14.10" ]; then
+  #
+  # 10.04
+  #
+  echo "ubuntu-setup : 14.10"
+
+  #
+  # We don't have any specific setup for 14.10
+  #
+  scripts/ubuntu-setup-default
+else
+  #
+  # Unknown ubuntu version
+  #
+  echo 'Not an understood ubuntu version. We will run the default setup.'
+  echo 'Running generic ubuntu setup steps."
+  
+  #
+  # We don't have a specific install setup for this release
+  #
+  scripts/ubuntu-setup-default
+fi

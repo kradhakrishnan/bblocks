@@ -1,6 +1,6 @@
 #!/bin/bash
 
-OBJDIR=../build
+OBJDIR=obj
 BMARK=$OBJDIR/test/perf/fs/bmark_aio
 LOGFILE=/tmp/log
 

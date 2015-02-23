@@ -1,5 +1,5 @@
 ifndef OBJDIR
-OBJDIR = $(PWD)/../build
+OBJDIR = $(PWD)/obj
 endif
 
 SUBDIR = src/			\
@@ -53,12 +53,14 @@ ubuntu-setup: build-setup
 run-test: all run-unit-test run-valgrind-test
 
 run-unit-test: default
-	python test/unit/run-unit-test.py -b $(OBJDIR) \
+	@echo '** run-unit-test'
+	@python test/unit/run-unit-test.py -b $(OBJDIR) \
 					  -u test/unit/default-unit-tests \
 					  -o $(OBJDIR)/unit-test.log
 
 run-valgrind-test: default
-	python test/unit/run-unit-test.py -v -b $(OBJDIR) \
+	@echo '** run-valgrind-test'
+	@python test/unit/run-unit-test.py -v -b $(OBJDIR) \
 					  -u test/unit/default-unit-tests \
 					  -o $(OBJDIR)/unit-test.log
 
@@ -75,7 +77,8 @@ run-all-test:
 	@scripts/run-all-test.sh
 
 run-codeship-test: default
-	python test/unit/run-unit-test.py -b $(OBJDIR) \
+	@echo '** run-codeship-test'
+	@python test/unit/run-unit-test.py -b $(OBJDIR) \
 					  -u test/unit/default-codeship-tests \
 					  -o $(OBJDIR)/codeship-test.log ; \
 	cat $(OBJDIR)/codeship-test.log
@@ -98,6 +101,10 @@ uninstall:
 	@sudo ${RM} -r -f /usr/include/bblocks
 	@echo ' UNINSTALL	' libbblocks.so
 	@sudo ${RM} -f /usr/lib/libbblocks.so
+
+#
+# build/commit helper
+#
 
 #
 # Misc

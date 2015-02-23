@@ -61,9 +61,9 @@ function run_test()
 	#
 	# Run client
 	#
-	../build/test/perf/net/bmark_tcp --client --laddr "127.0.0.1:$clientport" \
-					 --raddr "127.0.0.1:$serverport" --iosize 4000 \
-					 --conn 1 --s 5 >> $clientlog 2>&1
+	obj/test/perf/net/bmark_tcp --client --laddr "127.0.0.1:$clientport" \
+							 --raddr "127.0.0.1:$serverport" --iosize 4000 \
+							 --conn 1 --s 5 >> $clientlog 2>&1
 
 	if [ $? -ne 0 ]; then
 		echo '** ERROR ** error running benchmark client'
@@ -87,7 +87,7 @@ clientport=9000
 #
 echo '** Starting server ...'
 
-../build/test/perf/net/bmark_tcp --server --laddr "127.0.0.1:$serverport" >> $serverlog 2>&1 &
+obj/test/perf/net/bmark_tcp --server --laddr "127.0.0.1:$serverport" >> $serverlog 2>&1 &
 
 #
 # Wait for the server to start listening

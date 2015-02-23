@@ -1,5 +1,7 @@
 include ${SUBDIR:%=%/Makefile}
 
+$(info $(argument))
+
 #
 # tsan=enable
 # 
@@ -150,7 +152,7 @@ endif
 # CC
 #
 ifndef $(CC)
-    CC = g++-4.8
+    CC = g++
 endif
 
 $(info ** Using compiler $(CC))

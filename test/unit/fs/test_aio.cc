@@ -33,7 +33,8 @@ public:
 
     BasicAioTest()
         : log_("testaio/")
-        , dev_("../build/test.out", /*size=*/ 10 * 1024 * 1024, &aio_)
+		/* TODO: Fix this dependency */
+        , dev_("obj/test.out", /*size=*/ 10 * 1024 * 1024, &aio_)
 	, count_(0)
     {
     }
