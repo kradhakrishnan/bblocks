@@ -155,6 +155,19 @@ ifndef $(CC)
     CC = g++
 endif
 
+#
+# static binaries
+#
+ifdef STATICLIB
+	ifeq ($(STATICLIB), enable)
+		LDFLAGS += -static -static-libgcc -static-libstdc++
+	else
+		$(error unknown staticlib value)
+	endif
+
+	$(info ** staticlib enabled)
+endif
+
 $(info ** Using compiler $(CC))
 
 CY = $(shell which cython)
@@ -187,7 +200,7 @@ DYNAMIC := ${SHARED:%.so=$(OBJDIR)/%.so}
 -include $(DEPS)
 -include $(TDEPS)
 
-all: ${OBJS} ${PYX} ${LIBRARY} ${SHARED} ${TOBJ} ${TEXE}
+all: ${OBJS} ${PYX} ${STATIC} ${SHARED} ${TOBJ} ${TEXE}
 	@rm -r -f $(OBJDIR)/lib $(OBJDIR)/bin
 	@${MKDIR_P} $(OBJDIR)/lib $(OBJDIR)/bin
 	@echo ' CP	.so => $(OBJDIR)/lib'
@@ -203,9 +216,9 @@ else
 	@${CC} ${LDFLAGS} $@.o ${STATIC} -o $@ ${LIBS} 
 endif
 
-${LIBRARY}: ${OBJS}
-	@echo ' AR	' ${OBJDIR}/$@/library.a
-	@$(AR) rcs ${OBJDIR}/$@/library.a $(shell find ${OBJDIR}/$@ | egrep "\.o$$")
+${STATIC}: ${OBJS}
+	@echo ' AR	' $@
+	@$(AR) rcs $@ $(shell find $(dir $@) | egrep "\.o$$") 
 ifdef ARDIR
 	@echo ' CP	$(OBJDIR)/$@/library.a => $(ARDIR)/$(notdir $@.a)'
 	@cp $(OBJDIR)/$@/library.a $(ARDIR)/$(notdir $@).a

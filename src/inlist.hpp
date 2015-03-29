@@ -258,7 +258,7 @@ public:
     {
     }
 
-    inline void Push(T * t)
+    inline void Push(const T & t)
     {
         lock_.Lock();
         q_.push(t);
@@ -281,12 +281,21 @@ public:
         return t;
     }
 
+	bool IsEmpty() const
+	{
+		lock_.Lock();
+		const bool result = q_.empty();
+		lock_.Unlock();
+
+		return result;
+	}
+
 private:
 
     Queue();
 
-    string log_;
-    PThreadMutex lock_;
+    const string log_;
+    mutable PThreadMutex lock_;
     WaitCondition conditionEmpty_;
     queue<T> q_;
 };

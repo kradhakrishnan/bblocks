@@ -165,6 +165,13 @@ public:
 		return SEC_TO_MICROSEC(t.tv_sec) + NSEC_TO_MICROSEC(t.tv_nsec);
 	}
 
+	static uint64_t ElapsedInMicroSec(const uint64_t start)
+	{
+		const uint64_t now = NowInMicroSec();
+		ASSERT(now >= start);
+		return now - start;
+	}
+
 	/**
 	 * Get timespec for time msec from now.
 	 *

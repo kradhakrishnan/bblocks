@@ -4,7 +4,7 @@
 #include <ostream>
 #include <atomic>
 #include <iomanip>
-#include <map>
+#include <unordered_map>
 
 namespace bblocks {
 
@@ -85,23 +85,23 @@ public:
 
 		Print(os, kv);
 
-		kv.clear();
 		if (pc.count_.load()) {
 			for (int i = 0; i < 32; ++i) {
 				if (!pc.bucket_[i].load()) continue;
 
 				auto k = to_h(i ? pow(2, i) : 0) + "-" + to_h(pow(2, i + 1));
-				kv[k] = to_h(pc.bucket_[i].load());
+				PrintKeyValue(os, k, to_h(pc.bucket_[i].load()));
 			}
 		}
 
-		Print(os, kv);
+		DrawLine(os);
+
 		return os;
 	}
 
 protected:
 
-	typedef map<string, string> kvs_t;
+	typedef unordered_map<string, string> kvs_t;
 
 	static void DrawLine(ostream & os)
 	{
@@ -116,12 +116,17 @@ protected:
 
 		for (auto kv : kvs)
 		{
-			os << "|" << setw(30) << left << kv.first << "|"
-			   << setw(30) << left << kv.second << "|"
-			   << endl;
+			PrintKeyValue(os, kv.first, kv.second);
 		}
 
 		DrawLine(os);
+	}
+
+	static void PrintKeyValue(ostream & os, const std::string & key, const std::string & val)
+	{
+		os << "|" << setw(30) << left << key << "|"
+		   << setw(30) << left << val << "|"
+		   << endl;
 	}
 
 	double ElapsedSec() const

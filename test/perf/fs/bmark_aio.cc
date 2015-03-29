@@ -7,6 +7,8 @@
 
 #include "fs/aio-linux.h"
 #include "test/unit/unit-test.h"
+#include "util.h"
+#include "perf/perf-counter.h"
 
 using namespace std;
 using namespace bblocks;
@@ -18,18 +20,19 @@ size_t _time_s = 10; // 10s
 struct Stats
 {
     Stats()
-        : bytes_(0), ops_time_ms_(0), ops_count_(0)
+        : bytes_(0), time_usec_(0), count_(0)
     {}
 
     Timer ms_;
     atomic<uint64_t> bytes_;
-    atomic<uint64_t> ops_time_ms_;
-    atomic<uint64_t> ops_count_;
+    atomic<uint64_t> time_usec_;
+    atomic<uint64_t> count_;
 };
 
-//............................................................ AIOBenchamrk ....
+//................................................................................ AIOBenchamrk ....
 
 /**
+ * Benchmarking devices using LinuxAioProcessor implementation
  */
 class AIOBenchmark : public CompletionHandle
 {
@@ -53,7 +56,6 @@ public:
 	             const size_t iosize, const IOType iotype,
 		     const IOPattern iopattern, const size_t qdepth)
 		: log_("/aiobmark")
-		, lock_("/aiobmark")
 		, devname_(devname)
 		, devsize_(devsize)
 		, iosize_(iosize)
@@ -62,9 +64,11 @@ public:
 		, qdepth_(qdepth)
 		, aio_(new LinuxAioProcessor())
 		, dev_(devname_, devsize_ / 512, aio_.Ptr())
-		, buf_(IOBuffer::Alloc(iosize_))
+		, buf_(IOBuffer::AllocMappedMem(iosize_))
 		, nextOff_(UINT64_MAX)
 		, pendingOps_(0)
+		/* perf counters */
+		, statLatency_("/aiobmark/latency", "microsec", PerfCounter::TIME) 
 	{
 		INVARIANT(!(iosize_ % 512));
 		INVARIANT(!(devsize_ % 512));
@@ -72,7 +76,10 @@ public:
 		buf_.FillRandom();
 	}
 
-	virtual ~AIOBenchmark() {}
+	virtual ~AIOBenchmark()
+	{
+		INFO(log_) << statLatency_;
+	}
 
 	void Start(int)
 	{
@@ -80,76 +87,110 @@ public:
 		INVARIANT(status != -1);
 
 		for (size_t i = 0; i < qdepth_; ++i) {
-			IssueNextIO();
-		}
-	}
-
-	void WriteDone(int status, diskoff_t off) __async_fn__
-	{
-		DEBUG(log_) << "Write complete for " << off;
-
-		INVARIANT(status > 0 && size_t(status) == buf_.Size());
-
-		stats_.bytes_ += status;
-
-		if (stats_.ms_.Elapsed() < (_time_s * 1000)) {
-			IssueNextIO();
-			pendingOps_--;
-		} else {
-		    /*
-		     * Time has elapsed, will issue a stop if we are the last IO
-		     */
-		    pendingOps_--;
-		    if (!pendingOps_) Stop();
-		}
-	}
-
-	void ReadDone(int status, diskoff_t off)
-	{
-		DEBUG(log_) << "Read complete for " << off;
-
-		INVARIANT(status > 0 && size_t(status) == buf_.Size());
-
-		stats_.bytes_ += status;
-
-		if (stats_.ms_.Elapsed() < (_time_s * 1000)) {
-			IssueNextIO();
-			pendingOps_--;
-		} else {
-			pendingOps_--;
-			if (!pendingOps_) Stop();
+			IssueNextIO(new IOCtx);
 		}
 	}
 
 private:
 
-	void IssueNextIO()
+	struct IOCtx
+	{
+		IOCtx(const diskoff_t off = 0, const uint64_t start_usec = 0)
+			: off_(off), start_usec_(start_usec)
+		{}
+
+		diskoff_t off_;
+		uint64_t start_usec_;
+	};
+
+	void WriteDone(int status, IOCtx * ctx) /* inline callback */
+	{
+		ASSERT(ctx);
+
+		DEBUG(log_) << "Write complete for " << ctx->off_;
+
+		INVARIANT(status > 0 && size_t(status) == buf_.Size());
+
+		UpdateStats(status, ctx);
+
+		if (stats_.ms_.Elapsed() < (_time_s * 1000)) {
+			IssueNextIO(ctx);
+			pendingOps_--;
+		} else {
+			delete ctx;
+			ctx = nullptr;
+
+			pendingOps_--;
+			if (!pendingOps_)
+				Stop();
+		}
+	}
+
+	void ReadDone(int status, IOCtx * ctx) /* inline callback */
+	{
+		ASSERT(ctx);
+
+		DEBUG(log_) << "Read complete for " << ctx->off_;
+ 
+		INVARIANT(status > 0 && size_t(status) == buf_.Size());
+
+		UpdateStats(status, ctx);
+
+		if (stats_.ms_.Elapsed() < (_time_s * 1000)) {
+			IssueNextIO(ctx);
+			pendingOps_--;
+		} else {
+			delete ctx;
+			ctx = nullptr;
+
+			pendingOps_--;
+			if (!pendingOps_) Stop();
+		}
+	}
+
+	void UpdateStats(int bytes, IOCtx * const ctx)
+	{
+		ASSERT(ctx);
+
+		const uint64_t elapsed_usec = Time::ElapsedInMicroSec(ctx->start_usec_); 
+
+		stats_.count_ += 1;
+		stats_.bytes_ += bytes;
+		stats_.time_usec_ += elapsed_usec;
+
+		statLatency_.Update(elapsed_usec);
+	}
+
+	void IssueNextIO(IOCtx * const ctx)
 	{
 		pendingOps_++;
 
+		diskoff_t off = NextOff();
+
+		ctx->off_ = off;
+		ctx->start_usec_ = Time::NowInMicroSec();
+
 		if (iotype_ == READ) {
-			diskoff_t off = NextOff();
-			auto fn = intr_fn(this, &AIOBenchmark::ReadDone, off);
+			auto fn = intr_fn(this, &AIOBenchmark::ReadDone, ctx);
 			dev_.Read(buf_, off / 512, iosize_ / 512, fn);
 		} else {
-			diskoff_t off = NextOff();
-			auto fn = intr_fn(this, &AIOBenchmark::WriteDone, off);
+			auto fn = intr_fn(this, &AIOBenchmark::WriteDone, ctx);
 			dev_.Write(buf_, off / 512, iosize_ / 512, fn);
 		}
 	}
 
 	diskoff_t NextOff()
 	{
-		Guard _(&lock_);
-
-		if (nextOff_ == UINT64_MAX) {
-			nextOff_ = 0;
-			return nextOff_;
+		uint64_t expected = UINT64_MAX;
+		if (nextOff_.compare_exchange_strong(expected, 0)) {
+			return 0;
 		}
 
 		if (iopattern_ == SEQUENTIAL) {
-			nextOff_ += iosize_;
-			if ((nextOff_ + iosize_) >= devsize_) nextOff_ = 0;
+			auto t = nextOff_.fetch_add(iosize_);
+			// there can be a little glitch on wrap around.
+			// todo: fix the glitch
+			if ((t + iosize_) >= devsize_) nextOff_ = 0;
 		} else {
 			nextOff_ = rand() % (devsize_  - iosize_);
 		}
@@ -163,21 +204,28 @@ private:
 		BBlocks::Wakeup();
 	}
 
+	template<class A, class B> 
+	static double div(const A & a, const B & b)
+	{
+		return b ? (a / (double) b) : 0;
+	}
+
 	void PrintStats()
 	{
-		Guard _(&lock_);
-
 		double MiB = stats_.bytes_ / (1024 * 1024);
 		double s = stats_.ms_.Elapsed() / 1000;
 
 		cout << "Result :" << endl
-		     << " bytes " << stats_.bytes_ << endl
-		     << " time " << stats_.ms_.Elapsed() << " ms" << endl
-		     << " MBps " << (s ? (MiB / s) : 0) << endl;
+		     << "========" << endl
+		     << " Total bytes written " << stats_.bytes_ << " B" << endl
+		     << " Test time " << s << " s" << endl
+		     << " Total ops " << stats_.count_ << endl
+		     << " Op latency " << div(stats_.time_usec_, stats_.count_) << " usec" << endl
+		     << " Ops/sec " << div(stats_.count_, s) << endl
+		     << " MBps " << div(MiB, s) << endl;
 	}
 
 	string log_;
-	SpinMutex lock_;
 	const string devname_;
 	const disksize_t devsize_;
 	const size_t iosize_;
@@ -187,12 +235,14 @@ private:
 	AutoPtr<AioProcessor> aio_;
 	SpinningDevice dev_;
 	IOBuffer buf_;
-	diskoff_t nextOff_;
+	atomic<diskoff_t> nextOff_;
 	Stats stats_;
 	atomic<size_t> pendingOps_;
+
+	PerfCounter statLatency_;
 };
 
-//.................................................................... Main ....
+//........................................................................................ Main ....
 
 int
 main(int argc, char ** argv)
@@ -220,8 +270,14 @@ main(int argc, char ** argv)
 
 	po::variables_map parg;
 
-	po::store(po::parse_command_line(argc, argv, desc), parg);
-	po::notify(parg);
+	try
+	{
+		po::store(po::parse_command_line(argc, argv, desc), parg);
+		po::notify(parg);
+	} catch (...) {
+		cout << desc << endl;
+		throw;
+	}
 
 	// help command
 	if (parg.count("help")) {
