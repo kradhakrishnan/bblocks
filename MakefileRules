@@ -159,13 +159,13 @@ endif
 # static binaries
 #
 ifdef STATICLIB
-	ifeq ($(STATICLIB), enable)
-		LDFLAGS += -static -static-libgcc -static-libstdc++
-	else
-		$(error unknown staticlib value)
-	endif
+        ifeq ($(STATICLIB), enable)
+                LDFLAGS += -static -static-libgcc -static-libstdc++
+        else
+                $(error unknown staticlib value)
+        endif
 
-	$(info ** staticlib enabled)
+        $(info ** staticlib enabled)
 endif
 
 $(info ** Using compiler $(CC))
